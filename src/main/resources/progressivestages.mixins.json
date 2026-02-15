@@ -8,8 +8,7 @@
     "AbstractContainerMenuMixin"
   ],
   "client": [
-    "client.EmiStackWidgetMixin",
-    "client.EmiItemStackMixin"
+    "client.EmiStackWidgetMixin"
   ],
   "injectors": {
     "defaultRequire": 0

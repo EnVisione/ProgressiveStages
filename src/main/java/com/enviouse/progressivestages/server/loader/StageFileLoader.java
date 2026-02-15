@@ -8,7 +8,7 @@ import com.enviouse.progressivestages.common.tags.StageTagRegistry;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.LevelResource;
+import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -18,7 +18,7 @@ import java.nio.file.Path;
 import java.util.*;
 
 /**
- * Loads stage definition files from the ProgressiveStages directory
+ * Loads stage definition files from the ProgressiveStages directory in config folder
  */
 public class StageFileLoader {
 
@@ -42,21 +42,25 @@ public class StageFileLoader {
      * Initialize the loader and create default files if needed
      */
     public void initialize(MinecraftServer server) {
-        // Get the world folder path
-        Path worldFolder = server.getWorldPath(LevelResource.ROOT);
-        stagesDirectory = worldFolder.resolve(Constants.STAGE_FILES_DIRECTORY);
+        // Get the config folder path
+        Path configFolder = FMLPaths.CONFIGDIR.get();
+        stagesDirectory = configFolder.resolve(Constants.STAGE_FILES_DIRECTORY);
 
         // Create directory if it doesn't exist
         if (!Files.exists(stagesDirectory)) {
             try {
                 Files.createDirectories(stagesDirectory);
                 LOGGER.info("Created ProgressiveStages directory: {}", stagesDirectory);
-
-                // Generate default stage files
-                generateDefaultStageFiles();
             } catch (IOException e) {
                 LOGGER.error("Failed to create ProgressiveStages directory", e);
             }
+        }
+
+        // Generate default stage files if none exist
+        // Check if there are any .toml files (excluding triggers.toml)
+        if (countStageFiles() == 0) {
+            LOGGER.info("No stage files found, generating defaults...");
+            generateDefaultStageFiles();
         }
 
         // Load all stage files
@@ -92,18 +96,27 @@ public class StageFileLoader {
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
             for (Path file : stream) {
+                // Skip triggers.toml - it's not a stage definition file
+                String fileName = file.getFileName().toString().toLowerCase();
+                if (fileName.equals("triggers.toml")) {
+                    LOGGER.debug("Skipping triggers.toml - not a stage definition file");
+                    continue;
+                }
                 loadStageFile(file);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to list stage files", e);
         }
 
-        // Sort stages by order and register with StageOrder
-        List<StageDefinition> sortedStages = new ArrayList<>(loadedStages.values());
-        sortedStages.sort(Comparator.comparingInt(StageDefinition::getOrder));
-
-        for (StageDefinition stage : sortedStages) {
+        // Register all stages with StageOrder (no longer sorted by order in v1.3)
+        for (StageDefinition stage : loadedStages.values()) {
             StageOrder.getInstance().registerStage(stage);
+        }
+
+        // Validate dependencies after all stages are loaded
+        List<String> validationErrors = StageOrder.getInstance().validateDependencies();
+        for (String error : validationErrors) {
+            LOGGER.error("[ProgressiveStages] Dependency validation error: {}", error);
         }
 
         LOGGER.info("Loaded {} stage definitions", loadedStages.size());
@@ -122,7 +135,7 @@ public class StageFileLoader {
             }
 
             loadedStages.put(stage.getId(), stage);
-            LOGGER.debug("Loaded stage: {} (order: {})", stage.getId(), stage.getOrder());
+            LOGGER.debug("Loaded stage: {} with {} dependencies", stage.getId(), stage.getDependencies().size());
         } else {
             LOGGER.warn("Failed to parse stage file: {}", file);
         }
@@ -256,7 +269,7 @@ public class StageFileLoader {
     }
 
     /**
-     * Count total stage files in directory
+     * Count total stage files in directory (excludes triggers.toml)
      */
     public int countStageFiles() {
         if (stagesDirectory == null || !Files.exists(stagesDirectory)) {
@@ -264,7 +277,13 @@ public class StageFileLoader {
         }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
             int count = 0;
-            for (Path ignored : stream) count++;
+            for (Path file : stream) {
+                // Skip triggers.toml
+                String fileName = file.getFileName().toString().toLowerCase();
+                if (!fileName.equals("triggers.toml")) {
+                    count++;
+                }
+            }
             return count;
         } catch (IOException e) {
             return 0;
@@ -303,28 +322,129 @@ public class StageFileLoader {
 
     private void generateStoneAgeFile() {
         String content = """
-            # Stage definition for Stone Age
-            # This is the starting stage - nothing is locked here
+            # ============================================================================
+            # Stage definition for Stone Age (v1.1)
+            # This file demonstrates ALL features available in ProgressiveStages v1.1
+            # This is a STARTING STAGE - no dependencies, granted to new players
+            # ============================================================================
             
             [stage]
+            # Unique identifier (must match filename without .toml)
             id = "stone_age"
+            
+            # Display name shown in tooltips, messages, etc.
             display_name = "Stone Age"
-            description = "Basic survival tools and resources"
-            order = 1
+            
+            # Description for quest integration or future GUI
+            description = "Basic survival tools and resources - the beginning of your journey"
+            
+            # Icon item for visual representation
             icon = "minecraft:stone_pickaxe"
-            unlock_message = "&7&lStone Age Unlocked! &r&8Begin your journey."
+            
+            # Message sent to ALL team members when this stage is unlocked
+            # Supports color codes: &c=red, &a=green, &b=aqua, &l=bold, &o=italic, &r=reset
+            unlock_message = "&7&lStone Age Unlocked! &r&8Begin your journey into the unknown."
+            
+            # ============================================================================
+            # DEPENDENCY (v1.1) - Stage(s) that must be unlocked BEFORE this one
+            # ============================================================================
+            
+            # No dependency - this is a starting stage (granted automatically to new players)
+            # To make this require another stage, uncomment one of these:
+            
+            # Single dependency:
+            # dependency = "tutorial_complete"
+            
+            # Multiple dependencies (list format):
+            # dependency = ["tutorial_complete", "spawn_visit"]
+            
+            # ============================================================================
+            # LOCKS - Define what is locked UNTIL this stage is unlocked
+            # Stone Age is the starting stage, so we don't lock anything here.
+            # Everything below is empty but shows the available options.
+            # ============================================================================
             
             [locks]
-            # Stone Age is the starting stage - nothing locked here
+            
+            # -----------------------------------------------------------------------------
+            # ITEMS - Lock specific items by registry ID
+            # Players cannot use, pickup, or hold these items until stage is unlocked
+            # Example: items = ["minecraft:wooden_pickaxe", "minecraft:wooden_sword"]
+            # -----------------------------------------------------------------------------
             items = []
+            
+            # -----------------------------------------------------------------------------
+            # ITEM TAGS - Lock all items in a tag (use # prefix)
+            # Example: item_tags = ["#c:tools/wooden", "#minecraft:wooden_slabs"]
+            # This locks ALL items that are part of the specified tag
+            # -----------------------------------------------------------------------------
             item_tags = []
-            recipes = []
-            recipe_tags = []
+            
+            # -----------------------------------------------------------------------------
+            # BLOCKS - Lock block placement and interaction
+            # Players cannot place or right-click these blocks
+            # Example: blocks = ["minecraft:crafting_table", "minecraft:furnace"]
+            # -----------------------------------------------------------------------------
             blocks = []
+            
+            # -----------------------------------------------------------------------------
+            # BLOCK TAGS - Lock all blocks in a tag
+            # Example: block_tags = ["#minecraft:logs"]
+            # -----------------------------------------------------------------------------
             block_tags = []
+            
+            # -----------------------------------------------------------------------------
+            # DIMENSIONS - Lock entire dimensions (prevent portal travel)
+            # Format: "namespace:dimension_id"
+            # Example: dimensions = ["minecraft:the_nether", "minecraft:the_end"]
+            # -----------------------------------------------------------------------------
             dimensions = []
+            
+            # -----------------------------------------------------------------------------
+            # MODS - Lock ENTIRE mods (all items, blocks, recipes from that mod)
+            # Format: "modid" (just the namespace, e.g., "mekanism", "create")
+            # This is powerful - use carefully!
+            # Example: mods = ["mekanism", "ae2", "create"]
+            # -----------------------------------------------------------------------------
             mods = []
+            
+            # -----------------------------------------------------------------------------
+            # NAMES - Lock items/blocks by name (case-insensitive substring matching)
+            # Locks ANYTHING with this text in its registry ID
+            # Example: names = ["iron"] locks "minecraft:iron_ingot", "create:iron_sheet", etc.
+            # Very broad - use carefully!
+            # -----------------------------------------------------------------------------
             names = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions
+            # These items are ALWAYS accessible, even if they would be locked by:
+            #   - mods = ["somemod"]
+            #   - names = ["stone"]
+            #   - item_tags = ["#sometag"]
+            #
+            # Use case: Lock entire mod but allow specific items from it
+            # Example: unlocked_items = ["mekanism:configurator"]
+            # -----------------------------------------------------------------------------
+            unlocked_items = []
+            
+            # -----------------------------------------------------------------------------
+            # INTERACTIONS - Lock specific player-world interactions
+            # Useful for Create mod's "apply item to block" mechanics
+            # -----------------------------------------------------------------------------
+            
+            # Example: Lock using a block (right-click)
+            # [[locks.interactions]]
+            # type = "block_right_click"
+            # target_block = "minecraft:crafting_table"
+            # description = "Use Crafting Table"
+            
+            # Example: Lock applying item to block (Create-style)
+            # [[locks.interactions]]
+            # type = "item_on_block"
+            # held_item = "create:andesite_alloy"
+            # target_block = "#minecraft:logs"
+            # description = "Create Andesite Casing"
             """;
 
         writeStageFile("stone_age.toml", content);
@@ -332,100 +452,41 @@ public class StageFileLoader {
 
     private void generateIronAgeFile() {
         String content = """
-            # Stage definition for Iron Age
-            # Unlocks iron tools, armor, and related items
-            
-            [stage]
-            id = "iron_age"
-            display_name = "Iron Age"
-            description = "Iron tools, armor, and basic machinery"
-            order = 2
-            icon = "minecraft:iron_pickaxe"
-            unlock_message = "&6&lIron Age Unlocked! &r&7You can now use iron equipment."
-            
-            [locks]
-            items = [
-                "minecraft:iron_ingot",
-                "minecraft:iron_block",
-                "minecraft:iron_ore",
-                "minecraft:deepslate_iron_ore",
-                "minecraft:raw_iron",
-                "minecraft:raw_iron_block",
-                "minecraft:iron_pickaxe",
-                "minecraft:iron_sword",
-                "minecraft:iron_axe",
-                "minecraft:iron_shovel",
-                "minecraft:iron_hoe",
-                "minecraft:iron_helmet",
-                "minecraft:iron_chestplate",
-                "minecraft:iron_leggings",
-                "minecraft:iron_boots",
-                "minecraft:shield",
-                "minecraft:bucket",
-                "minecraft:shears",
-                "minecraft:flint_and_steel"
-            ]
-            
-            item_tags = []
-            
-            recipes = [
-                "minecraft:iron_pickaxe",
-                "minecraft:iron_sword",
-                "minecraft:iron_axe",
-                "minecraft:iron_shovel",
-                "minecraft:iron_hoe",
-                "minecraft:iron_helmet",
-                "minecraft:iron_chestplate",
-                "minecraft:iron_leggings",
-                "minecraft:iron_boots",
-                "minecraft:bucket",
-                "minecraft:shield"
-            ]
-            
-            recipe_tags = []
-            
-            blocks = [
-                "minecraft:iron_block",
-                "minecraft:iron_door",
-                "minecraft:iron_trapdoor",
-                "minecraft:iron_bars"
-            ]
-            
-            block_tags = []
-            dimensions = []
-            mods = []
-            names = []
-            """;
-
-        writeStageFile("iron_age.toml", content);
-    }
-
-    private void generateDiamondAgeFile() {
-        String content = """
             # ============================================================================
-            # Stage definition for Diamond Age
-            # This file demonstrates ALL lock types available in ProgressiveStages
+            # Stage definition for Iron Age (v1.1)
+            # This file demonstrates ALL features available in ProgressiveStages v1.1
+            # Requires stone_age to be unlocked first
             # ============================================================================
             
             [stage]
             # Unique identifier (must match filename without .toml)
-            id = "diamond_age"
+            id = "iron_age"
             
             # Display name shown in tooltips, messages, etc.
-            display_name = "Diamond Age"
+            display_name = "Iron Age"
             
             # Description for quest integration or future GUI
-            description = "Diamond tools, armor, and advanced equipment"
-            
-            # Order in progression (lower = earlier, must be unique across all stages)
-            order = 3
+            description = "Iron tools, armor, and basic machinery - industrialization begins"
             
             # Icon item for visual representation
-            icon = "minecraft:diamond_pickaxe"
+            icon = "minecraft:iron_pickaxe"
             
             # Message sent to ALL team members when this stage is unlocked
             # Supports color codes: &c=red, &a=green, &b=aqua, &l=bold, &o=italic, &r=reset
-            unlock_message = "&b&lDiamond Age Unlocked! &r&7You can now use diamond items."
+            unlock_message = "&6&lIron Age Unlocked! &r&7You can now use iron equipment and basic machines."
+            
+            # ============================================================================
+            # DEPENDENCY (v1.1) - Stage(s) that must be unlocked BEFORE this one
+            # ============================================================================
+            
+            # Single dependency - requires stone_age before this can be granted
+            dependency = "stone_age"
+            
+            # Multiple dependencies (list format):
+            # dependency = ["stone_age", "tutorial_complete"]
+            
+            # No dependency (can be obtained anytime):
+            # Just omit this field or leave empty
             
             # ============================================================================
             # LOCKS - Define what is locked UNTIL this stage is unlocked
@@ -438,21 +499,205 @@ public class StageFileLoader {
             # Players cannot use, pickup, or hold these items until stage is unlocked
             # -----------------------------------------------------------------------------
             items = [
+                # Raw materials
+                "minecraft:iron_ingot",
+                "minecraft:iron_block",
+                "minecraft:iron_ore",
+                "minecraft:deepslate_iron_ore",
+                "minecraft:raw_iron",
+                "minecraft:raw_iron_block",
+                
+                # Tools
+                "minecraft:iron_pickaxe",
+                "minecraft:iron_sword",
+                "minecraft:iron_axe",
+                "minecraft:iron_shovel",
+                "minecraft:iron_hoe",
+                
+                # Armor
+                "minecraft:iron_helmet",
+                "minecraft:iron_chestplate",
+                "minecraft:iron_leggings",
+                "minecraft:iron_boots",
+                
+                # Utility items
+                "minecraft:shield",
+                "minecraft:bucket",
+                "minecraft:shears",
+                "minecraft:flint_and_steel",
+                "minecraft:compass",
+                "minecraft:clock",
+                "minecraft:minecart",
+                "minecraft:rail",
+                "minecraft:powered_rail",
+                "minecraft:detector_rail",
+                "minecraft:activator_rail"
+            ]
+            
+            # -----------------------------------------------------------------------------
+            # ITEM TAGS - Lock all items in a tag (use # prefix)
+            # Example: "#c:ingots/iron" locks all items tagged as iron ingots
+            # -----------------------------------------------------------------------------
+            item_tags = [
+                # "#c:ingots/iron",
+                # "#c:storage_blocks/iron"
+            ]
+            
+            # -----------------------------------------------------------------------------
+            # BLOCKS - Lock block placement and interaction
+            # Players cannot place or right-click these blocks
+            # -----------------------------------------------------------------------------
+            blocks = [
+                "minecraft:iron_block",
+                "minecraft:iron_door",
+                "minecraft:iron_trapdoor",
+                "minecraft:iron_bars",
+                "minecraft:hopper",
+                "minecraft:blast_furnace",
+                "minecraft:smithing_table"
+            ]
+            
+            # -----------------------------------------------------------------------------
+            # BLOCK TAGS - Lock all blocks in a tag
+            # Example: block_tags = ["#minecraft:anvil"]
+            # -----------------------------------------------------------------------------
+            block_tags = []
+            
+            # -----------------------------------------------------------------------------
+            # DIMENSIONS - Lock entire dimensions (prevent portal travel)
+            # Format: "namespace:dimension_id"
+            # Iron age doesn't lock dimensions, but you could lock the Nether:
+            # dimensions = ["minecraft:the_nether"]
+            # -----------------------------------------------------------------------------
+            dimensions = []
+            
+            # -----------------------------------------------------------------------------
+            # MODS - Lock ENTIRE mods (all items, blocks, recipes from that mod)
+            # Format: "modid" (just the namespace, e.g., "mekanism", "create")
+            # This is powerful - use carefully!
+            # Example: Lock all of Create mod until iron age
+            # mods = ["create"]
+            # -----------------------------------------------------------------------------
+            mods = []
+            
+            # -----------------------------------------------------------------------------
+            # NAMES - Lock items/blocks by name (case-insensitive substring matching)
+            # Locks ANYTHING with this text in its registry ID
+            # Example: names = ["iron"] locks "minecraft:iron_ingot", "create:iron_sheet", etc.
+            # Very broad - use carefully!
+            # -----------------------------------------------------------------------------
+            names = [
+                # "iron"  # Uncomment to lock ALL items with "iron" in the name
+            ]
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions
+            # These items are ALWAYS accessible, even if they would be locked by:
+            #   - mods = ["somemod"]
+            #   - names = ["iron"]
+            #   - item_tags = ["#sometag"]
+            #
+            # Use case: Lock by name "iron" but allow iron nuggets
+            # Example: unlocked_items = ["minecraft:iron_nugget"]
+            # -----------------------------------------------------------------------------
+            unlocked_items = []
+            
+            # -----------------------------------------------------------------------------
+            # INTERACTIONS - Lock specific player-world interactions
+            # Useful for Create mod's "apply item to block" mechanics
+            # -----------------------------------------------------------------------------
+            
+            # Example: Lock using a smithing table (right-click block)
+            # [[locks.interactions]]
+            # type = "block_right_click"
+            # target_block = "minecraft:smithing_table"
+            # description = "Use Smithing Table"
+            
+            # Example: Lock applying iron to Create blocks
+            # [[locks.interactions]]
+            # type = "item_on_block"
+            # held_item = "minecraft:iron_ingot"
+            # target_block = "create:andesite_casing"
+            # description = "Apply Iron to Create Casing"
+            """;
+
+        writeStageFile("iron_age.toml", content);
+    }
+
+    private void generateDiamondAgeFile() {
+        String content = """
+            # ============================================================================
+            # Stage definition for Diamond Age (v1.1)
+            # This file demonstrates ALL features available in ProgressiveStages v1.1
+            # ============================================================================
+            
+            [stage]
+            # Unique identifier (must match filename without .toml)
+            id = "diamond_age"
+            
+            # Display name shown in tooltips, messages, etc.
+            display_name = "Diamond Age"
+            
+            # Description for quest integration or future GUI
+            description = "Diamond tools, armor, and advanced equipment - true power awaits"
+            
+            # Icon item for visual representation
+            icon = "minecraft:diamond_pickaxe"
+            
+            # Message sent to ALL team members when this stage is unlocked
+            # Supports color codes: &c=red, &a=green, &b=aqua, &l=bold, &o=italic, &r=reset
+            unlock_message = "&b&lDiamond Age Unlocked! &r&7You can now use diamond items and enchanting."
+            
+            # ============================================================================
+            # DEPENDENCY (v1.1) - Stage(s) that must be unlocked BEFORE this one
+            # ============================================================================
+            
+            # Single dependency:
+            dependency = "iron_age"
+            
+            # Multiple dependencies (list format):
+            # dependency = ["iron_age", "stone_age"]
+            
+            # No dependency (can be obtained anytime):
+            # Just omit this field or leave empty
+            
+            # ============================================================================
+            # LOCKS - Define what is locked UNTIL this stage is unlocked
+            # ============================================================================
+            
+            [locks]
+            
+            # -----------------------------------------------------------------------------
+            # ITEMS - Lock specific items by registry ID
+            # Players cannot use, pickup, or hold these items until stage is unlocked
+            # -----------------------------------------------------------------------------
+            items = [
+                # Raw materials
                 "minecraft:diamond",
                 "minecraft:diamond_block",
                 "minecraft:diamond_ore",
                 "minecraft:deepslate_diamond_ore",
+                
+                # Tools
                 "minecraft:diamond_pickaxe",
                 "minecraft:diamond_sword",
                 "minecraft:diamond_axe",
                 "minecraft:diamond_shovel",
                 "minecraft:diamond_hoe",
+                
+                # Armor
                 "minecraft:diamond_helmet",
                 "minecraft:diamond_chestplate",
                 "minecraft:diamond_leggings",
                 "minecraft:diamond_boots",
+                
+                # Special items
                 "minecraft:enchanting_table",
-                "minecraft:jukebox"
+                "minecraft:jukebox",
+                "minecraft:beacon",
+                "minecraft:conduit",
+                "minecraft:ender_chest",
+                "minecraft:experience_bottle"
             ]
             
             # -----------------------------------------------------------------------------
@@ -465,44 +710,29 @@ public class StageFileLoader {
             ]
             
             # -----------------------------------------------------------------------------
-            # RECIPES - Lock specific crafting recipes by ID
-            # Players cannot craft these recipes even if they have the items
-            # -----------------------------------------------------------------------------
-            recipes = [
-                "minecraft:diamond_pickaxe",
-                "minecraft:diamond_sword",
-                "minecraft:diamond_axe",
-                "minecraft:diamond_shovel",
-                "minecraft:diamond_hoe",
-                "minecraft:diamond_helmet",
-                "minecraft:diamond_chestplate",
-                "minecraft:diamond_leggings",
-                "minecraft:diamond_boots",
-                "minecraft:diamond_block",
-                "minecraft:enchanting_table",
-                "minecraft:jukebox"
-            ]
-            
-            recipe_tags = []
-            
-            # -----------------------------------------------------------------------------
             # BLOCKS - Lock block placement and interaction
             # Players cannot place or right-click these blocks
             # -----------------------------------------------------------------------------
             blocks = [
                 "minecraft:diamond_block",
-                "minecraft:enchanting_table"
+                "minecraft:enchanting_table",
+                "minecraft:beacon",
+                "minecraft:conduit",
+                "minecraft:ender_chest"
             ]
             
+            # -----------------------------------------------------------------------------
+            # BLOCK TAGS - Lock all blocks in a tag
+            # Example: block_tags = ["#minecraft:dragon_immune"]
+            # -----------------------------------------------------------------------------
             block_tags = []
             
             # -----------------------------------------------------------------------------
             # DIMENSIONS - Lock entire dimensions (prevent portal travel)
             # Format: "namespace:dimension_id"
-            # Uncomment to lock dimensions
+            # Example: Lock The End until diamond age
             # -----------------------------------------------------------------------------
             dimensions = [
-                # "minecraft:the_nether",
                 # "minecraft:the_end"
             ]
             
@@ -510,9 +740,9 @@ public class StageFileLoader {
             # MODS - Lock ENTIRE mods (all items, blocks, recipes from that mod)
             # Format: "modid" (just the namespace, e.g., "mekanism", "create")
             # This is powerful - use carefully!
+            # Example: Lock all of Applied Energistics 2 until diamond age
             # -----------------------------------------------------------------------------
             mods = [
-                # "mekanism",
                 # "ae2"
             ]
             
@@ -523,7 +753,21 @@ public class StageFileLoader {
             # Very broad - use carefully!
             # -----------------------------------------------------------------------------
             names = [
-                # "netherite"
+                # "netherite"  # Uncomment to lock ALL items with "netherite" in the name
+            ]
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions
+            # These items are ALWAYS accessible, even if they would be locked by:
+            #   - mods = ["somemod"]
+            #   - names = ["diamond"]
+            #   - item_tags = ["#sometag"]
+            #
+            # Use case: Lock entire mod but allow specific items from it
+            # Example: Lock by name "diamond" but allow diamond horse armor for decoration
+            # -----------------------------------------------------------------------------
+            unlocked_items = [
+                # "minecraft:diamond_horse_armor"
             ]
             
             # -----------------------------------------------------------------------------

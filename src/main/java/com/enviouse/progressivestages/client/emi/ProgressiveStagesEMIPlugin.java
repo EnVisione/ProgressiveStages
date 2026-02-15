@@ -7,6 +7,7 @@ import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageOrder;
+import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
 import dev.emi.emi.api.EmiEntrypoint;
 import dev.emi.emi.api.EmiPlugin;
@@ -19,6 +20,7 @@ import net.minecraft.world.item.Item;
 import org.slf4j.Logger;
 
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * EMI plugin entrypoint for ProgressiveStages
@@ -27,8 +29,8 @@ import java.util.Optional;
  * - Hiding locked items/recipes from EMI when show_locked_recipes = false
  * - Triggering EMI reload when stages change
  *
- * Stage browsing uses dynamic tags (#progressivestages:iron_age) built from
- * the TOML stage files - no static tag JSONs needed.
+ * Note: Stage tags (e.g., #progressivestages:iron_age) are provided through
+ * NeoForge's dynamic tag system, not through EMI's registry.
  */
 @EmiEntrypoint
 public class ProgressiveStagesEMIPlugin implements EmiPlugin {
@@ -46,6 +48,10 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             return;
         }
 
+        // Note: Dynamic stage tags (like #progressivestages:iron_age) are handled through
+        // NeoForge's tag system, not EMI's registry. EMI automatically picks up item tags.
+        // See StageTagProvider for datapack-based tag generation.
+
         // If show_locked_recipes is false, hide all locked items from EMI index
         if (!StageConfig.isShowLockedRecipes()) {
             hideLockedStacks(registry);
@@ -53,6 +59,7 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
         LOGGER.info("[ProgressiveStages] EMI integration enabled");
     }
+
 
     /**
      * Hide all locked stacks from EMI's index
@@ -64,8 +71,8 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
         // Get all locked items from the client cache
         var lockedItems = ClientLockCache.getAllItemLocks();
 
-        LOGGER.info("[ProgressiveStages] Processing {} locked item definitions", lockedItems.size());
-        LOGGER.info("[ProgressiveStages] Player has stages: {}", ClientStageCache.getStages());
+        LOGGER.debug("[ProgressiveStages] Processing {} locked item definitions", lockedItems.size());
+        LOGGER.debug("[ProgressiveStages] Player has stages: {}", ClientStageCache.getStages());
 
         for (var entry : lockedItems.entrySet()) {
             ResourceLocation itemId = entry.getKey();
@@ -94,8 +101,13 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
     /**
      * Trigger EMI to fully reload recipes and stacks.
-     * This will cause EMI to re-run all plugins including ours,
+     * This forces EMI to re-run all plugins including ours,
      * which will re-evaluate what should be hidden based on current stages.
+     *
+     * Multiple approaches are tried:
+     * 1. EmiReloadManager.reload() - full reload
+     * 2. Clear EmiSearch cache to force rebuild
+     * 3. Trigger reloadRecipes() + reloadTags()
      */
     public static void triggerEmiReload() {
         if (!initialized) {
@@ -109,22 +121,85 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             var minecraft = net.minecraft.client.Minecraft.getInstance();
 
             // Use a delayed task to ensure stage data is fully processed
-            new Thread(() -> {
+            minecraft.execute(() -> {
                 try {
-                    Thread.sleep(250); // Wait 250ms for stage data to be fully processed
-                    minecraft.execute(() -> {
+                    LOGGER.info("[ProgressiveStages] Current stages: {}", ClientStageCache.getStages());
+
+                    // Approach 1: Try to clear EmiSearch to force index rebuild
+                    try {
+                        Class<?> emiSearchClass = Class.forName("dev.emi.emi.search.EmiSearch");
+                        // Try to clear the search index
                         try {
-                            LOGGER.info("[ProgressiveStages] Current stages: {}", ClientStageCache.getStages());
-                            EmiReloadManager.reloadRecipes();
-                            LOGGER.info("[ProgressiveStages] EMI reload completed");
-                        } catch (Exception e) {
-                            LOGGER.error("[ProgressiveStages] Failed to trigger EMI reload: {}", e.getMessage());
+                            var clearMethod = emiSearchClass.getMethod("clear");
+                            clearMethod.invoke(null);
+                            LOGGER.info("[ProgressiveStages] Cleared EmiSearch index");
+                        } catch (NoSuchMethodException e) {
+                            // Try alternative - bake() to rebuild
+                            try {
+                                var bakeMethod = emiSearchClass.getMethod("bake");
+                                bakeMethod.invoke(null);
+                                LOGGER.info("[ProgressiveStages] Called EmiSearch.bake()");
+                            } catch (NoSuchMethodException e2) {
+                                // Neither method exists
+                            }
                         }
-                    });
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                    } catch (ClassNotFoundException e) {
+                        LOGGER.debug("[ProgressiveStages] EmiSearch class not found");
+                    }
+
+                    // Approach 2: Try EmiReloadManager.reload()
+                    try {
+                        Class<?> reloadManagerClass = Class.forName("dev.emi.emi.runtime.EmiReloadManager");
+
+                        // Try reload() method first (full reload)
+                        try {
+                            var reloadMethod = reloadManagerClass.getMethod("reload");
+                            reloadMethod.invoke(null);
+                            LOGGER.info("[ProgressiveStages] EMI full reload triggered via reload()");
+                        } catch (NoSuchMethodException e) {
+                            // reload() doesn't exist
+                        }
+
+                        // Fallback: trigger both recipes and tags reload
+                        EmiReloadManager.reloadRecipes();
+                        try {
+                            var reloadTagsMethod = reloadManagerClass.getMethod("reloadTags");
+                            reloadTagsMethod.invoke(null);
+                            LOGGER.info("[ProgressiveStages] Called reloadTags()");
+                        } catch (NoSuchMethodException e) {
+                            // reloadTags doesn't exist
+                        }
+
+                    } catch (ClassNotFoundException e) {
+                        LOGGER.warn("[ProgressiveStages] EmiReloadManager class not found");
+                    }
+
+                    // Approach 3: Try to invalidate EmiScreenManager's cached index
+                    try {
+                        Class<?> screenManagerClass = Class.forName("dev.emi.emi.screen.EmiScreenManager");
+                        // Look for any methods that might refresh the view
+                        for (var method : screenManagerClass.getMethods()) {
+                            if (method.getName().contains("refresh") || method.getName().contains("invalidate") || method.getName().contains("clear")) {
+                                if (method.getParameterCount() == 0) {
+                                    try {
+                                        method.invoke(null);
+                                        LOGGER.info("[ProgressiveStages] Called EmiScreenManager.{}()", method.getName());
+                                    } catch (Exception ex) {
+                                        // Ignore
+                                    }
+                                }
+                            }
+                        }
+                    } catch (ClassNotFoundException e) {
+                        LOGGER.debug("[ProgressiveStages] EmiScreenManager class not found");
+                    }
+
+                    LOGGER.info("[ProgressiveStages] EMI reload sequence completed");
+                } catch (Exception e) {
+                    LOGGER.error("[ProgressiveStages] Failed to trigger EMI reload: {}", e.getMessage());
+                    e.printStackTrace();
                 }
-            }).start();
+            });
         } catch (Exception e) {
             LOGGER.error("[ProgressiveStages] Failed to schedule EMI reload: {}", e.getMessage());
         }

@@ -52,6 +52,9 @@ public class LockRegistry {
     // Interaction locks: key = type:heldItem:targetBlock
     private final Map<String, InteractionLockEntry> interactionLocks = new ConcurrentHashMap<>();
 
+    // v1.3: Global whitelist of items that are ALWAYS unlocked (bypass all lock checks)
+    private final Set<ResourceLocation> unlockedItems = ConcurrentHashMap.newKeySet();
+
     // Cache for item -> stage lookups (rebuilt when registry changes)
     private final Map<Item, Optional<StageId>> itemStageCache = new ConcurrentHashMap<>();
 
@@ -80,6 +83,7 @@ public class LockRegistry {
         modLocks.clear();
         nameLocks.clear();
         interactionLocks.clear();
+        unlockedItems.clear();
         clearCache();
     }
 
@@ -88,6 +92,7 @@ public class LockRegistry {
      */
     public void clearCache() {
         itemStageCache.clear();
+        resolvedItemLocksCache = null;
     }
 
     /**
@@ -145,6 +150,17 @@ public class LockRegistry {
         // Register interaction locks
         for (LockDefinition.InteractionLock interaction : locks.getInteractions()) {
             registerInteractionLock(interaction, stageId);
+        }
+
+        // Register unlocked items (v1.3 whitelist exceptions)
+        for (String itemId : locks.getUnlockedItems()) {
+            ResourceLocation rl = parseResourceLocation(itemId);
+            if (rl != null) {
+                unlockedItems.add(rl);
+                LOGGER.debug("Registered whitelist item for stage {}: {}", stageId, itemId);
+            } else {
+                LOGGER.warn("Invalid unlocked item ID in stage {}: {}", stageId, itemId);
+            }
         }
 
         LOGGER.debug("Registered locks for stage: {}", stageId);
@@ -259,6 +275,11 @@ public class LockRegistry {
     private Optional<StageId> computeRequiredStageForItem(Item item) {
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
         if (itemId == null) {
+            return Optional.empty();
+        }
+
+        // v1.3: Check whitelist first - if item is whitelisted, it's never locked
+        if (unlockedItems.contains(itemId)) {
             return Optional.empty();
         }
 
@@ -409,6 +430,92 @@ public class LockRegistry {
      */
     public Map<ResourceLocation, StageId> getAllItemLocks() {
         return Collections.unmodifiableMap(itemLocks);
+    }
+
+    // Cache for resolved item locks (includes name patterns, tags, mod locks)
+    // Cleared when lock registry changes (via clear() or clearCache())
+    private Map<ResourceLocation, StageId> resolvedItemLocksCache = null;
+
+    /**
+     * Get ALL resolved item locks including name patterns, tags, and mod locks.
+     * This iterates all registered items and checks each one against all lock types.
+     * Used for syncing complete lock data to clients for EMI integration.
+     *
+     * <p>Results are cached for performance. Cache is cleared when registry changes.
+     */
+    public Map<ResourceLocation, StageId> getAllResolvedItemLocks() {
+        // Return cached result if available
+        if (resolvedItemLocksCache != null) {
+            return resolvedItemLocksCache;
+        }
+
+        long startTime = System.currentTimeMillis();
+        Map<ResourceLocation, StageId> resolved = new HashMap<>();
+
+        // Start with direct item locks
+        resolved.putAll(itemLocks);
+
+        // Only iterate all items if we have pattern-based locks
+        boolean hasPatternLocks = !itemTagLocks.isEmpty() || !modLocks.isEmpty() || !nameLocks.isEmpty();
+
+        if (hasPatternLocks) {
+            // Iterate all registered items and check name patterns, tags, and mod locks
+            for (Item item : BuiltInRegistries.ITEM) {
+                ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
+                if (itemId == null) continue;
+
+                // Skip if already has direct lock
+                if (resolved.containsKey(itemId)) continue;
+
+                // Check item tags
+                for (Map.Entry<ResourceLocation, StageId> entry : itemTagLocks.entrySet()) {
+                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, entry.getKey());
+                    if (item.builtInRegistryHolder().is(tagKey)) {
+                        resolved.put(itemId, entry.getValue());
+                        break;
+                    }
+                }
+
+                // Skip if already locked by tag
+                if (resolved.containsKey(itemId)) continue;
+
+                // Check mod locks
+                String modId = itemId.getNamespace().toLowerCase();
+                StageId modLock = modLocks.get(modId);
+                if (modLock != null) {
+                    resolved.put(itemId, modLock);
+                    continue;
+                }
+
+                // Check name pattern locks
+                String itemIdStr = itemId.toString().toLowerCase();
+                for (Map.Entry<String, StageId> entry : nameLocks.entrySet()) {
+                    if (itemIdStr.contains(entry.getKey())) {
+                        resolved.put(itemId, entry.getValue());
+                        break;
+                    }
+                }
+            }
+        }
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        if (elapsed > 100) {
+            LOGGER.info("[ProgressiveStages] Resolved {} item locks in {}ms (caching result)", resolved.size(), elapsed);
+        } else {
+            LOGGER.debug("[ProgressiveStages] Resolved {} item locks in {}ms", resolved.size(), elapsed);
+        }
+
+        // Cache the result
+        resolvedItemLocksCache = Collections.unmodifiableMap(resolved);
+        return resolvedItemLocksCache;
+    }
+
+    /**
+     * Invalidate the resolved item locks cache.
+     * Call this when lock definitions change.
+     */
+    public void invalidateResolvedCache() {
+        resolvedItemLocksCache = null;
     }
 
     /**

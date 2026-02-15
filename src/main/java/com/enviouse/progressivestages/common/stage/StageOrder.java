@@ -8,18 +8,17 @@ import org.slf4j.Logger;
 import java.util.*;
 
 /**
- * Manages the linear ordering of stages.
- * Provides methods to determine stage prerequisites and successors.
+ * Manages stage definitions and their dependency relationships.
+ *
+ * <p>v1.3 changes: Replaced order-based linear progression with dependency graph.
+ * Dependencies are now explicitly defined per stage, not inferred from order numbers.
  */
 public class StageOrder {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    // Ordered list of stages (by order field)
-    private final List<StageId> orderedStages = new ArrayList<>();
-
-    // Stage ID -> Order number
-    private final Map<StageId, Integer> stageToOrder = new HashMap<>();
+    // All registered stages (insertion order preserved for iteration)
+    private final List<StageId> registeredStages = new ArrayList<>();
 
     // Stage definitions
     private final Map<StageId, StageDefinition> stageDefinitions = new HashMap<>();
@@ -36,51 +35,29 @@ public class StageOrder {
     private StageOrder() {}
 
     /**
-     * Clear all stage ordering data
+     * Clear all stage data
      */
     public void clear() {
-        orderedStages.clear();
-        stageToOrder.clear();
+        registeredStages.clear();
         stageDefinitions.clear();
     }
 
     /**
-     * Register a stage in the ordering system
+     * Register a stage
      */
     public void registerStage(StageDefinition stage) {
         StageId id = stage.getId();
-        int order = stage.getOrder();
 
-        // Check for duplicate orders
-        for (Map.Entry<StageId, Integer> entry : stageToOrder.entrySet()) {
-            if (entry.getValue() == order && !entry.getKey().equals(id)) {
-                LOGGER.warn("Duplicate stage order {}: {} and {}", order, id, entry.getKey());
-            }
+        // Check for duplicates
+        if (stageDefinitions.containsKey(id)) {
+            LOGGER.warn("Duplicate stage registration: {}", id);
+            return;
         }
 
-        stageToOrder.put(id, order);
         stageDefinitions.put(id, stage);
+        registeredStages.add(id);
 
-        // Rebuild ordered list
-        rebuildOrderedList();
-    }
-
-    private void rebuildOrderedList() {
-        orderedStages.clear();
-
-        List<Map.Entry<StageId, Integer>> entries = new ArrayList<>(stageToOrder.entrySet());
-        entries.sort(Comparator.comparingInt(Map.Entry::getValue));
-
-        for (Map.Entry<StageId, Integer> entry : entries) {
-            orderedStages.add(entry.getKey());
-        }
-    }
-
-    /**
-     * Get the order number for a stage
-     */
-    public Optional<Integer> getOrder(StageId stageId) {
-        return Optional.ofNullable(stageToOrder.get(stageId));
+        LOGGER.debug("Registered stage: {} with {} dependencies", id, stage.getDependencies().size());
     }
 
     /**
@@ -91,149 +68,192 @@ public class StageOrder {
     }
 
     /**
-     * Get all stages in order (earliest first)
+     * Get all stages (in registration order)
      */
     public List<StageId> getOrderedStages() {
-        return Collections.unmodifiableList(orderedStages);
+        return Collections.unmodifiableList(registeredStages);
     }
 
     /**
-     * Get all prerequisites for a stage (all stages with lower order)
+     * Get direct dependencies for a stage (stages that must be unlocked first).
+     * Returns only the explicitly declared dependencies, not transitive ones.
      */
+    public Set<StageId> getDependencies(StageId stageId) {
+        StageDefinition def = stageDefinitions.get(stageId);
+        if (def == null) {
+            return Collections.emptySet();
+        }
+        return new LinkedHashSet<>(def.getDependencies());
+    }
+
+    /**
+     * Get all dependencies (transitive) for a stage.
+     * This includes dependencies of dependencies, recursively.
+     */
+    public Set<StageId> getAllDependencies(StageId stageId) {
+        Set<StageId> allDeps = new LinkedHashSet<>();
+        collectDependencies(stageId, allDeps, new HashSet<>());
+        return allDeps;
+    }
+
+    private void collectDependencies(StageId stageId, Set<StageId> collected, Set<StageId> visited) {
+        if (visited.contains(stageId)) {
+            LOGGER.warn("Circular dependency detected involving stage: {}", stageId);
+            return;
+        }
+        visited.add(stageId);
+
+        StageDefinition def = stageDefinitions.get(stageId);
+        if (def == null) return;
+
+        for (StageId dep : def.getDependencies()) {
+            if (!collected.contains(dep)) {
+                collected.add(dep);
+                collectDependencies(dep, collected, visited);
+            }
+        }
+    }
+
+    /**
+     * @deprecated Use {@link #getDependencies(StageId)} instead.
+     * For compatibility with v1.2 code that expected order-based prerequisites.
+     */
+    @Deprecated(forRemoval = true)
     public Set<StageId> getPrerequisites(StageId stageId) {
-        Set<StageId> prerequisites = new LinkedHashSet<>();
-
-        Integer targetOrder = stageToOrder.get(stageId);
-        if (targetOrder == null) {
-            return prerequisites;
-        }
-
-        for (StageId id : orderedStages) {
-            Integer order = stageToOrder.get(id);
-            if (order != null && order < targetOrder) {
-                prerequisites.add(id);
-            }
-        }
-
-        return prerequisites;
+        return getAllDependencies(stageId);
     }
 
     /**
-     * Get all stages that require this stage as a prerequisite (all stages with higher order)
+     * Get stages that depend on this stage (stages that require this one).
      */
+    public Set<StageId> getDependents(StageId stageId) {
+        Set<StageId> dependents = new LinkedHashSet<>();
+
+        for (StageDefinition def : stageDefinitions.values()) {
+            if (def.getDependencies().contains(stageId)) {
+                dependents.add(def.getId());
+            }
+        }
+
+        return dependents;
+    }
+
+    /**
+     * Get all dependents (transitive) - stages that would need this stage revoked first
+     * if we're using strict dependency enforcement.
+     */
+    public Set<StageId> getAllDependents(StageId stageId) {
+        Set<StageId> allDependents = new LinkedHashSet<>();
+        collectDependents(stageId, allDependents, new HashSet<>());
+        return allDependents;
+    }
+
+    private void collectDependents(StageId stageId, Set<StageId> collected, Set<StageId> visited) {
+        if (visited.contains(stageId)) return;
+        visited.add(stageId);
+
+        for (StageDefinition def : stageDefinitions.values()) {
+            if (def.getDependencies().contains(stageId) && !collected.contains(def.getId())) {
+                collected.add(def.getId());
+                collectDependents(def.getId(), collected, visited);
+            }
+        }
+    }
+
+    /**
+     * @deprecated Use {@link #getDependents(StageId)} instead.
+     */
+    @Deprecated(forRemoval = true)
     public Set<StageId> getSuccessors(StageId stageId) {
-        Set<StageId> successors = new LinkedHashSet<>();
-
-        Integer targetOrder = stageToOrder.get(stageId);
-        if (targetOrder == null) {
-            return successors;
-        }
-
-        for (StageId id : orderedStages) {
-            Integer order = stageToOrder.get(id);
-            if (order != null && order > targetOrder) {
-                successors.add(id);
-            }
-        }
-
-        return successors;
-    }
-
-    /**
-     * Get the next stage after the given stage
-     */
-    public Optional<StageId> getNextStage(StageId stageId) {
-        int index = orderedStages.indexOf(stageId);
-        if (index >= 0 && index < orderedStages.size() - 1) {
-            return Optional.of(orderedStages.get(index + 1));
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Get the previous stage before the given stage
-     */
-    public Optional<StageId> getPreviousStage(StageId stageId) {
-        int index = orderedStages.indexOf(stageId);
-        if (index > 0) {
-            return Optional.of(orderedStages.get(index - 1));
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Get the first (starting) stage
-     */
-    public Optional<StageId> getFirstStage() {
-        if (orderedStages.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(orderedStages.get(0));
-    }
-
-    /**
-     * Get the last (final) stage
-     */
-    public Optional<StageId> getLastStage() {
-        if (orderedStages.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(orderedStages.get(orderedStages.size() - 1));
-    }
-
-    /**
-     * Check if stageA comes before stageB in the progression
-     */
-    public boolean isBefore(StageId stageA, StageId stageB) {
-        Integer orderA = stageToOrder.get(stageA);
-        Integer orderB = stageToOrder.get(stageB);
-
-        if (orderA == null || orderB == null) {
-            return false;
-        }
-
-        return orderA < orderB;
-    }
-
-    /**
-     * Check if stageA comes after stageB in the progression
-     */
-    public boolean isAfter(StageId stageA, StageId stageB) {
-        return isBefore(stageB, stageA);
+        return getAllDependents(stageId);
     }
 
     /**
      * Check if a stage exists
      */
     public boolean stageExists(StageId stageId) {
-        return stageToOrder.containsKey(stageId);
+        return stageDefinitions.containsKey(stageId);
     }
 
     /**
-     * Get progress as "current/total" format
+     * Check if all dependencies for a stage are satisfied.
+     * @param playerStages The set of stages the player currently has
+     * @param targetStage The stage being checked
+     * @return List of missing dependencies (empty if all satisfied)
      */
-    public String getProgressString(StageId currentStage) {
-        int current = orderedStages.indexOf(currentStage) + 1;
-        int total = orderedStages.size();
-
-        if (current <= 0) {
-            return "0/" + total;
+    public List<StageId> getMissingDependencies(Set<StageId> playerStages, StageId targetStage) {
+        StageDefinition def = stageDefinitions.get(targetStage);
+        if (def == null) {
+            return Collections.emptyList();
         }
 
-        return current + "/" + total;
+        List<StageId> missing = new ArrayList<>();
+        for (StageId dep : def.getDependencies()) {
+            if (!playerStages.contains(dep)) {
+                missing.add(dep);
+            }
+        }
+        return missing;
+    }
+
+    /**
+     * @deprecated Order-based progression removed in v1.3.
+     */
+    @Deprecated(forRemoval = true)
+    public Optional<Integer> getOrder(StageId stageId) {
+        int index = registeredStages.indexOf(stageId);
+        return index >= 0 ? Optional.of(index) : Optional.empty();
     }
 
     /**
      * Get all stage IDs
      */
     public Set<StageId> getAllStageIds() {
-        return Collections.unmodifiableSet(stageToOrder.keySet());
+        return Collections.unmodifiableSet(new LinkedHashSet<>(registeredStages));
     }
 
     /**
      * Get the total number of stages
      */
     public int getStageCount() {
-        return orderedStages.size();
+        return registeredStages.size();
+    }
+
+    /**
+     * @deprecated Use dependency-based progress tracking
+     */
+    @Deprecated(forRemoval = true)
+    public String getProgressString(StageId currentStage) {
+        int index = registeredStages.indexOf(currentStage);
+        return (index + 1) + "/" + registeredStages.size();
+    }
+
+    /**
+     * Validate all dependencies point to existing stages.
+     * @return List of validation errors (empty if all valid)
+     */
+    public List<String> validateDependencies() {
+        List<String> errors = new ArrayList<>();
+
+        for (StageDefinition def : stageDefinitions.values()) {
+            for (StageId dep : def.getDependencies()) {
+                if (!stageDefinitions.containsKey(dep)) {
+                    errors.add("Stage '" + def.getId() + "' depends on non-existent stage: " + dep);
+                }
+            }
+
+            // Check for circular dependencies
+            Set<StageId> allDeps = new LinkedHashSet<>();
+            try {
+                collectDependencies(def.getId(), allDeps, new HashSet<>());
+            } catch (StackOverflowError e) {
+                errors.add("Stage '" + def.getId() + "' has a circular dependency");
+            }
+            if (allDeps.contains(def.getId())) {
+                errors.add("Stage '" + def.getId() + "' has a circular dependency (depends on itself)");
+            }
+        }
+
+        return errors;
     }
 }

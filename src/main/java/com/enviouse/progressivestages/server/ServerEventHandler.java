@@ -6,9 +6,11 @@ import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.team.TeamProvider;
 import com.enviouse.progressivestages.common.team.TeamStageSync;
 import com.enviouse.progressivestages.common.util.Constants;
+import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.server.commands.StageCommand;
 import com.enviouse.progressivestages.server.enforcement.*;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
+import com.enviouse.progressivestages.server.triggers.*;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -18,6 +20,7 @@ import net.minecraft.world.level.block.Block;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
@@ -54,6 +57,16 @@ public class ServerEventHandler {
 
         // Load stage files
         StageFileLoader.getInstance().initialize(event.getServer());
+
+        // Load trigger config and register trigger event handlers
+        TriggerConfigLoader.loadTriggerConfig();
+        NeoForge.EVENT_BUS.register(AdvancementStageGrants.class);
+        NeoForge.EVENT_BUS.register(ItemPickupStageGrants.class);
+        NeoForge.EVENT_BUS.register(DimensionStageGrants.class);
+        NeoForge.EVENT_BUS.register(BossKillStageGrants.class);
+
+        // Initialize FTB Quests compatibility (soft dependency)
+        FTBQuestsCompat.init();
     }
 
     @SubscribeEvent
@@ -64,10 +77,13 @@ public class ServerEventHandler {
     @SubscribeEvent
     public static void onPlayerJoin(EntityJoinLevelEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            // Grant starting stage to new players
-            StageManager.getInstance().grantStartingStage(player);
+            // Sync stages to player on login (fires bulk event for FTB Quests)
+            StageManager.getInstance().syncStagesOnLogin(player);
 
-            // Sync stages to player
+            // Send stage definitions to client first (v1.3 - includes dependencies)
+            NetworkHandler.sendStageDefinitionsSync(player);
+
+            // Send stage data to client
             var stages = StageManager.getInstance().getStages(player);
             NetworkHandler.sendStageSync(player, stages);
 

@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.enviouse.progressivestages.mixin.ftbquests",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "QuestMixin",
+    "ChapterMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
+

@@ -113,7 +113,9 @@ public class TeamStageData {
     }
 
     /**
-     * Get the highest stage a team has reached (by order)
+     * Get the "most advanced" stage a team has reached.
+     * v1.3: Uses dependency depth instead of order number.
+     * A stage with more dependencies is considered more advanced.
      */
     public Optional<StageId> getHighestStage(UUID teamId) {
         Set<StageId> stages = teamStages.get(teamId);
@@ -122,13 +124,14 @@ public class TeamStageData {
         }
 
         StageId highest = null;
-        int highestOrder = -1;
+        int highestDepth = -1;
 
         for (StageId stageId : stages) {
-            int order = com.enviouse.progressivestages.common.stage.StageOrder.getInstance()
-                .getOrder(stageId).orElse(-1);
-            if (order > highestOrder) {
-                highestOrder = order;
+            // v1.3: Use dependency depth instead of order
+            int depth = com.enviouse.progressivestages.common.stage.StageOrder.getInstance()
+                .getAllDependencies(stageId).size();
+            if (depth > highestDepth) {
+                highestDepth = depth;
                 highest = stageId;
             }
         }

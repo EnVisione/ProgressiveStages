@@ -155,10 +155,7 @@ public class TeamStageSync {
             return true;
         }
 
-        // Get orders for comparison
-        int playerOrder = StageOrder.getInstance().getOrder(playerHighest.get()).orElse(0);
-        int teamOrder = StageOrder.getInstance().getOrder(teamHighest.get()).orElse(0);
-
+        // v1.3: With dependency-based progression, players can always join teams
         // Players with higher or equal stages can join (they accept team's stage level)
         // Players with lower stages can also join (they'll need to catch up, but we allow it)
         // The key is: team's stage level doesn't change when someone joins
@@ -200,7 +197,8 @@ public class TeamStageSync {
     }
 
     /**
-     * Get the highest stage from a set of stages.
+     * Get the "most advanced" stage from a set of stages.
+     * v1.3: Uses dependency depth instead of order number.
      */
     private static Optional<StageId> getHighestStage(Set<StageId> stages) {
         if (stages.isEmpty()) {
@@ -208,12 +206,13 @@ public class TeamStageSync {
         }
 
         StageId highest = null;
-        int highestOrder = -1;
+        int highestDepth = -1;
 
         for (StageId stageId : stages) {
-            int order = StageOrder.getInstance().getOrder(stageId).orElse(-1);
-            if (order > highestOrder) {
-                highestOrder = order;
+            // v1.3: Use dependency depth instead of order
+            int depth = StageOrder.getInstance().getAllDependencies(stageId).size();
+            if (depth > highestDepth) {
+                highestDepth = depth;
                 highest = stageId;
             }
         }

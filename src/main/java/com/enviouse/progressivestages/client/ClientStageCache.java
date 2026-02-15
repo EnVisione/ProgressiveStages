@@ -21,6 +21,47 @@ public class ClientStageCache {
     private static final Set<StageId> stages = new HashSet<>();
     private static StageId currentStage = null;
 
+    // v1.3: Stage definitions with dependencies
+    private static final Map<StageId, StageDefinitionData> stageDefinitions = new HashMap<>();
+
+    /**
+     * Stage definition data for client-side use (v1.3)
+     */
+    public record StageDefinitionData(StageId id, String displayName, List<StageId> dependencies) {
+    }
+
+    /**
+     * Set stage definitions (v1.3)
+     */
+    public static void setStageDefinitions(Map<StageId, StageDefinitionData> definitions) {
+        stageDefinitions.clear();
+        stageDefinitions.putAll(definitions);
+        LOGGER.info("[ProgressiveStages] Client cached {} stage definitions", definitions.size());
+    }
+
+    /**
+     * Get stage definition by ID (v1.3)
+     */
+    public static Optional<StageDefinitionData> getStageDefinition(StageId stageId) {
+        return Optional.ofNullable(stageDefinitions.get(stageId));
+    }
+
+    /**
+     * Get dependencies for a stage (v1.3)
+     */
+    public static List<StageId> getDependencies(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.dependencies() : Collections.emptyList();
+    }
+
+    /**
+     * Get display name for a stage (v1.3)
+     */
+    public static String getDisplayName(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.displayName() : stageId.getPath();
+    }
+
     /**
      * Set all stages (replaces existing)
      */
@@ -165,10 +206,8 @@ public class ClientStageCache {
      * Get the progress string (e.g., "2/5")
      */
     public static String getProgressString() {
-        if (currentStage != null) {
-            return StageOrder.getInstance().getProgressString(currentStage);
-        }
-        return "0/" + StageOrder.getInstance().getStageCount();
+        int total = StageOrder.getInstance().getStageCount();
+        return stages.size() + "/" + total;
     }
 
     /**
@@ -177,19 +216,14 @@ public class ClientStageCache {
     public static void clear() {
         stages.clear();
         currentStage = null;
+        stageDefinitions.clear();
         ClientLockCache.clear();
     }
 
     private static void updateCurrentStage() {
-        currentStage = null;
-        int highestOrder = -1;
-
-        for (StageId stageId : stages) {
-            int order = StageOrder.getInstance().getOrder(stageId).orElse(-1);
-            if (order > highestOrder) {
-                highestOrder = order;
-                currentStage = stageId;
-            }
-        }
+        // v1.3: With dependency-based system, just pick any stage if we have any
+        // The concept of "highest" stage doesn't really apply anymore
+        currentStage = stages.isEmpty() ? null : stages.iterator().next();
     }
+
 }

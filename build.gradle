@@ -102,6 +102,9 @@ dependencies {
     // JEI (optional) - from libs folder
     compileOnly files("libs/jei-1.21.1-neoforge-19.27.0.340.jar")
 
+    // FTB Library (required for FTB integration) - from libs folder
+    compileOnly files("libs/ftb-library-neoforge-2101.1.30.jar")
+
     // FTB Teams (required) - from libs folder
     implementation files("libs/ftb-teams-neoforge-2101.1.9.jar")
 
@@ -111,6 +114,7 @@ dependencies {
     // TOML parser for stage files
     implementation 'com.electronwill.night-config:toml:3.6.7'
 }
+
 
 // This block of code expands all declared replace properties in the specified resource targets.
 // A missing property will result in an error. Properties are expanded using ${} Groovy notation.

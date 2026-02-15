@@ -38,6 +38,10 @@ description = '''Team-scoped linear stage progression system with integrated ite
 [[mixins]]
 config = "${mod_id}.mixins.json"
 
+# FTB Quests mixins (optional - only loaded if FTB Quests is present)
+[[mixins]]
+config = "${mod_id}-ftbquests.mixins.json"
+
 # The [[accessTransformers]] block allows you to declare where your AT file is.
 # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg
 #[[accessTransformers]]

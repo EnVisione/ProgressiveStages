@@ -10,5 +10,10 @@
   "progressivestages.command.grant_success": "Granted stage %s to %s",
   "progressivestages.command.revoke_success": "Revoked stage %s from %s",
   "progressivestages.command.stage_not_found": "Stage not found: %s",
-  "progressivestages.command.reload_success": "Reloaded stage definitions"
+  "progressivestages.command.reload_success": "Reloaded stage definitions",
+
+  "progressivestages.quest.required_stage": "Stage Required",
+  "progressivestages.quest.required_stage.tooltip": "If set, this quest is hidden until the player has this stage. Leave empty for no requirement. Example: iron_age or progressivestages:diamond_age",
+  "progressivestages.chapter.required_stage": "Stage Required",
+  "progressivestages.chapter.required_stage.tooltip": "If set, this entire chapter is hidden until the player has this stage. Leave empty for no requirement. Example: iron_age or progressivestages:diamond_age"
 }

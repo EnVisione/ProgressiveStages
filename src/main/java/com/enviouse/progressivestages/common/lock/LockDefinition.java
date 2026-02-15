@@ -5,7 +5,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Contains all lock definitions parsed from a stage file
+ * Contains all lock definitions parsed from a stage file.
+ *
+ * <p>v1.3 changes: Added unlockedItems for whitelist exceptions.
  */
 public class LockDefinition {
 
@@ -19,6 +21,7 @@ public class LockDefinition {
     private final List<String> mods;
     private final List<String> names;
     private final List<InteractionLock> interactions;
+    private final List<String> unlockedItems;
 
     private LockDefinition(Builder builder) {
         this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
@@ -31,6 +34,7 @@ public class LockDefinition {
         this.mods = Collections.unmodifiableList(new ArrayList<>(builder.mods));
         this.names = Collections.unmodifiableList(new ArrayList<>(builder.names));
         this.interactions = Collections.unmodifiableList(new ArrayList<>(builder.interactions));
+        this.unlockedItems = Collections.unmodifiableList(new ArrayList<>(builder.unlockedItems));
     }
 
     public static LockDefinition empty() {
@@ -77,6 +81,14 @@ public class LockDefinition {
         return interactions;
     }
 
+    /**
+     * Get items that are always unlocked (whitelist exceptions).
+     * These items bypass mod locks, name patterns, and tag locks from this stage.
+     */
+    public List<String> getUnlockedItems() {
+        return unlockedItems;
+    }
+
     public boolean isEmpty() {
         return items.isEmpty() && itemTags.isEmpty() && recipes.isEmpty() &&
             recipeTags.isEmpty() && blocks.isEmpty() && blockTags.isEmpty() &&
@@ -99,6 +111,7 @@ public class LockDefinition {
         private List<String> mods = new ArrayList<>();
         private List<String> names = new ArrayList<>();
         private List<InteractionLock> interactions = new ArrayList<>();
+        private List<String> unlockedItems = new ArrayList<>();
 
         public Builder items(List<String> items) {
             this.items = items != null ? items : new ArrayList<>();
@@ -147,6 +160,11 @@ public class LockDefinition {
 
         public Builder interactions(List<InteractionLock> interactions) {
             this.interactions = interactions != null ? interactions : new ArrayList<>();
+            return this;
+        }
+
+        public Builder unlockedItems(List<String> unlockedItems) {
+            this.unlockedItems = unlockedItems != null ? unlockedItems : new ArrayList<>();
             return this;
         }
 

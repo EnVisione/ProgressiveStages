@@ -11,8 +11,17 @@ ProgressiveStages adds **stage-based progression locks** for:
 - **Items** (use/pickup/interactions)
 - **Blocks** (place/use/break where applicable)
 - **Recipes / viewing in recipe browsers** (EMI/JEI visibility depending on config)
+- **FTB Quests integration** (stages as task conditions and rewards)
 
-Stages are defined in per-world stage files and synced to clients.
+Stages are defined in global config files and synced to clients.
+
+### Key Features
+- **Event-driven**: No tick-based polling, stages update instantly
+- **Dependency graph**: v1.3 uses explicit dependencies instead of linear order
+- **FTB Quests native**: ProgressiveStages is the stage backend for FTB Quests
+- **Automatic triggers**: Grant stages from advancements, item pickups, dimension entry, or boss kills
+- **Team support**: Stages shared via FTB Teams
+- **Whitelist exceptions**: Always allow specific items even with broad locks
 
 ---
 
@@ -26,6 +35,17 @@ A stage is an ID like:
 - `diamond_age`
 
 Players must have the required stage to interact with locked content.
+
+### Dependencies (v1.3)
+Stages can require other stages to be unlocked first:
+```toml
+[stage]
+id = "diamond_age"
+dependency = "iron_age"  # Must have iron_age first
+
+# Or multiple dependencies:
+dependency = ["iron_age", "stone_age"]
+```
 
 ### Lock
 A lock maps a target to a required stage.
@@ -51,10 +71,10 @@ These tags are generated at runtime from your TOML stage files - no static JSON 
 ## 3) Stage files
 
 ### Location
-Stage files are stored **inside the world save** under:
+Stage files are stored in the **config directory**, making them global across all worlds:
 
 ```
-<world>/ProgressiveStages/*.toml
+config/ProgressiveStages/*.toml
 ```
 
 On first run the mod will generate defaults:
@@ -63,14 +83,14 @@ On first run the mod will generate defaults:
 - `iron_age.toml`
 - `diamond_age.toml`
 
-### File format
+### File format (v1.3)
 These are TOML files.
 
 Common fields:
 
 - `id` – stage ID (e.g., `"iron_age"`)
 - `display_name` – name shown in tooltips/UI
-- `order` – progression order (lower = earlier)
+- `dependency` – (v1.3) stage(s) required before this one can be granted
 - `items` – list of locked item IDs
 - `item_tags` – list of locked item tags (e.g., `"#forge:ingots/iron"`)
 - `blocks` – list of locked block IDs
@@ -81,7 +101,7 @@ Example:
 [stage]
 id = "iron_age"
 display_name = "Iron Age"
-order = 2
+dependency = "stone_age"  # v1.3: Must have stone_age first
 
 [locks]
 items = [
@@ -90,8 +110,11 @@ items = [
     "minecraft:iron_helmet"
 ]
 item_tags = [
-    "#forge:ingots/iron"
+    "#c:ingots/iron"
 ]
+
+# v1.3: Whitelist exceptions (always accessible)
+unlocked_items = []
 ```
 
 ---
@@ -122,6 +145,20 @@ Config file (generated after first run):
 ```
 config/progressivestages-common.toml
 ```
+
+### General options
+
+#### Linear progression
+```toml
+[general]
+linear_progression = false
+```
+When `true`, granting a stage also grants all missing dependency stages automatically.
+When `false`, stages require explicit dependency satisfaction (admin can bypass with double-confirm command).
+
+**Example:**
+- With `linear_progression = true`: granting `diamond_age` auto-grants `iron_age` and `stone_age` (its dependencies)
+- With `linear_progression = false`: granting `diamond_age` only grants `diamond_age` (dependencies must be met first)
 
 ### Enforcement options
 
@@ -263,10 +300,10 @@ Important classes:
 - `ClientLockCache` – client lock snapshot
 - `LockRegistry` – server lock registry
 - `StageTagRegistry` – dynamic stage→items mapping for EMI tags
+- `DynamicTagProvider` – provides TagKey lookup for dynamic stage tags
 - `NetworkHandler` – payload registration + sync sending
-- `ProgressiveStagesEMIPlugin` – hides stacks and triggers EMI reload
-- `EmiStackWidgetMixin` – recipe viewer overlays
-- `EmiItemStackMixin` – index/favorites lock icon only
+- `ProgressiveStagesEMIPlugin` – registers dynamic tags, hides stacks, triggers EMI reload
+- `EmiStackWidgetMixin` – recipe viewer overlays (lock icon + highlight)
 
 ---
 

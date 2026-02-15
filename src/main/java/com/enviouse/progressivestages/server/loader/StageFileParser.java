@@ -100,9 +100,11 @@ public class StageFileParser {
         // Parse optional fields
         String displayName = stageSection.getOrElse("display_name", id);
         String description = stageSection.getOrElse("description", "");
-        int order = stageSection.getIntOrElse("order", 0);
         String icon = stageSection.get("icon");
         String unlockMessage = stageSection.get("unlock_message");
+
+        // Parse dependencies (v1.3)
+        List<StageId> dependencies = parseDependencies(stageSection);
 
         // Parse locks section
         LockDefinition locks = parseLocks(config);
@@ -111,7 +113,7 @@ public class StageFileParser {
         StageDefinition.Builder builder = StageDefinition.builder(stageId)
             .displayName(displayName)
             .description(description)
-            .order(order)
+            .dependencies(dependencies)
             .locks(locks);
 
         if (icon != null && !icon.isEmpty()) {
@@ -171,9 +173,11 @@ public class StageFileParser {
         // Parse optional fields
         String displayName = stageSection.getOrElse("display_name", id);
         String description = stageSection.getOrElse("description", "");
-        int order = stageSection.getIntOrElse("order", 0);
         String icon = stageSection.get("icon");
         String unlockMessage = stageSection.get("unlock_message");
+
+        // Parse dependencies (v1.3)
+        List<StageId> dependencies = parseDependencies(stageSection);
 
         // Parse locks section
         LockDefinition locks = parseLocks(config);
@@ -182,7 +186,7 @@ public class StageFileParser {
         StageDefinition.Builder builder = StageDefinition.builder(stageId)
             .displayName(displayName)
             .description(description)
-            .order(order)
+            .dependencies(dependencies)
             .locks(locks);
 
         if (icon != null && !icon.isEmpty()) {
@@ -194,6 +198,45 @@ public class StageFileParser {
         }
 
         return Optional.of(builder.build());
+    }
+
+    /**
+     * Parse dependency field from stage section.
+     * Supports both single string and list of strings.
+     */
+    private static List<StageId> parseDependencies(Config stageSection) {
+        List<StageId> dependencies = new ArrayList<>();
+
+        Object dependencyValue = stageSection.get("dependency");
+        if (dependencyValue == null) {
+            return dependencies;
+        }
+
+        if (dependencyValue instanceof String depStr) {
+            // Single dependency
+            if (!depStr.isEmpty()) {
+                try {
+                    dependencies.add(StageId.parse(depStr));
+                } catch (Exception e) {
+                    LOGGER.warn("Invalid dependency ID: {}", depStr);
+                }
+            }
+        } else if (dependencyValue instanceof List<?> depList) {
+            // Multiple dependencies
+            for (Object dep : depList) {
+                if (dep instanceof String depStr) {
+                    if (!depStr.isEmpty()) {
+                        try {
+                            dependencies.add(StageId.parse(depStr));
+                        } catch (Exception e) {
+                            LOGGER.warn("Invalid dependency ID: {}", depStr);
+                        }
+                    }
+                }
+            }
+        }
+
+        return dependencies;
     }
 
     private static LockDefinition parseLocks(Config config) {
@@ -214,6 +257,9 @@ public class StageFileParser {
         builder.dimensions(getStringList(locksSection, "dimensions"));
         builder.mods(getStringList(locksSection, "mods"));
         builder.names(getStringList(locksSection, "names"));
+
+        // Parse unlocked_items (v1.3 whitelist exceptions)
+        builder.unlockedItems(getStringList(locksSection, "unlocked_items"));
 
         // Parse interactions (array of tables)
         List<Config> interactionConfigs = locksSection.get("interactions");

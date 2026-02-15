@@ -1,7 +1,9 @@
 package com.enviouse.progressivestages.common.network;
 
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
+import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.enviouse.progressivestages.client.ClientStageCache;
 import com.enviouse.progressivestages.client.ClientLockCache;
@@ -24,6 +26,7 @@ import java.util.*;
 /**
  * Handles network packet registration and sending
  */
+@SuppressWarnings("removal")
 @EventBusSubscriber(modid = Constants.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 public class NetworkHandler {
 
@@ -60,6 +63,16 @@ public class NetworkHandler {
                 (payload, context) -> {}
             )
         );
+
+        // Stage definitions sync packet (v1.3 - includes dependencies)
+        registrar.playToClient(
+            StageDefinitionsSyncPayload.TYPE,
+            StageDefinitionsSyncPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleStageDefinitionsSyncClient,
+                (payload, context) -> {}
+            )
+        );
     }
 
     /**
@@ -81,18 +94,42 @@ public class NetworkHandler {
     }
 
     /**
-     * Send lock registry sync to a player
+     * Send lock registry sync to a player.
+     * Sends ALL resolved item locks including name patterns, tags, and mod locks.
      */
     public static void sendLockSync(ServerPlayer player) {
         LockRegistry registry = LockRegistry.getInstance();
 
-        // Convert item locks to a list format for network
+        // Get all resolved item locks (includes name patterns, tags, mod locks)
         List<LockEntry> itemLocks = new ArrayList<>();
-        for (var entry : registry.getAllItemLocks().entrySet()) {
+        for (var entry : registry.getAllResolvedItemLocks().entrySet()) {
             itemLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
         }
 
         PacketDistributor.sendToPlayer(player, new LockSyncPayload(itemLocks));
+    }
+
+    /**
+     * Send stage definitions to a player (v1.3).
+     * Includes dependencies for UI display and validation.
+     */
+    public static void sendStageDefinitionsSync(ServerPlayer player) {
+        List<StageDefinitionEntry> definitions = new ArrayList<>();
+
+        for (StageId stageId : StageOrder.getInstance().getAllStageIds()) {
+            StageOrder.getInstance().getStageDefinition(stageId).ifPresent(def -> {
+                List<ResourceLocation> deps = def.getDependencies().stream()
+                    .map(StageId::getResourceLocation)
+                    .toList();
+                definitions.add(new StageDefinitionEntry(
+                    stageId.getResourceLocation(),
+                    def.getDisplayName(),
+                    deps
+                ));
+            });
+        }
+
+        PacketDistributor.sendToPlayer(player, new StageDefinitionsSyncPayload(definitions));
     }
 
     // ============ Client Handlers ============
@@ -125,6 +162,24 @@ public class NetworkHandler {
                 itemLocks.put(entry.itemId(), StageId.fromResourceLocation(entry.stageId()));
             }
             ClientLockCache.setItemLocks(itemLocks);
+        });
+    }
+
+    private static void handleStageDefinitionsSyncClient(StageDefinitionsSyncPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            Map<StageId, ClientStageCache.StageDefinitionData> definitions = new HashMap<>();
+            for (StageDefinitionEntry entry : payload.definitions()) {
+                StageId stageId = StageId.fromResourceLocation(entry.stageId());
+                List<StageId> deps = entry.dependencies().stream()
+                    .map(StageId::fromResourceLocation)
+                    .toList();
+                definitions.put(stageId, new ClientStageCache.StageDefinitionData(
+                    stageId,
+                    entry.displayName(),
+                    deps
+                ));
+            }
+            ClientStageCache.setStageDefinitions(definitions);
         });
     }
 
@@ -191,6 +246,40 @@ public class NetworkHandler {
             LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
             LockSyncPayload::itemLocks,
             LockSyncPayload::new
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Stage definition entry for network serialization (v1.3)
+     */
+    public record StageDefinitionEntry(ResourceLocation stageId, String displayName, List<ResourceLocation> dependencies) {
+        public static final StreamCodec<FriendlyByteBuf, StageDefinitionEntry> STREAM_CODEC = StreamCodec.composite(
+            ResourceLocation.STREAM_CODEC,
+            StageDefinitionEntry::stageId,
+            ByteBufCodecs.STRING_UTF8,
+            StageDefinitionEntry::displayName,
+            ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            StageDefinitionEntry::dependencies,
+            StageDefinitionEntry::new
+        );
+    }
+
+    /**
+     * Stage definitions sync payload (v1.3)
+     * Sends all stage definitions with dependencies to client.
+     */
+    public record StageDefinitionsSyncPayload(List<StageDefinitionEntry> definitions) implements CustomPacketPayload {
+        public static final Type<StageDefinitionsSyncPayload> TYPE = new Type<>(Constants.STAGE_DEFINITIONS_SYNC_PACKET);
+
+        public static final StreamCodec<FriendlyByteBuf, StageDefinitionsSyncPayload> STREAM_CODEC = StreamCodec.composite(
+            StageDefinitionEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            StageDefinitionsSyncPayload::definitions,
+            StageDefinitionsSyncPayload::new
         );
 
         @Override

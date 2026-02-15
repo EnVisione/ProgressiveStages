@@ -1,27 +1,32 @@
 package com.enviouse.progressivestages.common.config;
 
+import com.enviouse.progressivestages.common.util.Constants;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * Main configuration for ProgressiveStages
  */
-@EventBusSubscriber(modid = "progressivestages", bus = EventBusSubscriber.Bus.MOD)
+@SuppressWarnings("removal")
+@EventBusSubscriber(modid = Constants.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 public class StageConfig {
 
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
     // ============ General Settings ============
 
-    private static final ModConfigSpec.ConfigValue<String> STARTING_STAGE = BUILDER
-        .comment("Starting stage for new players",
-                 "Set to a stage ID (e.g., \"stone_age\") to auto-grant on first join",
-                 "Set to \"\" (empty string) for no starting stage")
-        .define("general.starting_stage", "stone_age");
+    private static final ModConfigSpec.ConfigValue<List<? extends String>> STARTING_STAGES = BUILDER
+        .comment("Starting stages for new players (v1.3)",
+                 "List of stage IDs to auto-grant on first join",
+                 "Example: [\"stone_age\", \"tutorial_complete\"]",
+                 "Set to empty list [] for no starting stages")
+        .defineListAllowEmpty("general.starting_stages", List.of("stone_age"), obj -> obj instanceof String);
 
     private static final ModConfigSpec.ConfigValue<String> TEAM_MODE = BUILDER
         .comment("Team mode: \"ftb_teams\" (requires FTB Teams mod) or \"solo\" (each player is their own team)",
@@ -32,6 +37,12 @@ public class StageConfig {
     private static final ModConfigSpec.BooleanValue DEBUG_LOGGING = BUILDER
         .comment("Enable debug logging for stage checks, lock queries, and team operations")
         .define("general.debug_logging", false);
+
+    private static final ModConfigSpec.BooleanValue LINEAR_PROGRESSION = BUILDER
+        .comment("Enable linear progression (auto-grant dependency stages)",
+                 "If true, granting a stage also auto-grants all missing dependencies recursively",
+                 "If false, stages require explicit dependency satisfaction (admin can bypass with double-confirm)")
+        .define("general.linear_progression", false);
 
     // ============ Enforcement Settings ============
 
@@ -169,13 +180,29 @@ public class StageConfig {
         .comment("Cache size per player")
         .defineInRange("performance.lock_cache_size", 1024, 128, 8192);
 
+    // ============ Integration Settings ============
+
+    private static final ModConfigSpec.BooleanValue FTB_QUESTS_INTEGRATION = BUILDER
+        .comment("Enable FTB Quests integration",
+                 "If true, ProgressiveStages registers as the stage provider for FTB Quests",
+                 "Stage tasks will update instantly when stages change",
+                 "Set to false if you experience compatibility issues")
+        .define("integration.ftbquests.enabled", true);
+
+    private static final ModConfigSpec.IntValue FTB_RECHECK_BUDGET = BUILDER
+        .comment("Maximum FTB Quests stage rechecks per tick",
+                 "Limits processing to prevent lag spikes on bulk operations",
+                 "Remaining players are processed on subsequent ticks")
+        .defineInRange("integration.ftbquests.recheck_budget_per_tick", 10, 1, 100);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     // ============ Cached Values ============
 
-    private static String startingStage;
+    private static List<String> startingStages;
     private static String teamMode;
     private static boolean debugLogging;
+    private static boolean linearProgression;
     private static boolean blockItemUse;
     private static boolean blockItemPickup;
     private static boolean blockItemInventory;
@@ -206,12 +233,23 @@ public class StageConfig {
     private static boolean showLockedRecipes;
     private static boolean enableLockCache;
     private static int lockCacheSize;
+    private static boolean ftbQuestsIntegration;
+    private static int ftbRecheckBudget;
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
-        startingStage = STARTING_STAGE.get();
+        // Starting stages (v1.3 - supports list)
+        List<? extends String> stagesList = STARTING_STAGES.get();
+        startingStages = new ArrayList<>();
+        if (stagesList != null) {
+            for (String s : stagesList) {
+                startingStages.add(s);
+            }
+        }
+
         teamMode = TEAM_MODE.get();
         debugLogging = DEBUG_LOGGING.get();
+        linearProgression = LINEAR_PROGRESSION.get();
         blockItemUse = BLOCK_ITEM_USE.get();
         blockItemPickup = BLOCK_ITEM_PICKUP.get();
         blockItemInventory = BLOCK_ITEM_INVENTORY.get();
@@ -241,6 +279,8 @@ public class StageConfig {
         showLockedRecipes = SHOW_LOCKED_RECIPES.get();
         enableLockCache = ENABLE_LOCK_CACHE.get();
         lockCacheSize = LOCK_CACHE_SIZE.get();
+        ftbQuestsIntegration = FTB_QUESTS_INTEGRATION.get();
+        ftbRecheckBudget = FTB_RECHECK_BUDGET.get();
 
         // Parse highlight color
         try {
@@ -257,9 +297,24 @@ public class StageConfig {
 
     // ============ Getters ============
 
-    public static String getStartingStage() { return startingStage; }
+    /**
+     * @deprecated Use {@link #getStartingStages()} instead. v1.3 supports multiple starting stages.
+     */
+    @Deprecated(forRemoval = true)
+    public static String getStartingStage() {
+        return startingStages == null || startingStages.isEmpty() ? "" : startingStages.get(0);
+    }
+
+    /**
+     * Get all starting stages to auto-grant to new players.
+     */
+    public static List<String> getStartingStages() {
+        return startingStages != null ? Collections.unmodifiableList(startingStages) : Collections.emptyList();
+    }
+
     public static String getTeamMode() { return teamMode; }
     public static boolean isDebugLogging() { return debugLogging; }
+    public static boolean isLinearProgression() { return linearProgression; }
     public static boolean isBlockItemUse() { return blockItemUse; }
     public static boolean isBlockItemPickup() { return blockItemPickup; }
     public static boolean isBlockItemInventory() { return blockItemInventory; }
@@ -290,6 +345,8 @@ public class StageConfig {
     public static boolean isShowLockedRecipes() { return showLockedRecipes; }
     public static boolean isEnableLockCache() { return enableLockCache; }
     public static int getLockCacheSize() { return lockCacheSize; }
+    public static boolean isFtbQuestsIntegrationEnabled() { return ftbQuestsIntegration; }
+    public static int getFtbRecheckBudget() { return ftbRecheckBudget; }
 
     public static boolean isFtbTeamsMode() {
         return "ftb_teams".equalsIgnoreCase(teamMode);
