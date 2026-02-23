@@ -73,6 +73,16 @@ public class NetworkHandler {
                 (payload, context) -> {}
             )
         );
+
+        // Creative bypass packet (notifies client to suppress lock UI)
+        registrar.playToClient(
+            CreativeBypassPayload.TYPE,
+            CreativeBypassPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleCreativeBypassClient,
+                (payload, context) -> {}
+            )
+        );
     }
 
     /**
@@ -132,6 +142,14 @@ public class NetworkHandler {
         PacketDistributor.sendToPlayer(player, new StageDefinitionsSyncPayload(definitions));
     }
 
+    /**
+     * Send creative bypass state to a player.
+     * When enabled, client suppresses all lock UI (icons, tooltips, EMI hiding).
+     */
+    public static void sendCreativeBypass(ServerPlayer player, boolean bypassing) {
+        PacketDistributor.sendToPlayer(player, new CreativeBypassPayload(bypassing));
+    }
+
     // ============ Client Handlers ============
 
     private static void handleStageSyncClient(StageSyncPayload payload, IPayloadContext context) {
@@ -180,6 +198,12 @@ public class NetworkHandler {
                 ));
             }
             ClientStageCache.setStageDefinitions(definitions);
+        });
+    }
+
+    private static void handleCreativeBypassClient(CreativeBypassPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            ClientLockCache.setCreativeBypass(payload.bypassing());
         });
     }
 
@@ -280,6 +304,25 @@ public class NetworkHandler {
             StageDefinitionEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
             StageDefinitionsSyncPayload::definitions,
             StageDefinitionsSyncPayload::new
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Creative bypass state payload.
+     * Tells client to suppress or restore lock UI rendering.
+     */
+    public record CreativeBypassPayload(boolean bypassing) implements CustomPacketPayload {
+        public static final Type<CreativeBypassPayload> TYPE = new Type<>(Constants.CREATIVE_BYPASS_PACKET);
+
+        public static final StreamCodec<FriendlyByteBuf, CreativeBypassPayload> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.BOOL,
+            CreativeBypassPayload::bypassing,
+            CreativeBypassPayload::new
         );
 
         @Override

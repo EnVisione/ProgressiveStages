@@ -222,6 +222,14 @@ public class Progressivestages {
             item_tags = []
             
             # -----------------------------------------------------------------------------
+            # ITEM_MODS - Lock all items from a mod (items only, not blocks or entities)
+            # Use this when you want to lock items but NOT blocks or entities from a mod.
+            # Format: "modid" (just the namespace)
+            # Example: item_mods = ["mekanism"]
+            # -----------------------------------------------------------------------------
+            item_mods = []
+            
+            # -----------------------------------------------------------------------------
             # BLOCKS - Lock block placement and interaction
             # Players cannot place or right-click these blocks
             # Example: blocks = ["minecraft:crafting_table", "minecraft:furnace"]
@@ -235,6 +243,14 @@ public class Progressivestages {
             block_tags = []
             
             # -----------------------------------------------------------------------------
+            # BLOCK_MODS - Lock all blocks from a mod (blocks only, not items or entities)
+            # Use this when you want to lock blocks but NOT items or entities from a mod.
+            # Format: "modid" (just the namespace)
+            # Example: block_mods = ["mekanism"]
+            # -----------------------------------------------------------------------------
+            block_mods = []
+            
+            # -----------------------------------------------------------------------------
             # DIMENSIONS - Lock entire dimensions (prevent portal travel)
             # Format: "namespace:dimension_id"
             # Example: dimensions = ["minecraft:the_nether", "minecraft:the_end"]
@@ -242,8 +258,32 @@ public class Progressivestages {
             dimensions = []
             
             # -----------------------------------------------------------------------------
-            # MODS - Lock ENTIRE mods (all items, blocks, recipes from that mod)
+            # FLUIDS (v1.4) - Lock specific fluids (hides from EMI/JEI)
+            # Players cannot see or interact with these fluids in recipe viewers
+            # Format: "namespace:fluid_id"
+            # Example: fluids = ["mekanism:hydrogen", "mekanism:sulfuric_acid"]
+            # -----------------------------------------------------------------------------
+            fluids = []
+            
+            # -----------------------------------------------------------------------------
+            # FLUID_TAGS (v1.4) - Lock all fluids in a tag
+            # Example: fluid_tags = ["#c:acids"]
+            # -----------------------------------------------------------------------------
+            fluid_tags = []
+            
+            # -----------------------------------------------------------------------------
+            # FLUID_MODS (v1.4) - Lock all fluids from a mod (EMI/JEI visibility)
+            # Use this when you want to hide all fluids from a mod in recipe viewers.
+            # Format: "modid" (just the namespace)
+            # Example: fluid_mods = ["mekanism"]
+            # -----------------------------------------------------------------------------
+            fluid_mods = []
+            
+            # -----------------------------------------------------------------------------
+            # MODS - Lock ENTIRE mods (all items, blocks, recipes, AND entities from that mod)
             # Format: "modid" (just the namespace, e.g., "mekanism", "create")
+            # NOTE: This locks EVERYTHING from the mod - items, blocks, AND entities.
+            # For finer control, use item_mods, block_mods, or entity_mods separately.
             # This is powerful - use carefully!
             # Example: mods = ["mekanism", "ae2", "create"]
             # -----------------------------------------------------------------------------
@@ -259,7 +299,30 @@ public class Progressivestages {
             names = []
             
             # -----------------------------------------------------------------------------
-            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions
+            # ENTITIES - Lock specific entity types (prevent attacking)
+            # Players cannot attack these entities until stage is unlocked
+            # Format: "namespace:entity_id"
+            # Example: entities = ["minecraft:warden", "minecraft:elder_guardian"]
+            # -----------------------------------------------------------------------------
+            entities = []
+            
+            # -----------------------------------------------------------------------------
+            # ENTITY TAGS - Lock all entity types in a tag
+            # Example: entity_tags = ["#minecraft:raiders"]
+            # -----------------------------------------------------------------------------
+            entity_tags = []
+            
+            # -----------------------------------------------------------------------------
+            # ENTITY_MODS - Lock all entities from a mod (attack only, not items)
+            # Use this when you want to lock entity attacks separately from items.
+            # NOTE: If you use mods = ["modid"], entities are automatically locked too.
+            # Format: "modid" (just the namespace)
+            # Example: entity_mods = ["mekanism"]
+            # -----------------------------------------------------------------------------
+            entity_mods = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions for items/blocks
             # These items are ALWAYS accessible, even if they would be locked by:
             #   - mods = ["somemod"]
             #   - names = ["stone"]
@@ -269,6 +332,38 @@ public class Progressivestages {
             # Example: unlocked_items = ["mekanism:configurator"]
             # -----------------------------------------------------------------------------
             unlocked_items = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_BLOCKS (v1.4) - Whitelist exceptions for blocks
+            # These blocks are ALWAYS placeable/interactable, even if they would be locked by:
+            #   - mods = ["somemod"]
+            #   - block_mods = ["somemod"]
+            #   - block_tags = ["#sometag"]
+            #
+            # Use case: Lock entire mod but allow specific blocks from it
+            # Example: unlocked_blocks = ["mekanism:teleporter"]
+            # -----------------------------------------------------------------------------
+            unlocked_blocks = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_ENTITIES (v1.1) - Whitelist exceptions for entities
+            # These entities can ALWAYS be attacked, even if they would be locked by:
+            #   - mods = ["somemod"]
+            #   - entity_mods = ["somemod"]
+            #   - entity_tags = ["#sometag"]
+            #
+            # Use case: Lock entire mod entities but allow attacking specific ones
+            # Example: unlocked_entities = ["mekanism:robit"]
+            # -----------------------------------------------------------------------------
+            unlocked_entities = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_FLUIDS (v1.4) - Whitelist exceptions for fluids in EMI/JEI
+            # These fluids are ALWAYS visible in EMI/JEI, even if their mod is locked.
+            # Use case: Lock mods = ["mekanism"] but allow specific fluids to show
+            # Example: unlocked_fluids = ["mekanism:hydrogen", "mekanism:oxygen"]
+            # -----------------------------------------------------------------------------
+            unlocked_fluids = []
             
             # -----------------------------------------------------------------------------
             # INTERACTIONS - Lock specific player-world interactions
@@ -381,6 +476,14 @@ public class Progressivestages {
             ]
             
             # -----------------------------------------------------------------------------
+            # ITEM_MODS - Lock all items from a mod (items only, not blocks or entities)
+            # Use this when you want to lock items but NOT blocks or entities from a mod.
+            # Format: "modid" (just the namespace)
+            # Example: item_mods = ["create"]
+            # -----------------------------------------------------------------------------
+            item_mods = []
+            
+            # -----------------------------------------------------------------------------
             # BLOCKS - Lock block placement and interaction
             # Players cannot place or right-click these blocks
             # -----------------------------------------------------------------------------
@@ -401,6 +504,14 @@ public class Progressivestages {
             block_tags = []
             
             # -----------------------------------------------------------------------------
+            # BLOCK_MODS - Lock all blocks from a mod (blocks only, not items or entities)
+            # Use this when you want to lock blocks but NOT items or entities from a mod.
+            # Format: "modid" (just the namespace)
+            # Example: block_mods = ["create"]
+            # -----------------------------------------------------------------------------
+            block_mods = []
+            
+            # -----------------------------------------------------------------------------
             # DIMENSIONS - Lock entire dimensions (prevent portal travel)
             # Format: "namespace:dimension_id"
             # Iron age doesn't lock dimensions, but you could lock the Nether:
@@ -409,9 +520,32 @@ public class Progressivestages {
             dimensions = []
             
             # -----------------------------------------------------------------------------
-            # MODS - Lock ENTIRE mods (all items, blocks, recipes from that mod)
+            # FLUIDS (v1.4) - Lock specific fluids (hides from EMI/JEI)
+            # Players cannot see or interact with these fluids in recipe viewers
+            # Format: "namespace:fluid_id"
+            # Example: fluids = ["mekanism:hydrogen", "mekanism:sulfuric_acid"]
+            # -----------------------------------------------------------------------------
+            fluids = []
+            
+            # -----------------------------------------------------------------------------
+            # FLUID_TAGS (v1.4) - Lock all fluids in a tag
+            # Example: fluid_tags = ["#c:acids"]
+            # -----------------------------------------------------------------------------
+            fluid_tags = []
+            
+            # -----------------------------------------------------------------------------
+            # FLUID_MODS (v1.4) - Lock all fluids from a mod (EMI/JEI visibility)
+            # Use this when you want to hide all fluids from a mod in recipe viewers.
+            # Format: "modid" (just the namespace)
+            # Example: fluid_mods = ["mekanism"]
+            # -----------------------------------------------------------------------------
+            fluid_mods = []
+            
+            # -----------------------------------------------------------------------------
+            # MODS - Lock ENTIRE mods (all items, blocks, recipes, AND entities from that mod)
             # Format: "modid" (just the namespace, e.g., "mekanism", "create")
-            # This is powerful - use carefully!
+            # NOTE: This locks EVERYTHING - items, blocks, AND entities.
+            # For finer control, use item_mods, block_mods, or entity_mods separately.
             # Example: Lock all of Create mod until iron age
             # mods = ["create"]
             # -----------------------------------------------------------------------------
@@ -428,7 +562,32 @@ public class Progressivestages {
             ]
             
             # -----------------------------------------------------------------------------
-            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions
+            # ENTITIES - Lock specific entity types (prevent attacking)
+            # Players cannot attack these entities until stage is unlocked
+            # Format: "namespace:entity_id"
+            # Example: Lock iron golems until iron age
+            # -----------------------------------------------------------------------------
+            entities = [
+                # "minecraft:iron_golem"
+            ]
+            
+            # -----------------------------------------------------------------------------
+            # ENTITY TAGS - Lock all entity types in a tag
+            # Example: entity_tags = ["#minecraft:raiders"]
+            # -----------------------------------------------------------------------------
+            entity_tags = []
+            
+            # -----------------------------------------------------------------------------
+            # ENTITY_MODS - Lock all entities from a mod (attack only, not items)
+            # Use this when you want to lock entity attacks separately from items.
+            # NOTE: If you use mods = ["modid"], entities are automatically locked too.
+            # Format: "modid" (just the namespace)
+            # Example: entity_mods = ["mekanism"]
+            # -----------------------------------------------------------------------------
+            entity_mods = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions for items/blocks
             # These items are ALWAYS accessible, even if they would be locked by:
             #   - mods = ["somemod"]
             #   - names = ["iron"]
@@ -438,6 +597,38 @@ public class Progressivestages {
             # Example: unlocked_items = ["minecraft:iron_nugget"]
             # -----------------------------------------------------------------------------
             unlocked_items = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_BLOCKS (v1.4) - Whitelist exceptions for blocks
+            # These blocks are ALWAYS placeable/interactable, even if they would be locked by:
+            #   - mods = ["somemod"]
+            #   - block_mods = ["somemod"]
+            #   - block_tags = ["#sometag"]
+            #
+            # Use case: Lock entire mod but allow specific blocks from it
+            # Example: unlocked_blocks = ["create:andesite_casing"]
+            # -----------------------------------------------------------------------------
+            unlocked_blocks = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_ENTITIES (v1.1) - Whitelist exceptions for entities
+            # These entities can ALWAYS be attacked, even if they would be locked by:
+            #   - mods = ["somemod"]
+            #   - entity_mods = ["somemod"]
+            #   - entity_tags = ["#sometag"]
+            #
+            # Use case: Lock entire mod entities but allow attacking specific ones
+            # Example: unlocked_entities = ["mekanism:robit"]
+            # -----------------------------------------------------------------------------
+            unlocked_entities = []
+            
+            # -----------------------------------------------------------------------------
+            # UNLOCKED_FLUIDS (v1.4) - Whitelist exceptions for fluids in EMI/JEI
+            # These fluids are ALWAYS visible in EMI/JEI, even if their mod is locked.
+            # Use case: Lock mods = ["mekanism"] but allow specific fluids to show
+            # Example: unlocked_fluids = ["mekanism:hydrogen", "mekanism:oxygen"]
+            # -----------------------------------------------------------------------------
+            unlocked_fluids = []
             
             # -----------------------------------------------------------------------------
             # INTERACTIONS - Lock specific player-world interactions
@@ -462,167 +653,457 @@ public class Progressivestages {
     private String getDiamondAgeContent() {
         return """
             # ============================================================================
-            # Stage definition for Diamond Age (v1.1)
-            # This file demonstrates ALL features available in ProgressiveStages v1.1
+            # Stage definition for Diamond Age (v1.4)
+            # This file demonstrates ALL features available in ProgressiveStages v1.4
+            # ============================================================================
+            #
+            # QUICK REFERENCE - Lock Types:
+            # ┌──────────────────────┬───────┬────────┬──────────┬────────────────┐
+            # │ Lock Type            │ Items │ Blocks │ Entities │ Fluids (EMI/JEI)│
+            # ├──────────────────────┼───────┼────────┼──────────┼────────────────┤
+            # │ mods = ["modid"]     │  ✅   │   ✅   │    ✅    │      ✅        │
+            # │ item_mods = ["modid"]│  ✅   │   ❌   │    ❌    │      ❌        │
+            # │ block_mods =["modid"]│  ❌   │   ✅   │    ❌    │      ❌        │
+            # │ entity_mods=["modid"]│  ❌   │   ❌   │    ✅    │      ❌        │
+            # │ fluid_mods =["modid"]│  ❌   │   ❌   │    ❌    │      ✅        │
+            # │ names = ["pattern"]  │  ✅   │   ✅   │    ✅    │      ✅        │
+            # └──────────────────────┴───────┴────────┴──────────┴────────────────┘
+            #
+            # IMPORTANT: Fluid locks ONLY affect EMI/JEI visibility. They do NOT
+            # prevent players from piping, pumping, or using fluids in machines.
+            # To block fluid transport, lock the machines/pipes themselves.
+            #
             # ============================================================================
             
             [stage]
             # Unique identifier (must match filename without .toml)
             id = "diamond_age"
             
-            # Display name shown in tooltips, messages, etc.
+            # Display name shown in tooltips, messages, and UI
             display_name = "Diamond Age"
             
             # Description for quest integration or future GUI
             description = "Diamond tools, armor, and advanced equipment - true power awaits"
             
-            # Icon item for visual representation
+            # Icon item for visual representation (supports any item ID)
             icon = "minecraft:diamond_pickaxe"
             
             # Message sent to ALL team members when this stage is unlocked
-            # Supports color codes: &c=red, &a=green, &b=aqua, &l=bold, &o=italic, &r=reset
+            # Supports color codes: &c=red, &a=green, &b=aqua, &e=yellow, &l=bold, &o=italic, &r=reset
             unlock_message = "&b&lDiamond Age Unlocked! &r&7You can now use diamond items and enchanting."
             
             # ============================================================================
-            # DEPENDENCY (v1.1) - Stage(s) that must be unlocked BEFORE this one
+            # DEPENDENCY (v1.3) - Stage(s) that must be unlocked BEFORE this one
             # ============================================================================
-            
-            # Single dependency:
+            #
+            # Single dependency (most common):
             dependency = "iron_age"
-            
-            # Multiple dependencies (list format):
-            # dependency = ["iron_age", "stone_age"]
-            
-            # No dependency (can be obtained anytime):
-            # Just omit this field or leave empty
+            #
+            # Multiple dependencies (player needs ALL of these):
+            # dependency = ["iron_age", "nether_access"]
+            #
+            # No dependency (can be granted anytime):
+            # (simply omit the dependency field)
+            #
+            # ============================================================================
             
             # ============================================================================
             # LOCKS - Define what is locked UNTIL this stage is unlocked
             # ============================================================================
+            #
+            # Everything below is LOCKED for players who do NOT have this stage.
+            # Once the stage is granted, all locks from this stage are released.
+            #
+            # ============================================================================
             
             [locks]
             
-            # -----------------------------------------------------------------------------
-            # ITEMS - Lock specific items by registry ID
-            # Players cannot use, pickup, or hold these items until stage is unlocked
-            # -----------------------------------------------------------------------------
+            # =============================================================================
+            # ITEMS - Lock specific items by exact registry ID
+            # =============================================================================
+            # Players cannot:
+            #   - Pick up these items
+            #   - Use/right-click with these items
+            #   - Hold these items in inventory (they get dropped)
+            #   - Craft these items (recipe locked)
+            #
+            # Format: "namespace:item_id"
+            # Use F3+H in-game to see item registry IDs
+            # =============================================================================
             items = [
-                # Raw materials
+                # ─── Raw Materials ───
                 "minecraft:diamond",
                 "minecraft:diamond_block",
                 "minecraft:diamond_ore",
                 "minecraft:deepslate_diamond_ore",
                 
-                # Tools
+                # ─── Tools ───
                 "minecraft:diamond_pickaxe",
                 "minecraft:diamond_sword",
                 "minecraft:diamond_axe",
                 "minecraft:diamond_shovel",
                 "minecraft:diamond_hoe",
                 
-                # Armor
+                # ─── Armor ───
                 "minecraft:diamond_helmet",
                 "minecraft:diamond_chestplate",
                 "minecraft:diamond_leggings",
                 "minecraft:diamond_boots",
                 
-                # Special items
+                # ─── Advanced Equipment ───
                 "minecraft:enchanting_table",
                 "minecraft:jukebox",
                 "minecraft:beacon",
                 "minecraft:conduit",
                 "minecraft:ender_chest",
-                "minecraft:experience_bottle"
+                "minecraft:experience_bottle",
+                "minecraft:firework_rocket",
+                "minecraft:firework_star",
+                "minecraft:end_crystal"
             ]
             
-            # -----------------------------------------------------------------------------
-            # ITEM TAGS - Lock all items in a tag (use # prefix)
-            # Example: "#c:gems/diamond" locks all items tagged as diamond gems
-            # -----------------------------------------------------------------------------
+            # =============================================================================
+            # ITEM TAGS - Lock all items belonging to a tag
+            # =============================================================================
+            # Format: "#namespace:tag_path"
+            # Common tag namespaces: c (common/cross-mod), minecraft, forge, neoforge
+            #
+            # Use /tags or F3+H to discover tags on items
+            # =============================================================================
             item_tags = [
+                # Lock all diamond gems from any mod
                 # "#c:gems/diamond",
-                # "#c:storage_blocks/diamond"
+                
+                # Lock all diamond storage blocks
+                # "#c:storage_blocks/diamond",
+                
+                # Lock all enchanting-related items
+                # "#c:enchanting_fuels"
             ]
             
-            # -----------------------------------------------------------------------------
-            # BLOCKS - Lock block placement and interaction
-            # Players cannot place or right-click these blocks
-            # -----------------------------------------------------------------------------
+            # =============================================================================
+            # ITEM_MODS - Lock ALL items from entire mods
+            # =============================================================================
+            # This locks ONLY ITEMS from the mod (not blocks, entities, or fluids).
+            # For full mod lock, use mods = ["modid"] instead.
+            #
+            # Format: "modid" (the namespace, e.g., "ae2", "mekanism", "create")
+            # =============================================================================
+            item_mods = [
+                # Lock all items from Applied Energistics 2 (but not AE2 blocks)
+                # "ae2",
+                
+                # Lock all items from Botania (but not Botania blocks)
+                # "botania"
+            ]
+            
+            # =============================================================================
+            # BLOCKS - Lock specific blocks by exact registry ID
+            # =============================================================================
+            # Players cannot:
+            #   - Place these blocks
+            #   - Right-click/interact with these blocks
+            #   - Break these blocks (optional, via config)
+            #
+            # Format: "namespace:block_id"
+            # =============================================================================
             blocks = [
                 "minecraft:diamond_block",
                 "minecraft:enchanting_table",
                 "minecraft:beacon",
                 "minecraft:conduit",
-                "minecraft:ender_chest"
+                "minecraft:ender_chest",
+                "minecraft:respawn_anchor",
+                "minecraft:lodestone"
             ]
             
-            # -----------------------------------------------------------------------------
-            # BLOCK TAGS - Lock all blocks in a tag
-            # Example: block_tags = ["#minecraft:dragon_immune"]
-            # -----------------------------------------------------------------------------
-            block_tags = []
-            
-            # -----------------------------------------------------------------------------
-            # DIMENSIONS - Lock entire dimensions (prevent portal travel)
-            # Format: "namespace:dimension_id"
-            # Example: Lock The End until diamond age
-            # -----------------------------------------------------------------------------
-            dimensions = [
-                # "minecraft:the_end"
+            # =============================================================================
+            # BLOCK TAGS - Lock all blocks belonging to a tag
+            # =============================================================================
+            # Format: "#namespace:tag_path"
+            # =============================================================================
+            block_tags = [
+                # Lock all beacon base blocks
+                # "#minecraft:beacon_base_blocks",
+                
+                # Lock all crystal sound blocks
+                # "#minecraft:crystal_sound_blocks"
             ]
             
-            # -----------------------------------------------------------------------------
-            # MODS - Lock ENTIRE mods (all items, blocks, recipes from that mod)
-            # Format: "modid" (just the namespace, e.g., "mekanism", "create")
-            # This is powerful - use carefully!
-            # Example: Lock all of Applied Energistics 2 until diamond age
-            # -----------------------------------------------------------------------------
-            mods = [
+            # =============================================================================
+            # BLOCK_MODS - Lock ALL blocks from entire mods
+            # =============================================================================
+            # This locks ONLY BLOCKS from the mod (not items, entities, or fluids).
+            # For full mod lock, use mods = ["modid"] instead.
+            #
+            # Format: "modid"
+            # =============================================================================
+            block_mods = [
+                # Lock all blocks from Applied Energistics 2
                 # "ae2"
             ]
             
-            # -----------------------------------------------------------------------------
-            # NAMES - Lock items/blocks by name (case-insensitive substring matching)
-            # Locks ANYTHING with this text in its registry ID
-            # Example: "diamond" locks "minecraft:diamond", "botania:diamond_pickaxe",
-            #          "sophisticatedstorage:limited_diamond_barrel_1", etc.
-            # This is VERY broad - it will lock items from ALL mods containing this text!
-            # -----------------------------------------------------------------------------
-            names = [
-                 "diamond"
-                # "netherite"  # Uncomment to lock ALL items with "netherite" in the name
-            ]
-            
-            # -----------------------------------------------------------------------------
-            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions
-            # These items are ALWAYS accessible, even if they would be locked by:
-            #   - mods = ["somemod"]
-            #   - names = ["diamond"]
-            #   - item_tags = ["#sometag"]
+            # =============================================================================
+            # DIMENSIONS - Lock entire dimensions (prevent portal travel)
+            # =============================================================================
+            # Players cannot enter these dimensions until stage is unlocked.
+            # Portal interactions are blocked, and any teleportation is cancelled.
             #
-            # Use case: Lock by name "diamond" but allow diamond horse armor for decoration
-            # -----------------------------------------------------------------------------
-            unlocked_items = [
-                # "minecraft:diamond_horse_armor"
+            # Format: "namespace:dimension_id"
+            # Common dimensions: minecraft:the_nether, minecraft:the_end
+            # =============================================================================
+            dimensions = [
+                # Lock The End until diamond age (commented out by default)
+                # "minecraft:the_end"
             ]
             
-            # -----------------------------------------------------------------------------
+            # =============================================================================
+            # FLUIDS (v1.4) - Lock specific fluids (EMI/JEI visibility ONLY)
+            # =============================================================================
+            # ⚠️ IMPORTANT: Fluid locks ONLY hide fluids from EMI/JEI recipe browsers!
+            # They do NOT prevent:
+            #   - Piping fluids with pipes/conduits
+            #   - Pumping fluids with machines
+            #   - Using fluids in tanks/machines
+            #   - Natural fluid generation
+            #
+            # To actually block fluid usage, lock the MACHINES that process them.
+            #
+            # Format: "namespace:fluid_id"
+            # =============================================================================
+            fluids = [
+                # Hide specific fluids from EMI/JEI
+                # "mekanism:heavy_water",
+                # "mekanism:sulfuric_acid"
+            ]
+            
+            # =============================================================================
+            # FLUID_TAGS (v1.4) - Lock all fluids in a tag (EMI/JEI visibility ONLY)
+            # =============================================================================
+            # Format: "#namespace:tag_path"
+            # =============================================================================
+            fluid_tags = [
+                # Hide all acidic fluids from EMI/JEI
+                # "#c:acids",
+                
+                # Hide all gaseous fluids
+                # "#c:gaseous"
+            ]
+            
+            # =============================================================================
+            # FLUID_MODS (v1.4) - Lock ALL fluids from entire mods (EMI/JEI only)
+            # =============================================================================
+            # Hides all fluids from a mod in EMI/JEI. Does NOT affect gameplay.
+            # Format: "modid"
+            # =============================================================================
+            fluid_mods = [
+                # Hide all Mekanism fluids from EMI/JEI until stage unlocked
+                # "mekanism",
+                
+                # Hide all Thermal fluids
+                # "thermal"
+            ]
+            
+            # =============================================================================
+            # MODS - Lock ENTIRE mods (items, blocks, entities, AND fluids)
+            # =============================================================================
+            # ⚠️ This is the NUCLEAR OPTION - locks EVERYTHING from the mod:
+            #   ✅ All items from the mod
+            #   ✅ All blocks from the mod
+            #   ✅ All entities from the mod (cannot attack)
+            #   ✅ All fluids from the mod (hidden in EMI/JEI)
+            #   ✅ All recipes involving mod items
+            #
+            # For finer control, use item_mods, block_mods, entity_mods, or fluid_mods.
+            #
+            # Format: "modid"
+            # =============================================================================
+            mods = [
+                # Lock ALL of Applied Energistics 2 until diamond age
+                # "ae2",
+                
+                # Lock ALL of Create until diamond age
+                # "create"
+            ]
+            
+            # =============================================================================
+            # NAMES - Lock by name pattern (case-insensitive substring match)
+            # =============================================================================
+            # ⚠️ This is VERY POWERFUL and VERY BROAD!
+            #
+            # Locks EVERYTHING with this text anywhere in its registry ID:
+            #   ✅ Items: minecraft:diamond, botania:diamond_pickaxe
+            #   ✅ Blocks: minecraft:diamond_block, ae2:diamond_storage
+            #   ✅ Entities: somemod:diamond_golem, modpack:diamond_zombie
+            #   ✅ Fluids: mekanism:liquid_diamond, somemod:molten_diamond
+            #
+            # The pattern is matched ANYWHERE in "namespace:path":
+            #   "diamond" matches: minecraft:diamond, my_mod:super_diamond_sword
+            #   "iron" matches: minecraft:iron_ingot, create:iron_sheet
+            #
+            # Use with CAUTION - this can lock more than you expect!
+            # It now iterates four registries at resolution time, not one 
+            # it requires iterating all registries to resolve 
+            # matches. In very large modpacks (10k+ items), 
+            # this can add ~50-500ms during server lock resolution.   
+            # =============================================================================
+            names = [
+                # Lock everything with "diamond" in the name
+                "diamond"
+                
+                # Also lock everything with "netherite" (uncomment to enable)
+                # "netherite"
+            ]
+            
+            # =============================================================================
+            # ENTITIES - Lock specific entity types (prevent attacking)
+            # =============================================================================
+            # Players cannot attack these entities until stage is unlocked.
+            # The entity is still visible and can attack the player!
+            #
+            # Format: "namespace:entity_id"
+            # =============================================================================
+            entities = [
+                # Lock attacking the Warden
+                # "minecraft:warden",
+                
+                # Lock attacking the Elder Guardian
+                # "minecraft:elder_guardian"
+            ]
+            
+            # =============================================================================
+            # ENTITY TAGS - Lock all entities in a tag
+            # =============================================================================
+            # Format: "#namespace:tag_path"
+            # =============================================================================
+            entity_tags = [
+                # Lock attacking all boss entities
+                # "#c:bosses",
+                
+                # Lock attacking all raid entities
+                # "#minecraft:raiders"
+            ]
+            
+            # =============================================================================
+            # ENTITY_MODS - Lock ALL entities from entire mods
+            # =============================================================================
+            # Players cannot attack any entity from these mods.
+            # Note: Using mods = ["modid"] also locks entities (cascade behavior).
+            #
+            # Format: "modid"
+            # =============================================================================
+            entity_mods = [
+                # Lock attacking all Mekanism entities (Robit, etc.)
+                # "mekanism",
+                
+                # Lock attacking all Alex's Mobs entities
+                # "alexsmobs"
+            ]
+            
+            # =============================================================================
+            # UNLOCKED_ITEMS (v1.1) - Whitelist exceptions for items
+            # =============================================================================
+            # These items are ALWAYS accessible, even if they would be locked by:
+            #   - mods = ["modid"]
+            #   - item_mods = ["modid"]
+            #   - names = ["pattern"]
+            #   - item_tags = ["#tag"]
+            #
+            # Use case: Lock names = ["diamond"] but allow diamond horse armor
+            # =============================================================================
+            unlocked_items = [
+                # Allow diamond horse armor even though "diamond" is locked
+                # "minecraft:diamond_horse_armor",
+                
+                # Allow a specific mod item even though the mod is locked
+                # "ae2:certus_quartz_crystal"
+            ]
+            
+            # =============================================================================
+            # UNLOCKED_BLOCKS (v1.4) - Whitelist exceptions for blocks
+            # =============================================================================
+            # These blocks are ALWAYS placeable/interactable, even if locked by:
+            #   - mods = ["modid"]
+            #   - block_mods = ["modid"]
+            #   - names = ["pattern"]
+            #   - block_tags = ["#tag"]
+            # =============================================================================
+            unlocked_blocks = [
+                # Allow AE2 charger even if ae2 is locked
+                # "ae2:charger",
+                
+                # Allow diamond pressure plate for redstone builds
+                # "some_mod:diamond_pressure_plate"
+            ]
+            
+            # =============================================================================
+            # UNLOCKED_ENTITIES (v1.1) - Whitelist exceptions for entities
+            # =============================================================================
+            # These entities can ALWAYS be attacked, even if locked by:
+            #   - mods = ["modid"]
+            #   - entity_mods = ["modid"]
+            #   - names = ["pattern"]
+            #   - entity_tags = ["#tag"]
+            # =============================================================================
+            unlocked_entities = [
+                # Allow attacking Robit even if mekanism entities are locked
+                # "mekanism:robit"
+            ]
+            
+            # =============================================================================
+            # UNLOCKED_FLUIDS (v1.4) - Whitelist exceptions for fluids (EMI/JEI)
+            # =============================================================================
+            # These fluids are ALWAYS visible in EMI/JEI, even if locked by:
+            #   - mods = ["modid"]
+            #   - fluid_mods = ["modid"]
+            #   - names = ["pattern"]
+            #   - fluid_tags = ["#tag"]
+            #
+            # Use case: Lock mods = ["mekanism"] but show hydrogen for tutorial
+            # =============================================================================
+            unlocked_fluids = [
+                # Show hydrogen and oxygen in EMI even if mekanism is locked
+                # "mekanism:hydrogen",
+                # "mekanism:oxygen"
+            ]
+            
+            # =============================================================================
             # INTERACTIONS - Lock specific player-world interactions
-            # Useful for Create mod's "apply item to block" mechanics
-            # -----------------------------------------------------------------------------
+            # =============================================================================
+            # Lock specific combinations of "player does X to Y" actions.
+            # Useful for Create mod mechanics, right-click crafting, etc.
+            #
+            # Supported types:
+            #   - "block_right_click" - Right-clicking a specific block
+            #   - "item_on_block" - Using an item on a specific block (Create-style)
+            #   - "item_on_entity" - Using an item on a specific entity
+            # =============================================================================
             
-            # Example: Lock using enchanting table (right-click block)
-            # [[locks.interactions]]
-            # type = "block_right_click"
-            # target_block = "minecraft:enchanting_table"
-            # description = "Use Enchanting Table"
+            # ─── Example: Lock using the enchanting table ───
+            [[locks.interactions]]
+            type = "block_right_click"
+            target_block = "minecraft:enchanting_table"
+            description = "Use Enchanting Table"
             
-            # Example: Lock Create Andesite Casing creation (item on block)
+            # ─── Example: Lock using the beacon ───
+            [[locks.interactions]]
+            type = "block_right_click"
+            target_block = "minecraft:beacon"
+            description = "Configure Beacon"
+            
+            # ─── Example: Lock Create mechanical crafting (item on block) ───
             # [[locks.interactions]]
             # type = "item_on_block"
             # held_item = "create:andesite_alloy"
             # target_block = "#minecraft:logs"
             # description = "Create Andesite Casing"
+            
+            # ─── Example: Lock applying diamond to an entity ───
+            # [[locks.interactions]]
+            # type = "item_on_entity"
+            # held_item = "minecraft:diamond"
+            # target_entity = "minecraft:villager"
+            # description = "Trade with Villager using Diamond"
             """;
     }
 

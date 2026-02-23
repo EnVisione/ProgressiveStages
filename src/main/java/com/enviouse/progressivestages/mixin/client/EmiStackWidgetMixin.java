@@ -1,5 +1,6 @@
 package com.enviouse.progressivestages.mixin.client;
 
+import com.enviouse.progressivestages.client.ClientLockCache;
 import com.enviouse.progressivestages.client.ClientStageCache;
 import com.enviouse.progressivestages.client.renderer.LockIconRenderer;
 import com.enviouse.progressivestages.common.config.StageConfig;
@@ -12,6 +13,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.slf4j.Logger;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -35,6 +37,7 @@ public abstract class EmiStackWidgetMixin {
     private static int progressivestages$renderCallCount = 0;
 
     @Shadow
+    @Final
     protected EmiIngredient stack;
 
     @Shadow
@@ -55,6 +58,12 @@ public abstract class EmiStackWidgetMixin {
     private void progressivestages$renderLockOverlay(GuiGraphics graphics, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         try {
             progressivestages$renderCallCount++;
+
+            // Creative bypass - skip all lock rendering
+            if (ClientLockCache.isCreativeBypass()) {
+                LockIconRenderer.exitSlotWidget();
+                return;
+            }
 
             if (stack == null || stack.isEmpty()) {
                 LockIconRenderer.exitSlotWidget();

@@ -17,10 +17,13 @@ import dev.emi.emi.runtime.EmiReloadManager;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.material.Fluid;
 import org.slf4j.Logger;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * EMI plugin entrypoint for ProgressiveStages
@@ -37,6 +40,8 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static boolean initialized = false;
+    // Prevent rapid-fire reloads; only allow one pending reload at a time
+    private static final AtomicBoolean reloadPending = new AtomicBoolean(false);
 
     @Override
     public void register(EmiRegistry registry) {
@@ -48,12 +53,8 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             return;
         }
 
-        // Note: Dynamic stage tags (like #progressivestages:iron_age) are handled through
-        // NeoForge's tag system, not EMI's registry. EMI automatically picks up item tags.
-        // See StageTagProvider for datapack-based tag generation.
-
-        // If show_locked_recipes is false, hide all locked items from EMI index
-        if (!StageConfig.isShowLockedRecipes()) {
+        // If show_locked_recipes is false AND creative bypass is not active, hide locked items
+        if (!StageConfig.isShowLockedRecipes() && !ClientLockCache.isCreativeBypass()) {
             hideLockedStacks(registry);
         }
 
@@ -62,41 +63,169 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
 
     /**
-     * Hide all locked stacks from EMI's index
+     * Hide all locked stacks from EMI's index.
+     * Uses ClientLockCache (synced from server) with LockRegistry fallback for integrated server.
+     *
+     * IMPORTANT: We use removeEmiStacks with a predicate to catch ALL NBT variants of locked items.
+     * Mods like Mekanism register multiple stacks per item (different stored fluids, chemicals, etc.)
+     * and we need to hide all of them, not just the base item.
      */
     private void hideLockedStacks(EmiRegistry registry) {
-        int hiddenCount = 0;
-        int unlockedCount = 0;
+        // Get all locked items from the client cache (synced from server)
+        Map<ResourceLocation, StageId> lockedItems = ClientLockCache.getAllItemLocks();
 
-        // Get all locked items from the client cache
-        var lockedItems = ClientLockCache.getAllItemLocks();
+        // If ClientLockCache is empty, try LockRegistry directly (singleplayer/integrated server)
+        if (lockedItems.isEmpty()) {
+            LockRegistry reg = LockRegistry.getInstance();
+            lockedItems = reg.getAllResolvedItemLocks();
+            if (!lockedItems.isEmpty()) {
+                LOGGER.info("[ProgressiveStages] ClientLockCache empty, using LockRegistry directly ({} items)", lockedItems.size());
+            }
+        }
 
-        LOGGER.debug("[ProgressiveStages] Processing {} locked item definitions", lockedItems.size());
-        LOGGER.debug("[ProgressiveStages] Player has stages: {}", ClientStageCache.getStages());
+        if (lockedItems.isEmpty()) {
+            LOGGER.info("[ProgressiveStages] No lock data available yet, EMI will reload when lock data arrives");
+            return;
+        }
 
+        Set<StageId> playerStages = ClientStageCache.getStages();
+
+        // Build a set of locked item IDs for fast lookup
+        Set<ResourceLocation> lockedItemIds = new java.util.HashSet<>();
         for (var entry : lockedItems.entrySet()) {
             ResourceLocation itemId = entry.getKey();
             StageId requiredStage = entry.getValue();
 
-            // Check if player has this stage
-            boolean hasStage = ClientStageCache.hasStage(requiredStage);
-
-            if (!hasStage) {
-                // Get the item and hide it
-                Item item = BuiltInRegistries.ITEM.get(itemId);
-                if (item != null) {
-                    EmiStack stack = EmiStack.of(item);
-                    if (!stack.isEmpty()) {
-                        registry.removeEmiStacks(stack);
-                        hiddenCount++;
-                    }
-                }
-            } else {
-                unlockedCount++;
+            // Only add to locked set if player doesn't have the required stage
+            if (!playerStages.contains(requiredStage)) {
+                lockedItemIds.add(itemId);
             }
         }
 
-        LOGGER.info("[ProgressiveStages] Hidden {} locked items, {} items unlocked", hiddenCount, unlockedCount);
+        if (lockedItemIds.isEmpty()) {
+            LOGGER.info("[ProgressiveStages] EMI: No locked items to hide (player has all required stages)");
+            return;
+        }
+
+        LOGGER.debug("[ProgressiveStages] Hiding {} locked item types from EMI", lockedItemIds.size());
+
+        // Use predicate-based removal to catch ALL NBT variants of each locked item
+        // This is crucial for mods like Mekanism that register multiple stacks per item type
+        final Set<ResourceLocation> finalLockedItemIds = lockedItemIds;
+        registry.removeEmiStacks(stack -> {
+            // Get the underlying ItemStack from the EmiStack
+            var itemStack = stack.getItemStack();
+            if (itemStack.isEmpty()) {
+                return false; // Don't remove empty stacks
+            }
+
+            // Check by Item registry ID, ignoring NBT
+            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
+            return finalLockedItemIds.contains(itemId);
+        });
+
+        LOGGER.info("[ProgressiveStages] EMI: Set up removal predicate for {} locked item types (catches all NBT variants)", lockedItemIds.size());
+
+        // Also hide fluids from locked mods
+        hideLockedFluids(registry, playerStages);
+    }
+
+    /**
+     * Hide fluids that are locked.
+     * Checks: direct fluid locks, fluid mod locks, general mod locks, and name patterns.
+     * Uses predicate-based removal to catch all fluid variants.
+     * Respects unlocked_fluids whitelist.
+     */
+    private void hideLockedFluids(EmiRegistry registry, Set<StageId> playerStages) {
+        LockRegistry lockRegistry = LockRegistry.getInstance();
+
+        // Get all types of fluid locks
+        Set<ResourceLocation> directFluidLocks = new java.util.HashSet<>();
+        Set<String> lockedFluidMods = new java.util.HashSet<>();
+        Set<String> lockedMods = new java.util.HashSet<>();
+        Map<String, StageId> namePatterns = new java.util.HashMap<>();
+
+        // Direct fluid locks (fluids = ["..."])
+        for (var entry : lockRegistry.getAllFluidLocks().entrySet()) {
+            if (!playerStages.contains(entry.getValue())) {
+                directFluidLocks.add(entry.getKey());
+            }
+        }
+
+        // Fluid mod locks (fluid_mods = ["..."])
+        for (String modId : lockRegistry.getAllLockedFluidMods()) {
+            var requiredStage = lockRegistry.getFluidModLockStage(modId);
+            if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
+                lockedFluidMods.add(modId.toLowerCase());
+            }
+        }
+
+        // General mod locks also lock fluids (mods = ["..."])
+        for (String modId : lockRegistry.getAllLockedMods()) {
+            var requiredStage = lockRegistry.getModLockStage(modId);
+            if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
+                lockedMods.add(modId.toLowerCase());
+            }
+        }
+
+        // Name patterns also lock fluids (names = ["diamond"])
+        for (String pattern : lockRegistry.getAllNamePatterns()) {
+            var requiredStage = lockRegistry.getNamePatternStage(pattern);
+            if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
+                namePatterns.put(pattern.toLowerCase(), requiredStage.get());
+            }
+        }
+
+        if (directFluidLocks.isEmpty() && lockedFluidMods.isEmpty() && lockedMods.isEmpty() && namePatterns.isEmpty()) {
+            return;
+        }
+
+        // Get unlocked fluids whitelist
+        Set<ResourceLocation> unlockedFluids = lockRegistry.getUnlockedFluids();
+
+        // Use predicate-based removal for fluids
+        registry.removeEmiStacks(stack -> {
+            // Check if this is a fluid stack by checking if getItemStack is empty
+            var itemStack = stack.getItemStack();
+            if (!itemStack.isEmpty()) {
+                return false; // This is an item, not a fluid
+            }
+
+            // Get the fluid ID from the stack
+            ResourceLocation id = stack.getId();
+            if (id == null) {
+                return false;
+            }
+
+            // Check fluid whitelist first - don't hide whitelisted fluids
+            if (unlockedFluids.contains(id)) {
+                return false;
+            }
+
+            // Check direct fluid lock
+            if (directFluidLocks.contains(id)) {
+                return true;
+            }
+
+            // Check fluid mod lock and general mod lock
+            String modId = id.getNamespace().toLowerCase();
+            if (lockedFluidMods.contains(modId) || lockedMods.contains(modId)) {
+                return true;
+            }
+
+            // Check name patterns (names = ["diamond"] locks fluids containing "diamond")
+            String fluidIdStr = id.toString().toLowerCase();
+            for (String pattern : namePatterns.keySet()) {
+                if (fluidIdStr.contains(pattern)) {
+                    return true;
+                }
+            }
+
+            return false;
+        });
+
+        LOGGER.debug("[ProgressiveStages] EMI: Set up fluid removal predicate for {} direct locks, {} fluid mods, {} general mods, {} name patterns",
+            directFluidLocks.size(), lockedFluidMods.size(), lockedMods.size(), namePatterns.size());
     }
 
     /**
@@ -104,10 +233,8 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
      * This forces EMI to re-run all plugins including ours,
      * which will re-evaluate what should be hidden based on current stages.
      *
-     * Multiple approaches are tried:
-     * 1. EmiReloadManager.reload() - full reload
-     * 2. Clear EmiSearch cache to force rebuild
-     * 3. Trigger reloadRecipes() + reloadTags()
+     * Uses EmiReloadManager.reloadRecipes() which is the same path EMI uses
+     * when RecipesUpdatedEvent fires — it re-runs all plugin register() calls.
      */
     public static void triggerEmiReload() {
         if (!initialized) {
@@ -115,92 +242,38 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             return;
         }
 
+        // Debounce: if a reload is already pending, don't queue another
+        if (!reloadPending.compareAndSet(false, true)) {
+            LOGGER.debug("[ProgressiveStages] EMI reload already pending, skipping duplicate");
+            return;
+        }
+
         try {
-            LOGGER.info("[ProgressiveStages] Scheduling EMI reload due to stage change...");
+            LOGGER.info("[ProgressiveStages] Scheduling EMI reload due to stage/lock change...");
 
             var minecraft = net.minecraft.client.Minecraft.getInstance();
 
-            // Use a delayed task to ensure stage data is fully processed
+            // Schedule on the main render thread with a small delay to let data settle
             minecraft.execute(() -> {
                 try {
-                    LOGGER.info("[ProgressiveStages] Current stages: {}", ClientStageCache.getStages());
+                    reloadPending.set(false);
+                    LOGGER.info("[ProgressiveStages] Triggering EMI reload. Current stages: {}", ClientStageCache.getStages());
 
-                    // Approach 1: Try to clear EmiSearch to force index rebuild
-                    try {
-                        Class<?> emiSearchClass = Class.forName("dev.emi.emi.search.EmiSearch");
-                        // Try to clear the search index
-                        try {
-                            var clearMethod = emiSearchClass.getMethod("clear");
-                            clearMethod.invoke(null);
-                            LOGGER.info("[ProgressiveStages] Cleared EmiSearch index");
-                        } catch (NoSuchMethodException e) {
-                            // Try alternative - bake() to rebuild
-                            try {
-                                var bakeMethod = emiSearchClass.getMethod("bake");
-                                bakeMethod.invoke(null);
-                                LOGGER.info("[ProgressiveStages] Called EmiSearch.bake()");
-                            } catch (NoSuchMethodException e2) {
-                                // Neither method exists
-                            }
-                        }
-                    } catch (ClassNotFoundException e) {
-                        LOGGER.debug("[ProgressiveStages] EmiSearch class not found");
-                    }
+                    // EmiReloadManager.reloadRecipes() triggers a full EMI reload cycle:
+                    // - Clears all data
+                    // - Re-runs all plugin register() methods (including ours)
+                    // - Rebuilds search index
+                    // This is the same codepath as when Minecraft syncs recipes on world join.
+                    EmiReloadManager.reloadRecipes();
 
-                    // Approach 2: Try EmiReloadManager.reload()
-                    try {
-                        Class<?> reloadManagerClass = Class.forName("dev.emi.emi.runtime.EmiReloadManager");
-
-                        // Try reload() method first (full reload)
-                        try {
-                            var reloadMethod = reloadManagerClass.getMethod("reload");
-                            reloadMethod.invoke(null);
-                            LOGGER.info("[ProgressiveStages] EMI full reload triggered via reload()");
-                        } catch (NoSuchMethodException e) {
-                            // reload() doesn't exist
-                        }
-
-                        // Fallback: trigger both recipes and tags reload
-                        EmiReloadManager.reloadRecipes();
-                        try {
-                            var reloadTagsMethod = reloadManagerClass.getMethod("reloadTags");
-                            reloadTagsMethod.invoke(null);
-                            LOGGER.info("[ProgressiveStages] Called reloadTags()");
-                        } catch (NoSuchMethodException e) {
-                            // reloadTags doesn't exist
-                        }
-
-                    } catch (ClassNotFoundException e) {
-                        LOGGER.warn("[ProgressiveStages] EmiReloadManager class not found");
-                    }
-
-                    // Approach 3: Try to invalidate EmiScreenManager's cached index
-                    try {
-                        Class<?> screenManagerClass = Class.forName("dev.emi.emi.screen.EmiScreenManager");
-                        // Look for any methods that might refresh the view
-                        for (var method : screenManagerClass.getMethods()) {
-                            if (method.getName().contains("refresh") || method.getName().contains("invalidate") || method.getName().contains("clear")) {
-                                if (method.getParameterCount() == 0) {
-                                    try {
-                                        method.invoke(null);
-                                        LOGGER.info("[ProgressiveStages] Called EmiScreenManager.{}()", method.getName());
-                                    } catch (Exception ex) {
-                                        // Ignore
-                                    }
-                                }
-                            }
-                        }
-                    } catch (ClassNotFoundException e) {
-                        LOGGER.debug("[ProgressiveStages] EmiScreenManager class not found");
-                    }
-
-                    LOGGER.info("[ProgressiveStages] EMI reload sequence completed");
+                    LOGGER.info("[ProgressiveStages] EMI reload triggered successfully");
                 } catch (Exception e) {
+                    reloadPending.set(false);
                     LOGGER.error("[ProgressiveStages] Failed to trigger EMI reload: {}", e.getMessage());
-                    e.printStackTrace();
                 }
             });
         } catch (Exception e) {
+            reloadPending.set(false);
             LOGGER.error("[ProgressiveStages] Failed to schedule EMI reload: {}", e.getMessage());
         }
     }

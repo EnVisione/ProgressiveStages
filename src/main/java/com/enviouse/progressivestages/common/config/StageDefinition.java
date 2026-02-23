@@ -18,6 +18,13 @@ import java.util.Optional;
  *   <li>Added dependencies list (stages required before this one)</li>
  *   <li>Added unlockedItems list (whitelist exceptions)</li>
  * </ul>
+ *
+ * <p>v1.4 changes:
+ * <ul>
+ *   <li>Added unlockedBlocks list (whitelist for blocks)</li>
+ *   <li>Added unlockedEntities list (whitelist for entities)</li>
+ *   <li>Added unlockedFluids list (whitelist for fluids)</li>
+ * </ul>
  */
 public class StageDefinition {
 
@@ -29,6 +36,9 @@ public class StageDefinition {
     private final LockDefinition locks;
     private final List<StageId> dependencies;
     private final List<String> unlockedItems;
+    private final List<String> unlockedBlocks;
+    private final List<String> unlockedEntities;
+    private final List<String> unlockedFluids;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -42,6 +52,15 @@ public class StageDefinition {
             : Collections.emptyList();
         this.unlockedItems = builder.unlockedItems != null
             ? Collections.unmodifiableList(new ArrayList<>(builder.unlockedItems))
+            : Collections.emptyList();
+        this.unlockedBlocks = builder.unlockedBlocks != null
+            ? Collections.unmodifiableList(new ArrayList<>(builder.unlockedBlocks))
+            : Collections.emptyList();
+        this.unlockedEntities = builder.unlockedEntities != null
+            ? Collections.unmodifiableList(new ArrayList<>(builder.unlockedEntities))
+            : Collections.emptyList();
+        this.unlockedFluids = builder.unlockedFluids != null
+            ? Collections.unmodifiableList(new ArrayList<>(builder.unlockedFluids))
             : Collections.emptyList();
     }
 
@@ -100,6 +119,30 @@ public class StageDefinition {
         return unlockedItems;
     }
 
+    /**
+     * Get blocks that are always unlocked (whitelist exceptions).
+     * These blocks bypass mod locks, name patterns, and tag locks.
+     */
+    public List<String> getUnlockedBlocks() {
+        return unlockedBlocks;
+    }
+
+    /**
+     * Get entities that are always unlocked (whitelist exceptions).
+     * These entities bypass mod locks, name patterns, and tag locks.
+     */
+    public List<String> getUnlockedEntities() {
+        return unlockedEntities;
+    }
+
+    /**
+     * Get fluids that are always unlocked (whitelist exceptions).
+     * These fluids bypass mod locks for EMI/JEI visibility.
+     */
+    public List<String> getUnlockedFluids() {
+        return unlockedFluids;
+    }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -122,6 +165,9 @@ public class StageDefinition {
         private LockDefinition locks;
         private List<StageId> dependencies = new ArrayList<>();
         private List<String> unlockedItems = new ArrayList<>();
+        private List<String> unlockedBlocks = new ArrayList<>();
+        private List<String> unlockedEntities = new ArrayList<>();
+        private List<String> unlockedFluids = new ArrayList<>();
 
         private Builder(StageId id) {
             this.id = id;
@@ -194,6 +240,33 @@ public class StageDefinition {
          */
         public Builder unlockedItems(List<String> unlockedItems) {
             this.unlockedItems = unlockedItems != null ? unlockedItems : new ArrayList<>();
+            return this;
+        }
+
+        /**
+         * Set the unlocked blocks (whitelist exceptions).
+         * @param unlockedBlocks List of block IDs that bypass this stage's broader locks
+         */
+        public Builder unlockedBlocks(List<String> unlockedBlocks) {
+            this.unlockedBlocks = unlockedBlocks != null ? unlockedBlocks : new ArrayList<>();
+            return this;
+        }
+
+        /**
+         * Set the unlocked entities (whitelist exceptions).
+         * @param unlockedEntities List of entity IDs that bypass this stage's broader locks
+         */
+        public Builder unlockedEntities(List<String> unlockedEntities) {
+            this.unlockedEntities = unlockedEntities != null ? unlockedEntities : new ArrayList<>();
+            return this;
+        }
+
+        /**
+         * Set the unlocked fluids (whitelist exceptions).
+         * @param unlockedFluids List of fluid IDs that bypass mod locks for EMI/JEI visibility
+         */
+        public Builder unlockedFluids(List<String> unlockedFluids) {
+            this.unlockedFluids = unlockedFluids != null ? unlockedFluids : new ArrayList<>();
             return this;
         }
 

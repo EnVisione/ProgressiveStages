@@ -16,6 +16,7 @@ public final class Constants {
     public static final ResourceLocation LOCK_REGISTRY_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "lock_registry_sync");
     public static final ResourceLocation LOCK_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "lock_sync");
     public static final ResourceLocation STAGE_DEFINITIONS_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "stage_definitions_sync");
+    public static final ResourceLocation CREATIVE_BYPASS_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "creative_bypass");
 
     // Stage file directory name (inside config folder)
     public static final String STAGE_FILES_DIRECTORY = "ProgressiveStages";

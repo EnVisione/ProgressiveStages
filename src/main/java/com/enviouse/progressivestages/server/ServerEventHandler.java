@@ -16,6 +16,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -89,6 +90,33 @@ public class ServerEventHandler {
 
             // Sync lock registry to player (for EMI integration)
             NetworkHandler.sendLockSync(player);
+
+            // Send initial creative bypass state
+            if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
+                NetworkHandler.sendCreativeBypass(player, true);
+            }
+        }
+    }
+
+    // ============ Gamemode Change Handling ============
+
+    @SubscribeEvent
+    public static void onGameModeChange(PlayerEvent.PlayerChangeGameModeEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            if (!StageConfig.isAllowCreativeBypass()) {
+                return; // Creative bypass disabled in config
+            }
+
+            GameType newMode = event.getNewGameMode();
+            GameType oldMode = event.getCurrentGameMode();
+
+            if (newMode == GameType.CREATIVE && oldMode != GameType.CREATIVE) {
+                // Entering creative mode - enable bypass on client
+                NetworkHandler.sendCreativeBypass(player, true);
+            } else if (newMode != GameType.CREATIVE && oldMode == GameType.CREATIVE) {
+                // Leaving creative mode - disable bypass on client
+                NetworkHandler.sendCreativeBypass(player, false);
+            }
         }
     }
 
@@ -227,6 +255,18 @@ public class ServerEventHandler {
             if (!DimensionEnforcer.canTravelToDimension(player, event.getDimension())) {
                 event.setCanceled(true);
                 DimensionEnforcer.notifyLocked(player, event.getDimension().location());
+            }
+        }
+    }
+
+    // ============ Entity Attack Enforcement ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onAttackEntity(net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            if (!EntityEnforcer.canAttackEntity(player, event.getTarget().getType())) {
+                event.setCanceled(true);
+                EntityEnforcer.notifyLocked(player, event.getTarget().getType());
             }
         }
     }

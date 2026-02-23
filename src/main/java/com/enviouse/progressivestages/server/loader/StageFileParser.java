@@ -250,16 +250,38 @@ public class StageFileParser {
         // Parse simple lists
         builder.items(getStringList(locksSection, "items"));
         builder.itemTags(getStringList(locksSection, "item_tags"));
+        builder.itemMods(getStringList(locksSection, "item_mods"));
         builder.recipes(getStringList(locksSection, "recipes"));
         builder.recipeTags(getStringList(locksSection, "recipe_tags"));
         builder.blocks(getStringList(locksSection, "blocks"));
         builder.blockTags(getStringList(locksSection, "block_tags"));
+        builder.blockMods(getStringList(locksSection, "block_mods"));
+
+        // Parse fluid locks (v1.4)
+        builder.fluids(getStringList(locksSection, "fluids"));
+        builder.fluidTags(getStringList(locksSection, "fluid_tags"));
+        builder.fluidMods(getStringList(locksSection, "fluid_mods"));
+
         builder.dimensions(getStringList(locksSection, "dimensions"));
         builder.mods(getStringList(locksSection, "mods"));
         builder.names(getStringList(locksSection, "names"));
 
+        // Parse entity locks
+        builder.entities(getStringList(locksSection, "entities"));
+        builder.entityTags(getStringList(locksSection, "entity_tags"));
+        builder.entityMods(getStringList(locksSection, "entity_mods"));
+
         // Parse unlocked_items (v1.3 whitelist exceptions)
         builder.unlockedItems(getStringList(locksSection, "unlocked_items"));
+
+        // Parse unlocked_blocks (v1.4 whitelist exceptions for blocks)
+        builder.unlockedBlocks(getStringList(locksSection, "unlocked_blocks"));
+
+        // Parse unlocked_entities (v1.3 whitelist exceptions for entities)
+        builder.unlockedEntities(getStringList(locksSection, "unlocked_entities"));
+
+        // Parse unlocked_fluids (v1.4 whitelist exceptions for fluids)
+        builder.unlockedFluids(getStringList(locksSection, "unlocked_fluids"));
 
         // Parse interactions (array of tables)
         List<Config> interactionConfigs = locksSection.get("interactions");

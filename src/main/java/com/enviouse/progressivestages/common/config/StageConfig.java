@@ -91,6 +91,11 @@ public class StageConfig {
         .comment("Block Create-style item-on-block interactions")
         .define("enforcement.block_interactions", true);
 
+    private static final ModConfigSpec.BooleanValue BLOCK_ENTITY_ATTACK = BUILDER
+        .comment("Block attacking locked entities",
+                 "If true, players cannot attack entity types locked behind a stage")
+        .define("enforcement.block_entity_attack", true);
+
     private static final ModConfigSpec.BooleanValue ALLOW_CREATIVE_BYPASS = BUILDER
         .comment("Allow creative mode players to bypass stage locks",
                  "If true, players in creative mode can use/place locked items",
@@ -214,6 +219,7 @@ public class StageConfig {
     private static boolean blockDimensionTravel;
     private static boolean blockLockedMods;
     private static boolean blockInteractions;
+    private static boolean blockEntityAttack;
     private static boolean allowCreativeBypass;
     private static boolean maskLockedItemNames;
     private static int notificationCooldown;
@@ -261,6 +267,7 @@ public class StageConfig {
         blockDimensionTravel = BLOCK_DIMENSION_TRAVEL.get();
         blockLockedMods = BLOCK_LOCKED_MODS.get();
         blockInteractions = BLOCK_INTERACTIONS.get();
+        blockEntityAttack = BLOCK_ENTITY_ATTACK.get();
         allowCreativeBypass = ALLOW_CREATIVE_BYPASS.get();
         maskLockedItemNames = MASK_LOCKED_ITEM_NAMES.get();
         notificationCooldown = NOTIFICATION_COOLDOWN.get();
@@ -326,6 +333,7 @@ public class StageConfig {
     public static boolean isBlockDimensionTravel() { return blockDimensionTravel; }
     public static boolean isBlockLockedMods() { return blockLockedMods; }
     public static boolean isBlockInteractions() { return blockInteractions; }
+    public static boolean isBlockEntityAttack() { return blockEntityAttack; }
     public static boolean isAllowCreativeBypass() { return allowCreativeBypass; }
     public static boolean isMaskLockedItemNames() { return maskLockedItemNames; }
     public static int getNotificationCooldown() { return notificationCooldown; }

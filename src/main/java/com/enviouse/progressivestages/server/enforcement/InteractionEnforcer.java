@@ -37,6 +37,11 @@ public class InteractionEnforcer {
             return true;
         }
 
+        // Creative bypass
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
+            return true;
+        }
+
         // Get IDs for lookup
         String heldItemId = getItemId(heldItem);
         String targetBlockId = getBlockId(targetBlock);

@@ -120,9 +120,16 @@ public class ClientStageCache {
     }
 
     /**
-     * Trigger EMI and JEI to reload their recipe/item index
+     * Trigger EMI and JEI to reload their recipe/item index.
+     * Only triggers if show_locked_recipes is false (meaning items are hidden based on stages).
      */
     private static void triggerEmiReload() {
+        // Only refresh if we're hiding locked items - otherwise there's nothing to update
+        if (StageConfig.isShowLockedRecipes()) {
+            LOGGER.debug("[ProgressiveStages] Stage changed but show_locked_recipes=true, skipping EMI/JEI reload");
+            return;
+        }
+
         LOGGER.info("[ProgressiveStages] Stage change detected, scheduling EMI/JEI reload...");
 
         // Trigger EMI reload (it will handle its own thread scheduling)
@@ -171,6 +178,33 @@ public class ClientStageCache {
         // Fallback to LockRegistry for integrated server/singleplayer
         if (requiredStage.isEmpty()) {
             requiredStage = LockRegistry.getInstance().getRequiredStage(item);
+        }
+
+        if (requiredStage.isEmpty()) {
+            return false;
+        }
+        return !hasStage(requiredStage.get());
+    }
+
+    /**
+     * Check if an item is locked for the client by ResourceLocation.
+     * Uses ClientLockCache for lock data (synced from server) and local stage cache.
+     */
+    public static boolean isItemLocked(net.minecraft.resources.ResourceLocation itemId) {
+        if (itemId == null) {
+            return false;
+        }
+
+        // Try ClientLockCache first (synced from server)
+        Optional<StageId> requiredStage = ClientLockCache.getRequiredStageForItem(itemId);
+
+        // Fallback to LockRegistry for integrated server/singleplayer
+        if (requiredStage.isEmpty()) {
+            // Try to get the item from registry
+            var itemOpt = BuiltInRegistries.ITEM.getOptional(itemId);
+            if (itemOpt.isPresent()) {
+                requiredStage = LockRegistry.getInstance().getRequiredStage(itemOpt.get());
+            }
         }
 
         if (requiredStage.isEmpty()) {

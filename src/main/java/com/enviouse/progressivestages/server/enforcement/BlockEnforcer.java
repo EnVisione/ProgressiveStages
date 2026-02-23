@@ -23,6 +23,11 @@ public class BlockEnforcer {
             return true;
         }
 
+        // Creative bypass
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
+            return true;
+        }
+
         if (block == null) {
             return true;
         }
@@ -36,6 +41,11 @@ public class BlockEnforcer {
      */
     public static boolean canInteractWithBlock(ServerPlayer player, Block block) {
         if (!StageConfig.isBlockBlockInteraction()) {
+            return true;
+        }
+
+        // Creative bypass
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
             return true;
         }
 

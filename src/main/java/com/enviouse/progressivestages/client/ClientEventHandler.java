@@ -26,6 +26,11 @@ public class ClientEventHandler {
 
     @SubscribeEvent
     public static void onItemTooltip(ItemTooltipEvent event) {
+        // Creative bypass - don't show lock tooltips in creative mode
+        if (ClientLockCache.isCreativeBypass()) {
+            return;
+        }
+
         Item item = event.getItemStack().getItem();
 
         // Get required stage from ClientLockCache (synced from server) with LockRegistry fallback
