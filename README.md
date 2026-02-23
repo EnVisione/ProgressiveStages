@@ -1,57 +1,61 @@
-# ProgressiveStages – Documentation
+# ProgressiveStages
 
-This document describes how ProgressiveStages works, how to configure it, how stage files are loaded, and how item/recipe locking integrates with EMI/JEI.
-
----
-
-## 1) What this mod does
-
-ProgressiveStages adds **stage-based progression locks** for:
-
-- **Items** (use/pickup/interactions)
-- **Blocks** (place/use/break where applicable)
-- **Recipes / viewing in recipe browsers** (EMI/JEI visibility depending on config)
-- **FTB Quests integration** (stages as task conditions and rewards)
-
-Stages are defined in global config files and synced to clients.
-
-### Key Features
-- **Event-driven**: No tick-based polling, stages update instantly
-- **Dependency graph**: v1.3 uses explicit dependencies instead of linear order
-- **FTB Quests native**: ProgressiveStages is the stage backend for FTB Quests
-- **Automatic triggers**: Grant stages from advancements, item pickups, dimension entry, or boss kills
-- **Team support**: Stages shared via FTB Teams
-- **Whitelist exceptions**: Always allow specific items even with broad locks
-- **Fluid locks (v1.4)**: Hide fluids from EMI/JEI recipe browsers
-- **Name pattern locks**: Lock everything containing a text pattern across all content types
+A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression locks. Define stages in simple TOML files — ProgressiveStages handles locking items, blocks, entities, fluids, dimensions, and recipes until players earn the right to use them.
 
 ---
 
-## v1.4 Changes
+## Features
 
-### Fluid Locks
-Lock fluids from appearing in EMI/JEI recipe browsers:
+- **Lock anything** — items, blocks, entities, fluids, dimensions, recipes
+- **Granular mod locks** — lock all items from a mod, or just its blocks, or just its entities — independently
+- **Name pattern matching** — `names = ["diamond"]` locks every item, block, entity, and fluid with "diamond" in its ID across all mods
+- **Whitelist exceptions** — `unlocked_items`, `unlocked_blocks`, `unlocked_entities`, `unlocked_fluids` let you carve out exceptions from broad locks
+- **EMI + JEI integration** — lock icons in recipe viewer and search index, hidden items when locked, full creative bypass
+- **FTB Quests integration** — Stage Tasks, Stage Rewards, and a native "Stage Required" field on quests and chapters
+- **Trigger system** — grant stages automatically on advancement, item pickup, dimension entry, or boss kill
+- **Dependency graph** — stages can require other stages before they can be granted
+- **Team support** — FTB Teams mode or solo per-player mode
+- **Event-driven** — no tick polling, stages update instantly
+
+---
+
+## Installation
+
+1. Install [NeoForge](https://neoforged.net/) for Minecraft 1.21.1
+2. Drop `progressivestages-x.x.x.jar` into your `mods/` folder
+3. Optional: install EMI or JEI for recipe viewer integration
+4. Optional: install FTB Quests + FTB Library for quest integration
+5. Launch and configure stages in `config/ProgressiveStages/*.toml`
+
+---
+
+## Quick Start
+
+Create `config/ProgressiveStages/iron_age.toml`:
+
 ```toml
+[stage]
+id = "iron_age"
+display_name = "Iron Age"
+dependency = "stone_age"
+unlock_message = "&6Iron Age Unlocked!"
+
 [locks]
-fluids = ["mekanism:hydrogen"]  # Lock specific fluids
-fluid_tags = ["#c:acids"]       # Lock fluids by tag
-fluid_mods = ["mekanism"]       # Lock all fluids from a mod
+items = ["minecraft:iron_pickaxe", "minecraft:iron_ingot"]
+mods = ["create"]
+unlocked_items = ["create:wrench"]
 ```
 
-**⚠️ Important:** Fluid locks ONLY affect EMI/JEI visibility. They do NOT prevent players from piping, pumping, or using fluids in machines. To block fluid transport, lock the machines/pipes themselves.
+Grant the stage in-game:
 
-### Name Patterns Now Lock Everything
-The `names = ["pattern"]` field now locks ALL content types containing the pattern:
-- Items
-- Blocks
-- Entities
-- Fluids (EMI/JEI visibility)
+```
+/stage grant YourName iron_age
+```
 
-### New Whitelist Fields
-- `unlocked_blocks = [...]` - Exempt specific blocks from locks
-- `unlocked_fluids = [...]` - Exempt specific fluids from EMI/JEI hiding
+---
 
-### Lock Cascade Table
+## Lock Cascade Table
+
 | Lock Type | Items | Blocks | Entities | Fluids (EMI/JEI) |
 |-----------|:-----:|:------:|:--------:|:----------------:|
 | `mods = ["modid"]` | ✅ | ✅ | ✅ | ✅ |
@@ -60,296 +64,113 @@ The `names = ["pattern"]` field now locks ALL content types containing the patte
 | `entity_mods` | ❌ | ❌ | ✅ | ❌ |
 | `fluid_mods` | ❌ | ❌ | ❌ | ✅ |
 | `names = ["pattern"]` | ✅ | ✅ | ✅ | ✅ |
+| `items = [...]` | ✅ | ❌ | ❌ | ❌ |
+| `blocks = [...]` | ❌ | ✅ | ❌ | ❌ |
+| `entities = [...]` | ❌ | ❌ | ✅ | ❌ |
+| `fluids = [...]` | ❌ | ❌ | ❌ | ✅ |
+
+Whitelists (`unlocked_items`, `unlocked_blocks`, `unlocked_entities`, `unlocked_fluids`) take priority over ALL lock types.
+
+> ⚠️ **Fluid locks only affect EMI/JEI visibility.** They do NOT prevent players from piping, pumping, or using fluids in machines. To block fluid transport, lock the machines and pipes themselves.
 
 ---
 
-## 2) Key concepts
+## Commands
 
-### Stage
-A stage is an ID like:
-
-- `stone_age`
-- `iron_age`
-- `diamond_age`
-
-Players must have the required stage to interact with locked content.
-
-### Dependencies (v1.3)
-Stages can require other stages to be unlocked first:
-```toml
-[stage]
-id = "diamond_age"
-dependency = "iron_age"  # Must have iron_age first
-
-# Or multiple dependencies:
-dependency = ["iron_age", "stone_age"]
-```
-
-### Lock
-A lock maps a target to a required stage.
-
-Examples:
-
-- Item lock: `minecraft:diamond_pickaxe` → requires `diamond_age`
-- Block lock: `minecraft:enchanting_table` → requires `diamond_age`
-
-Locks are built server-side from stage definitions and synced to the client.
-
-### Dynamic Tags
-When stages are loaded, ProgressiveStages builds **dynamic item tags** for each stage:
-
-- `#progressivestages:stone_age`
-- `#progressivestages:iron_age`
-- `#progressivestages:diamond_age`
-
-These tags are generated at runtime from your TOML stage files - no static JSON tag files needed.
+| Command | Permission | Description |
+|---------|------------|-------------|
+| `/stage grant <player> <stage>` | OP | Grant a stage |
+| `/stage revoke <player> <stage>` | OP | Revoke a stage |
+| `/stage list [player]` | OP | List stages |
+| `/stage check <player> <stage>` | OP | Check if player has stage |
+| `/stage info <stage>` | OP | Show stage definition |
+| `/progressivestages reload` | OP | Reload stage + trigger configs |
+| `/progressivestages validate` | OP | Validate stage files |
+| `/progressivestages ftb status [player]` | OP | Debug FTB integration |
 
 ---
 
-## 3) Stage files
+## Configuration
 
-### Location
-Stage files are stored in the **config directory**, making them global across all worlds:
+Config file: `config/progressivestages-common.toml`
 
-```
-config/ProgressiveStages/*.toml
-```
-
-On first run the mod will generate defaults:
-
-- `stone_age.toml`
-- `iron_age.toml`
-- `diamond_age.toml`
-
-### File format (v1.3)
-These are TOML files.
-
-Common fields:
-
-- `id` – stage ID (e.g., `"iron_age"`)
-- `display_name` – name shown in tooltips/UI
-- `dependency` – (v1.3) stage(s) required before this one can be granted
-- `items` – list of locked item IDs
-- `item_tags` – list of locked item tags (e.g., `"#forge:ingots/iron"`)
-- `blocks` – list of locked block IDs
-- `block_tags` – list of locked block tags
-
-Example:
-```toml
-[stage]
-id = "iron_age"
-display_name = "Iron Age"
-dependency = "stone_age"  # v1.3: Must have stone_age first
-
-[locks]
-items = [
-    "minecraft:iron_pickaxe",
-    "minecraft:iron_sword",
-    "minecraft:iron_helmet"
-]
-item_tags = [
-    "#c:ingots/iron"
-]
-
-# v1.3: Whitelist exceptions (always accessible)
-unlocked_items = []
-```
-
----
-
-## 4) Commands
-
-ProgressiveStages adds stage management commands:
-
-- Grant a stage:
-  - `/stage grant <player> <stage>`
-- Revoke a stage:
-  - `/stage revoke <player> <stage>`
-- List stages:
-  - `/stage list [player]`
-- Check stage:
-  - `/stage check <player> <stage>`
-- Reload stage files:
-  - `/progressivestages reload`
-
-After reload, the server will resync stage+lock data to clients.
-
----
-
-## 5) Configuration
-
-Config file (generated after first run):
-
-```
-config/progressivestages-common.toml
-```
-
-### General options
-
-#### Linear progression
 ```toml
 [general]
+starting_stages = ["stone_age"]
+team_mode = "ftb_teams"  # or "solo"
+debug_logging = false
 linear_progression = false
-```
-When `true`, granting a stage also grants all missing dependency stages automatically.
-When `false`, stages require explicit dependency satisfaction (admin can bypass with double-confirm command).
 
-**Example:**
-- With `linear_progression = true`: granting `diamond_age` auto-grants `iron_age` and `stone_age` (its dependencies)
-- With `linear_progression = false`: granting `diamond_age` only grants `diamond_age` (dependencies must be met first)
-
-### Enforcement options
-
-#### Creative bypass
-```toml
 [enforcement]
+block_item_use = true
+block_item_pickup = true
+block_item_inventory = true
+block_crafting = true
+block_block_placement = true
+block_block_interaction = true
+block_dimension_travel = true
+block_entity_attack = true
 allow_creative_bypass = true
-```
-When `true`, creative players can use/place locked items.
-
-#### Mask locked item names
-```toml
-[enforcement]
 mask_locked_item_names = true
-```
-When `true`, locked items show as **"Unknown Item"** in tooltips.
-
-#### Pickup message cooldown
-```toml
-[enforcement]
 notification_cooldown = 3000
-```
-Prevents chat spam when repeatedly touching locked items.
 
-### EMI integration options
-
-#### Enable EMI integration
-```toml
 [emi]
 enabled = true
-```
-
-#### Show locked recipes / items in EMI
-```toml
-[emi]
+show_lock_icon = true
+lock_icon_position = "top_left"
+lock_icon_size = 8
+show_highlight = true
+highlight_color = "0x50FFAA40"
 show_locked_recipes = false
 ```
 
-Behavior:
-- `false`: locked items/recipes are **hidden** from EMI list/index
-- `true`: locked items are visible and rendered with lock UI
+---
+
+## Compatibility
+
+| Mod | Status |
+|-----|--------|
+| EMI | ✅ Full integration |
+| JEI | ✅ Full integration |
+| FTB Quests | ✅ Full integration |
+| FTB Teams | ✅ Supported |
+| NeoForge 1.21.1 | ✅ Required |
 
 ---
 
-## 6) EMI Integration
+## Changelog
 
-### Dynamic Stage Tags
-ProgressiveStages generates item tags dynamically from your stage TOML files.
+### v1.2
+- Entity locks — `entities`, `entity_tags`, `entity_mods`, `unlocked_entities`
+- `mods` cascade now includes entities
+- `block_entity_attack` config toggle
+- Fixed creative bypass missing from block placement, crafting, and dimension travel
+- Fixed EMI/JEI not refreshing after `/stage grant`
+- Dependency graph replaces linear `order` field
+- `item_mods` and `block_mods` for granular mod locking
+- Multiple `starting_stages` support
+- Admin bypass confirmation for missing dependencies
+- `unlocked_blocks` and `unlocked_entities` whitelist fields
+- Fluid locks — `fluids`, `fluid_tags`, `fluid_mods`, `unlocked_fluids`
+- `names` pattern now matches items, blocks, entities, AND fluids
+- `mods` cascade now includes fluids
+- NBT-aware EMI/JEI hiding — catches all stack variants (Mekanism Chemical Tanks, Meka-Suit, etc.)
+- EMI search index lock icons via `EmiScreenManagerMixin`
+- Creative mode toggle instantly refreshes EMI/JEI index without relog
+- `unlocked_blocks` whitelist field
 
-In EMI, you can search by stage using the tag prefix `#`:
-- `#progressivestages:stone_age` – all stone age items
-- `#progressivestages:iron_age` – all iron age items
-- `#progressivestages:diamond_age` – all diamond age items
-
-This works because:
-1. When the server loads stage files, it builds `StageTagRegistry`
-2. Items defined in each stage's `items` and `item_tags` are grouped
-3. EMI reads these as virtual tags
-
-### Lock overlays
-ProgressiveStages draws lock UI in EMI via mixins:
-
-- **Recipe viewer slots**: orange highlight + lock icon
-- **Search list / favorites**: lock icon only (no orange overlay)
-
-### Vanilla creative menu
-Vanilla creative inventory is **not modified**. The EMI mixin skips rendering on `CreativeModeInventoryScreen`.
-
----
-
-## 7) Client sync + caches
-
-### Stage sync
-Server sends the client a stage snapshot and delta updates.
-Client stores stages in: `ClientStageCache`
-
-### Lock sync
-Server sends lock registry data to the client.
-Client stores locks in: `ClientLockCache`
-
-### Tag sync
-Dynamic stage tags are built server-side in `StageTagRegistry`.
+### v1.1
+- FTB Quests integration
+- EMI handling improvements
+- Expanded trigger system
+- Expanded default stages
 
 ---
 
-## 8) EMI refresh when stages change
+## Documentation
 
-When a stage is granted/revoked:
+Full documentation is in [DOCUMENTATION.md](DOCUMENTATION.md).
 
-1. Client stage cache updates
-2. A delayed EMI reload is scheduled
-3. EMI calls `EmiReloadManager.reloadRecipes()`
-4. EMI re-runs plugin registration and rebuilds its item/recipe index
+## License
 
-This ensures that:
-- Newly unlocked content becomes visible
-- Newly locked content disappears
-
----
-
-## 9) Debugging
-
-Enable debug logging:
-```toml
-[general]
-debug_logging = true
-```
-
-Useful log messages:
-- Stage sync received (client)
-- Lock sync received (client)
-- EMI reload scheduled + completed
-- Dynamic stage tags built: X stages, Y total items
-
----
-
-## 10) Troubleshooting
-
-### "I can't see locked items in EMI search"
-Expected if `emi.show_locked_recipes = false`. Set to `true` if you want locked items visible with lock indicator.
-
-### "I granted a stage but items still don't show in EMI"
-- EMI must receive the stage update
-- EMI reload must run afterward
-- Re-open EMI or inventory after a grant if needed
-
-### "Tag search doesn't show my stage items"
-- Ensure the stage TOML file has items listed in `[locks]` section
-- Run `/progressivestages reload` after editing TOML files
-- Check logs for "Built dynamic stage tags" message
-
----
-
-## 11) Developer notes
-
-Important classes:
-
-- `ClientStageCache` – client stage snapshot/deltas
-- `ClientLockCache` – client lock snapshot
-- `LockRegistry` – server lock registry
-- `StageTagRegistry` – dynamic stage→items mapping for EMI tags
-- `DynamicTagProvider` – provides TagKey lookup for dynamic stage tags
-- `NetworkHandler` – payload registration + sync sending
-- `ProgressiveStagesEMIPlugin` – registers dynamic tags, hides stacks, triggers EMI reload
-- `EmiStackWidgetMixin` – recipe viewer overlays (lock icon + highlight)
-
----
-
-## 12) Workflow for pack devs
-
-1. Start a new world once to generate defaults
-2. Edit the TOML stage files in `<world>/ProgressiveStages/`
-3. Run `/progressivestages reload`
-4. Use `/stage grant` and `/stage revoke` to test lock states
-5. Search in EMI with `#progressivestages:<stage>` to browse stage items
-6. Validate visibility and overlays via EMI
+MIT
