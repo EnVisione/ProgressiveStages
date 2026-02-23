@@ -24,6 +24,11 @@ public class RecipeEnforcer {
             return true;
         }
 
+        // Creative bypass
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
+            return true;
+        }
+
         if (recipe == null) {
             return true;
         }

@@ -22,6 +22,44 @@ Stages are defined in global config files and synced to clients.
 - **Automatic triggers**: Grant stages from advancements, item pickups, dimension entry, or boss kills
 - **Team support**: Stages shared via FTB Teams
 - **Whitelist exceptions**: Always allow specific items even with broad locks
+- **Fluid locks (v1.4)**: Hide fluids from EMI/JEI recipe browsers
+- **Name pattern locks**: Lock everything containing a text pattern across all content types
+
+---
+
+## v1.4 Changes
+
+### Fluid Locks
+Lock fluids from appearing in EMI/JEI recipe browsers:
+```toml
+[locks]
+fluids = ["mekanism:hydrogen"]  # Lock specific fluids
+fluid_tags = ["#c:acids"]       # Lock fluids by tag
+fluid_mods = ["mekanism"]       # Lock all fluids from a mod
+```
+
+**⚠️ Important:** Fluid locks ONLY affect EMI/JEI visibility. They do NOT prevent players from piping, pumping, or using fluids in machines. To block fluid transport, lock the machines/pipes themselves.
+
+### Name Patterns Now Lock Everything
+The `names = ["pattern"]` field now locks ALL content types containing the pattern:
+- Items
+- Blocks
+- Entities
+- Fluids (EMI/JEI visibility)
+
+### New Whitelist Fields
+- `unlocked_blocks = [...]` - Exempt specific blocks from locks
+- `unlocked_fluids = [...]` - Exempt specific fluids from EMI/JEI hiding
+
+### Lock Cascade Table
+| Lock Type | Items | Blocks | Entities | Fluids (EMI/JEI) |
+|-----------|:-----:|:------:|:--------:|:----------------:|
+| `mods = ["modid"]` | ✅ | ✅ | ✅ | ✅ |
+| `item_mods` | ✅ | ❌ | ❌ | ❌ |
+| `block_mods` | ❌ | ✅ | ❌ | ❌ |
+| `entity_mods` | ❌ | ❌ | ✅ | ❌ |
+| `fluid_mods` | ❌ | ❌ | ❌ | ✅ |
+| `names = ["pattern"]` | ✅ | ✅ | ✅ | ✅ |
 
 ---
 

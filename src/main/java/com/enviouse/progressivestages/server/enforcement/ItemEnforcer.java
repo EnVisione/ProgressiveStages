@@ -204,6 +204,24 @@ public class ItemEnforcer {
     }
 
     /**
+     * Send lock notification with cooldown for a generic locked thing (entity, block, etc.)
+     */
+    public static void notifyLockedWithCooldown(ServerPlayer player, StageId requiredStage, String type) {
+        UUID playerId = player.getUUID();
+        String key = type + ":" + requiredStage.toString();
+        long currentTime = System.currentTimeMillis();
+        int cooldownMs = StageConfig.getNotificationCooldown();
+
+        Map<String, Long> playerCooldowns = messageCooldowns.computeIfAbsent(playerId, k -> new HashMap<>());
+
+        Long lastMessageTime = playerCooldowns.get(key);
+        if (lastMessageTime == null || currentTime - lastMessageTime >= cooldownMs) {
+            notifyLocked(player, requiredStage, type);
+            playerCooldowns.put(key, currentTime);
+        }
+    }
+
+    /**
      * Clear cooldowns for a player (call on logout)
      */
     public static void clearCooldowns(UUID playerId) {

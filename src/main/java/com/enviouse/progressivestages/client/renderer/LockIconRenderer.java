@@ -101,12 +101,16 @@ public class LockIconRenderer {
         }
 
         // Render the lock icon - push z-level to render ON TOP of items
+        // Flush any pending draws, disable depth test, and use high Z to guarantee on-top rendering
+        graphics.flush();
+        RenderSystem.disableDepthTest();
         RenderSystem.enableBlend();
         graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, 200); // Move above item layer (items render at z=150)
+        graphics.pose().translate(0, 0, 1000); // High Z to render above everything
         graphics.blit(LOCK_TEXTURE, iconX, iconY, 0, 0, iconSize, iconSize, iconSize, iconSize);
         graphics.pose().popPose();
         RenderSystem.disableBlend();
+        RenderSystem.enableDepthTest();
     }
 
     /**
@@ -143,5 +147,13 @@ public class LockIconRenderer {
      */
     public static void renderLockIconOnly(GuiGraphics graphics, int x, int y, int slotSize) {
         render(graphics, x, y, slotSize);
+    }
+
+    /**
+     * Render just the lock icon without highlight using default slot size (16)
+     * Used by sidebar/search index rendering
+     */
+    public static void renderLockIconOnly(GuiGraphics graphics, int x, int y) {
+        render(graphics, x, y, 16);
     }
 }

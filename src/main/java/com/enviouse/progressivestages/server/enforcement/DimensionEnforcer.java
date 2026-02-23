@@ -25,6 +25,11 @@ public class DimensionEnforcer {
             return true;
         }
 
+        // Creative bypass
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
+            return true;
+        }
+
         if (dimension == null) {
             return true;
         }

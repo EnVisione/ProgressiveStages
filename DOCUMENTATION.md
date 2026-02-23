@@ -12,7 +12,7 @@ You define *stages* in TOML files, then ProgressiveStages:
 
 ---
 
-## v1.3 Changes
+## v1.2 Changes
 
 ### Dependency Graph (replaces linear order)
 - **Removed:** `order` field in stage definitions
@@ -44,6 +44,24 @@ New field to always allow specific items, even if broader locks apply:
 [locks]
 mods = ["mekanism"]  # Lock all Mekanism items
 unlocked_items = ["mekanism:basic_universal_cable"]  # Except this one
+```
+
+### Entity Locks
+Lock entity types to prevent attacking them until a stage is unlocked:
+```toml
+[locks]
+entities = ["minecraft:warden"]
+entity_tags = ["#minecraft:raiders"]
+entity_mods = ["mekanism"]  # Lock all entities from a mod
+```
+Note: Using `mods = ["modid"]` also locks entities from that mod (cascade behavior).
+
+### Unlocked Entities (Whitelist Exceptions)
+New field to always allow attacking specific entities, even if broader locks apply:
+```toml
+[locks]
+mods = ["mekanism"]  # Locks items, blocks, AND entities
+unlocked_entities = ["mekanism:robit"]  # But allow attacking robits
 ```
 
 ---
@@ -92,7 +110,7 @@ config/ProgressiveStages/*.toml
 
 That means stages apply to all worlds on that server/instance (not per-save).
 
-### Stage File Format (v1.3)
+### Stage File Format (v1.2)
 ```toml
 [stage]
 # Required
@@ -104,7 +122,7 @@ description = "Iron tools and basic machinery"
 icon = "minecraft:iron_pickaxe"
 unlock_message = "&6Iron Age Unlocked!"
 
-# Dependency (v1.3) - stages that must be unlocked BEFORE this one
+# Dependency (v1.2) - stages that must be unlocked BEFORE this one
 # Single dependency:
 dependency = "stone_age"
 
@@ -125,15 +143,29 @@ item_tags = [
   "#c:ingots/iron"
 ]
 
+# Item mods (lock all items from a mod, NOT blocks/entities)
+# Use this when you only want to lock items from a mod
+item_mods = [
+  "mekanism"  # Locks all Mekanism items, but NOT blocks or entities
+]
+
 # Name patterns (case-insensitive substring matching)
 names = [
   "diamond",  # Locks minecraft:diamond, minecraft:diamond_pickaxe, etc.
   "netherite" # Locks all netherite items
 ]
 
-# Mod locks (lock all items from a mod)
+# Block mods (lock all blocks from a mod, NOT items/entities)
+# Use this when you only want to lock blocks from a mod
+block_mods = [
+  "mekanism"  # Locks all Mekanism blocks, but NOT items or entities
+]
+
+# Mod locks (lock ALL content from a mod: items, blocks, AND entities)
+# NOTE: Using mods = ["modid"] locks EVERYTHING from that mod.
+# For finer control, use item_mods, block_mods, or entity_mods separately.
 mods = [
-  "create"  # Locks all items from the Create mod
+  "create"  # Locks all items, blocks, AND entities from the Create mod
 ]
 
 # Blocks
@@ -151,19 +183,85 @@ dimensions = [
   "minecraft:the_nether"
 ]
 
-# Unlocked items (v1.3) - Whitelist exceptions
+# Entities (v1.1) - Lock entity types (prevent attacking)
+entities = [
+  "minecraft:warden",       # Can't attack wardens until this stage
+  "minecraft:elder_guardian" # Can't attack elder guardians
+]
+
+# Entity tags (v1.1) - Lock all entity types in a tag
+entity_tags = [
+  "#minecraft:raiders"  # Can't attack any raiders
+]
+
+# Entity mods (v1.1) - Lock all entities from a mod
+# NOTE: entity_mods is ONLY for entity attacks. Use this when you want to lock
+# entities separately from items. If you use mods = ["modid"], entities are 
+# automatically locked as well (no need to also specify entity_mods).
+entity_mods = [
+  "mekanism"  # Can't attack any Mekanism entities
+]
+
+# Unlocked items (v1.2) - Whitelist exceptions
 # These items are ALWAYS accessible, even if broader locks apply
 # Use case: Lock entire mod but allow specific items
 unlocked_items = [
   "mekanism:basic_universal_cable",  # Allow this even though mekanism is locked
   "minecraft:diamond_horse_armor"    # Allow this even though "diamond" name pattern is locked
 ]
+
+# Unlocked entities (v1.2) - Whitelist exceptions for entities
+# These entities can ALWAYS be attacked, even if broader entity locks apply
+# Use case: Lock entire mod entities but allow attacking specific ones
+unlocked_entities = [
+  "mekanism:robit",  # Allow attacking robits even though mekanism entities are locked
+  "minecraft:zombie" # Allow attacking zombies even if locked via tag/pattern
+]
 ```
 
 ### Notes
 - `stage.id` can be bare (`iron_age`) or namespaced (`progressivestages:iron_age`). Both work.
 - All stage IDs are normalized (trimmed/lowercased) when loaded.
-- v1.3: The `order` field is **removed**. Use `dependency` instead.
+- v1.2: The `order` field is **removed**. Use `dependency` instead.
+
+### Lock Cascade Behavior
+
+The following table shows which content types are locked by each lock type:
+
+| Lock Type | Items | Blocks | Entities | Fluids (EMI/JEI) |
+|-----------|:-----:|:------:|:--------:|:----------------:|
+| `mods = ["modid"]` | ✅ | ✅ | ✅ | ✅ |
+| `item_mods = ["modid"]` | ✅ | ❌ | ❌ | ❌ |
+| `block_mods = ["modid"]` | ❌ | ✅ | ❌ | ❌ |
+| `entity_mods = ["modid"]` | ❌ | ❌ | ✅ | ❌ |
+| `fluid_mods = ["modid"]` | ❌ | ❌ | ❌ | ✅ |
+| `names = ["pattern"]` | ✅ | ✅ | ✅ | ✅ |
+| `items = [...]` | ✅ | ❌ | ❌ | ❌ |
+| `blocks = [...]` | ❌ | ✅ | ❌ | ❌ |
+| `entities = [...]` | ❌ | ❌ | ✅ | ❌ |
+| `fluids = [...]` | ❌ | ❌ | ❌ | ✅ |
+
+**Key Points:**
+- **`mods = ["modid"]`** is the "lock everything" option — locks all items, blocks, entities, AND fluids from that mod.
+- **`names = ["pattern"]`** locks **everything** containing that pattern — items, blocks, entities, AND fluids.
+- **Fluid locks only affect EMI/JEI visibility.** They do NOT prevent players from piping, pumping, or using fluids in machines. To block fluid transport, you need to lock the machines/pipes themselves.
+
+### Whitelist Exceptions
+Each content type has its own whitelist that takes priority over ALL lock types:
+
+| Whitelist | Exempts |
+|-----------|---------|
+| `unlocked_items = [...]` | Items from `mods`, `item_mods`, `item_tags`, `names` |
+| `unlocked_blocks = [...]` | Blocks from `mods`, `block_mods`, `block_tags`, `names` |
+| `unlocked_entities = [...]` | Entities from `mods`, `entity_mods`, `entity_tags`, `names` |
+| `unlocked_fluids = [...]` | Fluids from `mods`, `fluid_mods`, `fluid_tags`, `names` |
+
+**Example:** Lock all Mekanism items but allow the configurator:
+```toml
+[locks]
+mods = ["mekanism"]
+unlocked_items = ["mekanism:configurator"]
+```
 
 ---
 
@@ -176,10 +274,10 @@ config/progressivestages-common.toml
 
 The authoritative list of config keys is in `StageConfig.java`.
 
-### General (v1.3)
+### General (v1.2)
 ```toml
 [general]
-# Multiple starting stages (v1.3)
+# Multiple starting stages (v1.2)
 starting_stages = ["stone_age", "tutorial_complete"]
 
 # Or single stage
@@ -212,6 +310,7 @@ block_block_interaction = true
 block_dimension_travel = true
 block_locked_mods = true
 block_interactions = true
+block_entity_attack = true  # Block attacking locked entity types
 
 # Bypass checks when player is in creative mode
 allow_creative_bypass = true

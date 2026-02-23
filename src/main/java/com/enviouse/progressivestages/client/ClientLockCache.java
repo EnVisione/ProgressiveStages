@@ -28,6 +28,38 @@ public class ClientLockCache {
     // Recipe ID -> Required Stage
     private static final Map<ResourceLocation, StageId> recipeLocks = new ConcurrentHashMap<>();
 
+    // Creative bypass flag - when true, all lock checks return false (not locked)
+    private static volatile boolean creativeBypass = false;
+
+    /**
+     * Set creative bypass state.
+     * When enabled, all lock rendering is suppressed (icons, tooltips, EMI hiding).
+     */
+    public static void setCreativeBypass(boolean bypassing) {
+        boolean changed = creativeBypass != bypassing;
+        creativeBypass = bypassing;
+
+        if (StageConfig.isDebugLogging()) {
+            LOGGER.info("[ProgressiveStages] Creative bypass: {}", bypassing);
+        }
+
+        // Trigger EMI/JEI reload when bypass state changes
+        // This is needed because:
+        // 1. When entering creative: show all items (currently hidden ones need to appear)
+        // 2. When leaving creative: hide locked items again
+        if (changed) {
+            triggerEmiReload();
+        }
+    }
+
+    /**
+     * Check if creative bypass is active.
+     * When active, all items should appear unlocked on the client.
+     */
+    public static boolean isCreativeBypass() {
+        return creativeBypass;
+    }
+
     /**
      * Set all item locks (replaces existing)
      */
@@ -89,31 +121,69 @@ public class ClientLockCache {
     }
 
     /**
-     * Get the required stage for an item
+     * Get the required stage for an item.
+     * Returns empty if creative bypass is active.
      */
     public static Optional<StageId> getRequiredStageForItem(ResourceLocation itemId) {
+        if (creativeBypass) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(itemLocks.get(itemId));
     }
 
     /**
-     * Get the required stage for a block
+     * Get the required stage for a block.
+     * Returns empty if creative bypass is active.
      */
     public static Optional<StageId> getRequiredStageForBlock(ResourceLocation blockId) {
+        if (creativeBypass) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(blockLocks.get(blockId));
     }
 
     /**
-     * Get the required stage for a recipe
+     * Get the required stage for a recipe.
+     * Returns empty if creative bypass is active.
      */
     public static Optional<StageId> getRequiredStageForRecipe(ResourceLocation recipeId) {
+        if (creativeBypass) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(recipeLocks.get(recipeId));
     }
 
     /**
-     * Check if an item is locked (has a required stage)
+     * Check if an item is locked (has a required stage).
+     * Returns false if creative bypass is active.
      */
     public static boolean hasItemLock(ResourceLocation itemId) {
+        if (creativeBypass) {
+            return false;
+        }
         return itemLocks.containsKey(itemId);
+    }
+
+    /**
+     * Check if a fluid is locked (by checking the LockRegistry for fluid locks).
+     * Returns false if creative bypass is active.
+     */
+    public static boolean isFluidLocked(ResourceLocation fluidId) {
+        if (creativeBypass) {
+            return false;
+        }
+        // Check LockRegistry for fluid locks (mods, fluid_mods, direct fluid locks)
+        try {
+            var requiredStage = com.enviouse.progressivestages.common.lock.LockRegistry.getInstance()
+                .getRequiredStageForFluid(fluidId);
+            if (requiredStage.isEmpty()) {
+                return false;
+            }
+            // Check if player has the required stage
+            return !ClientStageCache.hasStage(requiredStage.get());
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -130,6 +200,7 @@ public class ClientLockCache {
         itemLocks.clear();
         blockLocks.clear();
         recipeLocks.clear();
+        creativeBypass = false;
 
         if (StageConfig.isDebugLogging()) {
             LOGGER.debug("[ProgressiveStages] Cleared client lock cache");
