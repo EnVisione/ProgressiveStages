@@ -131,6 +131,25 @@ public class ServerEventHandler {
                 // We can't truly cancel the craft here, but the inventory scanner will drop it
                 // And the mixin will hide the output slot
                 ItemEnforcer.notifyLocked(player, event.getCrafting().getItem());
+                return;
+            }
+
+            // Check recipe-only lock (item is not locked but the specific recipe is).
+            // CraftingMenuMixin already blocks the result slot server-side; this is a backstop
+            // for crafting paths that bypass the mixin (e.g., recipe book, auto-crafters).
+            if (!event.getCrafting().isEmpty() &&
+                    event.getInventory() instanceof net.minecraft.world.inventory.CraftingContainer craftingContainer) {
+                var server = player.getServer();
+                if (server != null) {
+                    server.getRecipeManager()
+                        .getRecipeFor(net.minecraft.world.item.crafting.RecipeType.CRAFTING,
+                                craftingContainer, player.level())
+                        .ifPresent(recipe -> {
+                            if (RecipeEnforcer.isRecipeLockedForPlayer(player, recipe.id())) {
+                                RecipeEnforcer.notifyLocked(player, recipe.id());
+                            }
+                        });
+                }
             }
         }
     }

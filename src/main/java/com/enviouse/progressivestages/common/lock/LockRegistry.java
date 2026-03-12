@@ -824,10 +824,17 @@ public class LockRegistry {
     }
 
     /**
-     * Get all locked recipes
+     * Get all locked recipes (IDs only)
      */
     public Set<ResourceLocation> getAllLockedRecipes() {
         return Collections.unmodifiableSet(recipeLocks.keySet());
+    }
+
+    /**
+     * Get all recipe locks with their required stages (for EMI integration)
+     */
+    public Map<ResourceLocation, StageId> getAllRecipeLocks() {
+        return Collections.unmodifiableMap(recipeLocks);
     }
 
     /**

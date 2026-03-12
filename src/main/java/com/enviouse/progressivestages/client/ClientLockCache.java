@@ -194,6 +194,13 @@ public class ClientLockCache {
     }
 
     /**
+     * Get all recipe locks (for EMI recipe hiding)
+     */
+    public static Map<ResourceLocation, StageId> getAllRecipeLocks() {
+        return Collections.unmodifiableMap(recipeLocks);
+    }
+
+    /**
      * Clear all cached data (on disconnect)
      */
     public static void clear() {

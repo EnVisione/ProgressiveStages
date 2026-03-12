@@ -616,10 +616,27 @@ public class StageFileLoader {
             unlocked_items = []
             
             # -----------------------------------------------------------------------------
+            # RECIPES - Lock specific crafting recipes by registry ID
+            # The item remains usable and visible in EMI, but the recipe is hidden and
+            # uncraftable until this stage is unlocked. Use this instead of items = [...]
+            # when you want the item to be obtainable via other means (loot, trading, etc.)
+            # Example: recipes = ["minecraft:iron_sword", "minecraft:iron_pickaxe"]
+            # -----------------------------------------------------------------------------
+            recipes = [
+                # "minecraft:iron_sword"
+            ]
+
+            # -----------------------------------------------------------------------------
+            # RECIPE TAGS - Lock all recipes in a tag
+            # Example: recipe_tags = ["#c:tools/iron"]
+            # -----------------------------------------------------------------------------
+            recipe_tags = []
+
+            # -----------------------------------------------------------------------------
             # INTERACTIONS - Lock specific player-world interactions
             # Useful for Create mod's "apply item to block" mechanics
             # -----------------------------------------------------------------------------
-            
+
             # Example: Lock using a smithing table (right-click block)
             # [[locks.interactions]]
             # type = "block_right_click"
