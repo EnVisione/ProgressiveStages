@@ -33,8 +33,8 @@ public class Progressivestages {
         // Register data attachments
         StageAttachments.ATTACHMENT_TYPES.register(modEventBus);
 
-        // Register config
-        modContainer.registerConfig(ModConfig.Type.COMMON, StageConfig.SPEC);
+        // Register config (custom filename: progressivestages.toml instead of default progressivestages-common.toml)
+        modContainer.registerConfig(ModConfig.Type.COMMON, StageConfig.SPEC, "progressivestages.toml");
 
         // Create config folder early (before world load)
         createConfigFolder();

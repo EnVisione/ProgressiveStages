@@ -269,7 +269,7 @@ unlocked_items = ["mekanism:configurator"]
 
 Config file:
 ```
-config/progressivestages-common.toml
+config/progressivestages.toml
 ```
 
 The authoritative list of config keys is in `StageConfig.java`.
@@ -301,6 +301,25 @@ linear_progression = false
 [enforcement]
 block_item_use = true
 block_item_pickup = true
+
+# Soft item restriction options (v1.4):
+# These provide a friendlier alternative to block_item_inventory.
+# When block_item_inventory = false, these let you fine-tune what players
+# can do with locked items. Useful for modpacks where players can find
+# locked items in loot chests and store them for later use.
+
+# Prevent locked items from being in the hotbar.
+# Items are moved to main inventory (not dropped).
+# Ignored if block_item_inventory = true.
+block_item_hotbar = true
+
+# Prevent picking up locked items with the mouse cursor in GUIs.
+# When false, players can freely move locked items to chests.
+# Ignored if block_item_inventory = true.
+block_item_mouse_pickup = true
+
+# Strictest option: auto-drop locked items from entire inventory.
+# If true, overrides block_item_hotbar and block_item_mouse_pickup.
 block_item_inventory = true
 inventory_scan_frequency = 20
 block_crafting = true

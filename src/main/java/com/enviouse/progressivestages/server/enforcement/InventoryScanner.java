@@ -85,6 +85,70 @@ public class InventoryScanner {
     }
 
     /**
+     * Scan player's hotbar and move any locked items to main inventory.
+     * Called when block_item_hotbar = true but block_item_inventory = false.
+     * This is a softer alternative that lets players keep items in storage but not in the hotbar.
+     *
+     * @return number of items moved out of the hotbar
+     */
+    public static int scanAndMoveLockedItemsFromHotbar(ServerPlayer player) {
+        if (!StageConfig.isBlockItemHotbar()) {
+            return 0;
+        }
+
+        // If block_item_inventory is true, scanAndDropLockedItems handles everything already
+        if (StageConfig.isBlockItemInventory()) {
+            return 0;
+        }
+
+        Inventory inventory = player.getInventory();
+        int movedCount = 0;
+
+        // Hotbar slots are indices 0-8 in inventory.items
+        for (int hotbarSlot = 0; hotbarSlot < 9; hotbarSlot++) {
+            ItemStack stack = inventory.items.get(hotbarSlot);
+            if (stack.isEmpty() || ItemEnforcer.canHoldItem(player, stack)) {
+                continue;
+            }
+
+            // Try to move to main inventory (slots 9-35)
+            boolean moved = false;
+            for (int invSlot = 9; invSlot < 36; invSlot++) {
+                ItemStack existing = inventory.items.get(invSlot);
+                if (existing.isEmpty()) {
+                    // Move the locked item to this empty main inventory slot
+                    inventory.items.set(invSlot, stack.copy());
+                    inventory.items.set(hotbarSlot, ItemStack.EMPTY);
+                    moved = true;
+                    movedCount++;
+                    break;
+                }
+            }
+
+            // If main inventory is full, drop as fallback
+            if (!moved) {
+                dropItem(player, stack.copy());
+                inventory.items.set(hotbarSlot, ItemStack.EMPTY);
+                movedCount++;
+            }
+        }
+
+        if (movedCount > 0) {
+            ItemEnforcer.playLockSound(player);
+            if (StageConfig.isShowLockMessage()) {
+                player.sendSystemMessage(
+                    com.enviouse.progressivestages.common.util.TextUtil.parseColorCodes(
+                        "&c🔒 Moved " + movedCount + " locked item" + (movedCount > 1 ? "s" : "") + " out of your hotbar!"
+                    )
+                );
+            }
+            LOGGER.debug("Moved {} locked items from hotbar for player {}", movedCount, player.getName().getString());
+        }
+
+        return movedCount;
+    }
+
+    /**
      * Drop an item at the player's feet
      */
     private static void dropItem(ServerPlayer player, ItemStack stack) {

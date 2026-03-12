@@ -92,7 +92,7 @@ Whitelists (`unlocked_items`, `unlocked_blocks`, `unlocked_entities`, `unlocked_
 
 ## Configuration
 
-Config file: `config/progressivestages-common.toml`
+Config file: `config/progressivestages.toml`
 
 ```toml
 [general]
@@ -104,6 +104,8 @@ linear_progression = false
 [enforcement]
 block_item_use = true
 block_item_pickup = true
+block_item_hotbar = true
+block_item_mouse_pickup = true
 block_item_inventory = true
 block_crafting = true
 block_block_placement = true

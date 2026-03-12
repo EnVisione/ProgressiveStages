@@ -54,8 +54,26 @@ public class StageConfig {
         .comment("Block item pickup (prevent picking up locked items from ground)")
         .define("enforcement.block_item_pickup", true);
 
+    private static final ModConfigSpec.BooleanValue BLOCK_ITEM_HOTBAR = BUILDER
+        .comment("Prevent locked items from being in the hotbar",
+                 "When true, locked items in hotbar slots are moved to main inventory (not dropped)",
+                 "When false, locked items can remain in the hotbar but still cannot be used",
+                 "This is a softer alternative to block_item_inventory — lets players store items for later",
+                 "Ignored if block_item_inventory is true (which drops items from everywhere)")
+        .define("enforcement.block_item_hotbar", true);
+
+    private static final ModConfigSpec.BooleanValue BLOCK_ITEM_MOUSE_PICKUP = BUILDER
+        .comment("Prevent picking up locked items with the mouse cursor in GUIs",
+                 "When true, players cannot click on locked items in inventories/containers",
+                 "When false, players can freely move locked items between inventory and chests",
+                 "This allows players to store locked items for later use once they unlock the stage",
+                 "Ignored if block_item_inventory is true (which blocks all interaction)")
+        .define("enforcement.block_item_mouse_pickup", true);
+
     private static final ModConfigSpec.BooleanValue BLOCK_ITEM_INVENTORY = BUILDER
-        .comment("Block item holding in inventory (auto-drop locked items)")
+        .comment("Block item holding in inventory (auto-drop locked items)",
+                 "This is the strictest option — locked items are dropped on the ground",
+                 "If false, see block_item_hotbar and block_item_mouse_pickup for softer alternatives")
         .define("enforcement.block_item_inventory", true);
 
     private static final ModConfigSpec.IntValue INVENTORY_SCAN_FREQUENCY = BUILDER
@@ -210,6 +228,8 @@ public class StageConfig {
     private static boolean linearProgression;
     private static boolean blockItemUse;
     private static boolean blockItemPickup;
+    private static boolean blockItemHotbar;
+    private static boolean blockItemMousePickup;
     private static boolean blockItemInventory;
     private static int inventoryScanFrequency;
     private static boolean blockCrafting;
@@ -258,6 +278,8 @@ public class StageConfig {
         linearProgression = LINEAR_PROGRESSION.get();
         blockItemUse = BLOCK_ITEM_USE.get();
         blockItemPickup = BLOCK_ITEM_PICKUP.get();
+        blockItemHotbar = BLOCK_ITEM_HOTBAR.get();
+        blockItemMousePickup = BLOCK_ITEM_MOUSE_PICKUP.get();
         blockItemInventory = BLOCK_ITEM_INVENTORY.get();
         inventoryScanFrequency = INVENTORY_SCAN_FREQUENCY.get();
         blockCrafting = BLOCK_CRAFTING.get();
@@ -324,6 +346,8 @@ public class StageConfig {
     public static boolean isLinearProgression() { return linearProgression; }
     public static boolean isBlockItemUse() { return blockItemUse; }
     public static boolean isBlockItemPickup() { return blockItemPickup; }
+    public static boolean isBlockItemHotbar() { return blockItemHotbar; }
+    public static boolean isBlockItemMousePickup() { return blockItemMousePickup; }
     public static boolean isBlockItemInventory() { return blockItemInventory; }
     public static int getInventoryScanFrequency() { return inventoryScanFrequency; }
     public static boolean isBlockCrafting() { return blockCrafting; }
