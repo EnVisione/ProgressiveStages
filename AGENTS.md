@@ -64,7 +64,7 @@ All mod dependencies are **local JARs** in `libs/` — no external Maven repos n
 - **Message cooldowns** — enforcers track per-player, per-item cooldowns via `ItemEnforcer.messageCooldowns` to avoid chat spam.
 - **FTB Quests compat is soft-loaded** — `compat/ftbquests/` uses `compileOnly` dependency + separate mixin config (`progressivestages-ftbquests.mixins.json` with `required: false`). All FTB API calls go through `FtbQuestsHooks` using reflection so compile-time FTB classes are never required at runtime.
 - **Constants** — all mod-wide constants (mod ID, packet IDs, directory names) live in `common/util/Constants.java`.
-- **Config** — `StageConfig.java` is the authoritative source for all config keys; uses NeoForge `ModConfigSpec`. Runtime config file: `config/progressivestages-common.toml`.
+- **Config** — `StageConfig.java` is the authoritative source for all config keys; uses NeoForge `ModConfigSpec`. Runtime config file: `config/progressivestages.toml`.
 - **Dependency graph** — stages declare `dependency = "other_stage"` (single) or `dependency = ["a", "b"]` (multiple). `StageOrder` validates on load. Admin `/stage grant` prompts for confirmation when dependencies are missing; confirmation expires after 10 seconds.
 - **Trigger persistence** — dimension and boss triggers are one-time per player, persisted in `world/data/progressivestages_triggers.dat` via `TriggerPersistence` (NeoForge `SavedData`). Reset with `/progressivestages trigger reset`.
 
@@ -303,7 +303,7 @@ Whitelists (`unlocked_items`, `unlocked_blocks`, `unlocked_entities`, `unlocked_
 
 | File | Purpose |
 |------|---------|
-| `config/progressivestages-common.toml` | Main mod settings (enforcement, EMI, FTB integration) |
+| `config/progressivestages.toml` | Main mod settings (enforcement, EMI, FTB integration) |
 | `config/ProgressiveStages/*.toml` | Stage definitions (one file per stage or grouped) |
 | `config/ProgressiveStages/triggers.toml` | Trigger mappings (advancements, items, dimensions, bosses) |
 | `world/data/progressivestages_triggers.dat` | One-time trigger history (dimension/boss triggers) |

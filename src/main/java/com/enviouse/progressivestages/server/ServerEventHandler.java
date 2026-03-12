@@ -161,7 +161,7 @@ public class ServerEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             if (!ItemEnforcer.canUseItem(player, event.getItemStack())) {
                 event.setCanceled(true);
-                ItemEnforcer.notifyLocked(player, event.getItemStack().getItem());
+                ItemEnforcer.notifyLockedWithCooldown(player, event.getItemStack().getItem());
             }
         }
     }
@@ -171,7 +171,20 @@ public class ServerEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             if (!ItemEnforcer.canUseItem(player, event.getItem())) {
                 event.setCanceled(true);
-                ItemEnforcer.notifyLocked(player, event.getItem().getItem());
+                ItemEnforcer.notifyLockedWithCooldown(player, event.getItem().getItem());
+            }
+        }
+    }
+
+    // ============ Left-Click / Mining Enforcement ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            // Block mining/breaking when the held tool/item is locked
+            if (!event.getItemStack().isEmpty() && !ItemEnforcer.canUseItem(player, event.getItemStack())) {
+                event.setCanceled(true);
+                ItemEnforcer.notifyLockedWithCooldown(player, event.getItemStack().getItem());
             }
         }
     }
@@ -209,7 +222,13 @@ public class ServerEventHandler {
 
         if (lastScan == null || currentTime - lastScan >= scanFrequency) {
             lastScanTime.put(playerId, currentTime);
-            InventoryScanner.scanAndDropLockedItems(player);
+
+            // Full inventory drop takes priority over hotbar-only move
+            if (StageConfig.isBlockItemInventory()) {
+                InventoryScanner.scanAndDropLockedItems(player);
+            } else if (StageConfig.isBlockItemHotbar()) {
+                InventoryScanner.scanAndMoveLockedItemsFromHotbar(player);
+            }
         }
     }
 
@@ -297,9 +316,18 @@ public class ServerEventHandler {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onAttackEntity(net.neoforged.neoforge.event.entity.player.AttackEntityEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
+            // Check if the entity type is locked
             if (!EntityEnforcer.canAttackEntity(player, event.getTarget().getType())) {
                 event.setCanceled(true);
                 EntityEnforcer.notifyLocked(player, event.getTarget().getType());
+                return;
+            }
+
+            // Also check if the held weapon/item is locked (can't attack with a locked sword, etc.)
+            var heldItem = player.getMainHandItem();
+            if (!heldItem.isEmpty() && !ItemEnforcer.canUseItem(player, heldItem)) {
+                event.setCanceled(true);
+                ItemEnforcer.notifyLockedWithCooldown(player, heldItem.getItem());
             }
         }
     }
