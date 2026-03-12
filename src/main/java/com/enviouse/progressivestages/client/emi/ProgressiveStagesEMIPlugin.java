@@ -280,8 +280,11 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
      * This forces EMI to re-run all plugins including ours,
      * which will re-evaluate what should be hidden based on current stages.
      *
-     * Uses EmiReloadManager.reloadRecipes() which is the same path EMI uses
-     * when RecipesUpdatedEvent fires — it re-runs all plugin register() calls.
+     * Uses EmiReloadManager.reload() which directly starts the reload worker thread.
+     * Note: reloadRecipes() cannot be used here because it uses an internal bitmask
+     * that waits for BOTH reloadTags() (bit 1) AND reloadRecipes() (bit 2) to be called
+     * before triggering the actual reload. Since we're doing a programmatic refresh
+     * (not a server-driven tag+recipe resync), reload() bypasses that gate.
      */
     public static void triggerEmiReload() {
         if (!initialized) {
@@ -306,12 +309,14 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
                     reloadPending.set(false);
                     LOGGER.info("[ProgressiveStages] Triggering EMI reload. Current stages: {}", ClientStageCache.getStages());
 
-                    // EmiReloadManager.reloadRecipes() triggers a full EMI reload cycle:
-                    // - Clears all data
-                    // - Re-runs all plugin register() methods (including ours)
-                    // - Rebuilds search index
-                    // This is the same codepath as when Minecraft syncs recipes on world join.
-                    EmiReloadManager.reloadRecipes();
+                    // Use EmiReloadManager.reload() directly to force a full EMI reload.
+                    // IMPORTANT: reloadRecipes() does NOT reload on its own — it sets bit 2
+                    // of an internal bitmask and waits for reloadTags() (bit 1) before calling
+                    // reload(). Since we only need to re-evaluate lock visibility (not a full
+                    // tag+recipe resync from the server), we call reload() directly to bypass
+                    // the bitmask gate. This clears all data, re-runs all plugin register()
+                    // methods (including ours), and rebuilds the search index.
+                    EmiReloadManager.reload();
 
                     LOGGER.info("[ProgressiveStages] EMI reload triggered successfully");
                 } catch (Exception e) {
