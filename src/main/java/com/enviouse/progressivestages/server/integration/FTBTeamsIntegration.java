@@ -1,10 +1,14 @@
 package com.enviouse.progressivestages.server.integration;
 
+import com.enviouse.progressivestages.common.api.ProgressiveStagesAPI;
+import com.enviouse.progressivestages.common.api.StageCause;
+import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.team.TeamStageSync;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import dev.ftb.mods.ftbteams.api.Team;
+import dev.ftb.mods.ftbteams.api.property.TeamProperties;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModList;
@@ -13,14 +17,17 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Integration with FTB Teams mod.
  * Uses polling to detect team changes since FTB Teams events aren't NeoForge events.
+ *
+ * <p>Also monitors FTB Teams' {@code TEAM_STAGES} property to detect stages granted
+ * by FTB Quests team rewards. When a StageReward has {@code isTeamReward() == true}
+ * (the default), FTB Quests calls {@code TeamStagesHelper.addTeamStage()} which
+ * bypasses our StageProvider entirely — the stage is stored in FTB Teams' own
+ * property system. This class detects those changes and syncs them to our system.
  */
 @EventBusSubscriber(modid = Constants.MOD_ID)
 public class FTBTeamsIntegration {
@@ -30,6 +37,10 @@ public class FTBTeamsIntegration {
 
     // Track each player's current team to detect changes
     private static final Map<UUID, UUID> lastKnownTeams = new HashMap<>();
+
+    // Track FTB Teams' TEAM_STAGES property per team to detect stage changes
+    // from FTB Quests team rewards (which bypass our StageProvider)
+    private static final Map<UUID, Set<String>> lastKnownFtbTeamStages = new HashMap<>();
 
     /**
      * Initialize FTB Teams integration if the mod is present.
@@ -70,6 +81,7 @@ public class FTBTeamsIntegration {
 
         for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) {
             checkTeamChange(player);
+            checkFtbTeamStages(player);
         }
     }
 
@@ -88,6 +100,16 @@ public class FTBTeamsIntegration {
             if (teamId != null) {
                 lastKnownTeams.put(player.getUUID(), teamId);
                 LOGGER.debug("Player {} logged in, team: {}", player.getName().getString(), teamId);
+
+                // Snapshot current FTB Teams stages as baseline for change detection
+                team.ifPresent(t -> {
+                    Set<String> ftbStages = new HashSet<>(t.getProperty(TeamProperties.TEAM_STAGES));
+                    lastKnownFtbTeamStages.put(teamId, ftbStages);
+                    if (!ftbStages.isEmpty()) {
+                        LOGGER.debug("[ProgressiveStages] Snapshotted {} FTB Teams stages for team {}",
+                            ftbStages.size(), teamId);
+                    }
+                });
             } else {
                 LOGGER.debug("Player {} logged in with no team", player.getName().getString());
             }
@@ -103,8 +125,79 @@ public class FTBTeamsIntegration {
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (!initialized) return;
 
-        lastKnownTeams.remove(event.getEntity().getUUID());
+        UUID playerId = event.getEntity().getUUID();
+        lastKnownTeams.remove(playerId);
+        // Note: don't remove lastKnownFtbTeamStages here — it's keyed by teamId,
+        // and other team members may still be online.
         LOGGER.debug("Player {} logged out, tracking removed", event.getEntity().getName().getString());
+    }
+
+    /**
+     * Check if FTB Teams' TEAM_STAGES property has changed and sync to our system.
+     *
+     * <p>This handles the case where FTB Quests grants a stage reward as a "team reward"
+     * ({@code isTeamReward() == true}, which is the default). In that case, FTB Quests
+     * calls {@code TeamStagesHelper.addTeamStage(team, stage)} which stores the stage
+     * in FTB Teams' own {@code TEAM_STAGES} property and <b>completely bypasses</b>
+     * our {@code StageProvider.add()} method. Without this check, our system would
+     * never know about the stage change, and EMI/JEI would not update.
+     *
+     * <p>Detection works by comparing the current {@code TEAM_STAGES} set against a
+     * snapshot taken at login (or last poll). Newly added stages are granted through
+     * our system; removed stages are revoked.
+     */
+    private static void checkFtbTeamStages(ServerPlayer player) {
+        try {
+            Optional<Team> teamOpt = FTBTeamsAPI.api().getManager().getTeamForPlayer(player);
+            if (teamOpt.isEmpty()) return;
+
+            Team team = teamOpt.get();
+            UUID teamId = team.getId();
+
+            // Read current FTB Teams stages
+            Set<String> currentFtbStages = new HashSet<>(team.getProperty(TeamProperties.TEAM_STAGES));
+
+            // Get last known snapshot (empty set if first check)
+            Set<String> lastKnown = lastKnownFtbTeamStages.getOrDefault(teamId, Collections.emptySet());
+
+            // Detect changes
+            Set<String> added = new HashSet<>(currentFtbStages);
+            added.removeAll(lastKnown);
+
+            Set<String> removed = new HashSet<>(lastKnown);
+            removed.removeAll(currentFtbStages);
+
+            if (added.isEmpty() && removed.isEmpty()) {
+                return; // No changes
+            }
+
+            // Grant newly added stages (FTB Teams → our system)
+            for (String stageName : added) {
+                StageId stageId = StageId.parse(stageName);
+                if (ProgressiveStagesAPI.stageExists(stageId) && !ProgressiveStagesAPI.hasStage(player, stageId)) {
+                    ProgressiveStagesAPI.grantStage(player, stageId, StageCause.QUEST_REWARD);
+                    LOGGER.info("[ProgressiveStages] Synced FTB Teams stage '{}' → granted to {} (team reward)",
+                        stageId, player.getName().getString());
+                }
+            }
+
+            // Revoke removed stages (FTB Teams removed → revoke from our system)
+            for (String stageName : removed) {
+                StageId stageId = StageId.parse(stageName);
+                if (ProgressiveStagesAPI.stageExists(stageId) && ProgressiveStagesAPI.hasStage(player, stageId)) {
+                    ProgressiveStagesAPI.revokeStage(player, stageId, StageCause.QUEST_REWARD);
+                    LOGGER.info("[ProgressiveStages] Synced FTB Teams stage '{}' → revoked from {} (team reward removal)",
+                        stageId, player.getName().getString());
+                }
+            }
+
+            // Update snapshot
+            lastKnownFtbTeamStages.put(teamId, currentFtbStages);
+
+        } catch (Exception e) {
+            LOGGER.error("[ProgressiveStages] Error checking FTB Teams stages for {}: {}",
+                player.getName().getString(), e.getMessage());
+        }
     }
 
     /**
