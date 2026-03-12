@@ -951,6 +951,20 @@ public class LockRegistry {
     }
 
     /**
+     * Get all interaction locks of a given type (e.g., "item_on_block", "item_on_entity").
+     * Used by InteractionEnforcer for runtime tag-pattern matching.
+     */
+    public java.util.Collection<InteractionLockEntry> getAllInteractionLocksOfType(String type) {
+        List<InteractionLockEntry> result = new ArrayList<>();
+        for (InteractionLockEntry entry : interactionLocks.values()) {
+            if (type.equals(entry.type)) {
+                result.add(entry);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Get all name patterns
      */
     public Set<String> getAllNamePatterns() {

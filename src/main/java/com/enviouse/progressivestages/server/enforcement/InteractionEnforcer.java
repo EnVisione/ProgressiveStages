@@ -75,12 +75,25 @@ public class InteractionEnforcer {
     }
 
     /**
-     * Check if an interaction is locked due to tag matching
+     * Check if an interaction is locked due to tag-pattern matching.
+     * Iterates all registered locks of the given type and uses runtime tag resolution
+     * via itemMatches() / blockMatches() to handle '#tag' patterns correctly.
      */
     private static boolean isInteractionLockedByTag(ServerPlayer player, String type, ItemStack heldItem, Block targetBlock) {
-        // This would require iterating through all interaction locks and checking tag matches
-        // For performance, we rely on the pre-computed matches in LockRegistry
-        // Tag matching is handled when registering the lock
+        for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(type)) {
+            // Only process entries that actually use a tag pattern — exact IDs are
+            // already handled by getRequiredStageForInteraction() above.
+            boolean heldIsTag = entry.heldItem != null && entry.heldItem.startsWith("#");
+            boolean targetIsTag = entry.targetBlock != null && entry.targetBlock.startsWith("#");
+            if (!heldIsTag && !targetIsTag) {
+                continue;
+            }
+            if (itemMatches(heldItem, entry.heldItem) && blockMatches(targetBlock, entry.targetBlock)) {
+                if (!StageManager.getInstance().hasStage(player, entry.requiredStage)) {
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
@@ -108,12 +121,21 @@ public class InteractionEnforcer {
     }
 
     /**
-     * Notify player that an interaction is locked
+     * Notify player that an interaction is locked.
+     * Checks exact-match locks first, then falls back to tag-pattern locks.
      */
     public static void notifyLocked(ServerPlayer player, ItemStack heldItem, Block targetBlock) {
         Optional<StageId> required = getRequiredStage(heldItem, targetBlock);
         if (required.isPresent()) {
             ItemEnforcer.notifyLocked(player, required.get(), "This interaction");
+            return;
+        }
+        // Fall back to tag-pattern search for notification
+        for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(TYPE_ITEM_ON_BLOCK)) {
+            if (itemMatches(heldItem, entry.heldItem) && blockMatches(targetBlock, entry.targetBlock)) {
+                ItemEnforcer.notifyLocked(player, entry.requiredStage, "This interaction");
+                return;
+            }
         }
     }
 
