@@ -240,7 +240,25 @@ public final class FtbQuestsHooks {
         }
 
         LOGGER.info("[ProgressiveStages] FTB Provider add() - normalized to: '{}'", stageId);
-        ProgressiveStagesAPI.grantStage(player, stageId, StageCause.QUEST_REWARD);
+
+        // Check if the stage exists in our system
+        if (!ProgressiveStagesAPI.stageExists(stageId)) {
+            LOGGER.error("[ProgressiveStages] FTB Provider add() - stage '{}' does not exist in ProgressiveStages! " +
+                "Check that the stage ID in FTB Quests matches a [stage] id in config/ProgressiveStages/*.toml", stageId);
+            return;
+        }
+
+        // Check if already has stage
+        if (ProgressiveStagesAPI.hasStage(player, stageId)) {
+            LOGGER.info("[ProgressiveStages] FTB Provider add() - player {} already has stage '{}'", player.getName().getString(), stageId);
+            return;
+        }
+
+        // Use grantStageBypassDependencies because FTB Quests rewards are explicitly
+        // configured by the modpack developer and should not be blocked by the
+        // dependency system. If a dev sets up a quest reward for a stage, they want it granted.
+        com.enviouse.progressivestages.common.stage.StageManager.getInstance()
+            .grantStageBypassDependencies(player, stageId, StageCause.QUEST_REWARD);
         LOGGER.info("[ProgressiveStages] FTB Provider add() completed - stage '{}' granted to {}", stageId, player.getName().getString());
     }
 
