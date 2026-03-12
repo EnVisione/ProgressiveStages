@@ -450,6 +450,14 @@ public class StageFileLoader {
             # held_item = "create:andesite_alloy"
             # target_block = "#minecraft:logs"
             # description = "Create Andesite Casing"
+
+            # Example: Lock feeding an item to an entity (item_on_entity)
+            # Blocks right-clicking the entity while holding the specified item
+            # [[locks.interactions]]
+            # type = "item_on_entity"
+            # held_item = "minecraft:cod"
+            # target_entity = "minecraft:dolphin"
+            # description = "Feed Dolphin"
             """;
 
         writeStageFile("stone_age.toml", content);
@@ -624,6 +632,13 @@ public class StageFileLoader {
             # held_item = "minecraft:iron_ingot"
             # target_block = "create:andesite_casing"
             # description = "Apply Iron to Create Casing"
+
+            # Example: Lock feeding wheat to a cow until iron age
+            # [[locks.interactions]]
+            # type = "item_on_entity"
+            # held_item = "minecraft:wheat"
+            # target_entity = "#minecraft:beehive_inhabitable"
+            # description = "Breed Cows (requires iron age)"
             """;
 
         writeStageFile("iron_age.toml", content);
