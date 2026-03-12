@@ -105,9 +105,15 @@ public class StageManager {
         if (!StageConfig.isLinearProgression()) {
             List<StageId> missing = getMissingDependencies(player, stageId);
             if (!missing.isEmpty()) {
-                LOGGER.warn("[ProgressiveStages] Cannot grant stage '{}' to {}: missing dependencies: {}. " +
-                    "Use command with bypass or enable linear_progression.",
+                LOGGER.debug("[ProgressiveStages] Cannot grant stage '{}' to {}: missing dependencies: {}",
                     stageId, player.getName().getString(), missing);
+                // Notify the player so quest rewards / triggers don't silently fail
+                String missingStr = missing.stream()
+                    .map(id -> id.getPath())
+                    .collect(java.util.stream.Collectors.joining(", "));
+                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                    "[ProgressiveStages] Stage '" + stageId.getPath() + "' could not be granted: " +
+                    "missing required stage(s): " + missingStr + ". Complete the prerequisites first."));
                 return;
             }
         }

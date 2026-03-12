@@ -285,8 +285,10 @@ public final class FtbQuestsHooks {
         UUID playerId = player.getUUID();
 
         // Re-entrancy guard: skip if already rechecking this player
+        // This can happen when a quest reward grants a stage which fires another recheck.
+        // The caller should re-queue for next tick if the return value is false.
         if (recheckInProgress.contains(playerId)) {
-            LOGGER.debug("[ProgressiveStages] Skipping recursive stage recheck for {} (already in progress)",
+            LOGGER.debug("[ProgressiveStages] Stage granted during FTB recheck — re-queued for next tick (player: {})",
                 player.getName().getString());
             return false;
         }
