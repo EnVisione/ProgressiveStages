@@ -56,6 +56,7 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
         // If show_locked_recipes is false AND creative bypass is not active, hide locked items
         if (!StageConfig.isShowLockedRecipes() && !ClientLockCache.isCreativeBypass()) {
             hideLockedStacks(registry);
+            hideLockedRecipes(registry);
         }
 
         LOGGER.info("[ProgressiveStages] EMI integration enabled");
@@ -226,6 +227,52 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
         LOGGER.debug("[ProgressiveStages] EMI: Set up fluid removal predicate for {} direct locks, {} fluid mods, {} general mods, {} name patterns",
             directFluidLocks.size(), lockedFluidMods.size(), lockedMods.size(), namePatterns.size());
+    }
+
+    /**
+     * Hide recipes that are locked for the current player.
+     * This covers recipe-only locks where the output item itself is NOT locked —
+     * the item remains visible in EMI's index but its crafting recipe is removed.
+     *
+     * For items that ARE also locked, hideLockedStacks() already hides them from the
+     * index entirely (including all associated recipes), so no double-work needed.
+     */
+    private void hideLockedRecipes(EmiRegistry registry) {
+        LockRegistry lockReg = LockRegistry.getInstance();
+        Map<ResourceLocation, StageId> recipeLocks = lockReg.getAllRecipeLocks();
+        if (recipeLocks.isEmpty()) {
+            return;
+        }
+
+        Set<StageId> playerStages = ClientStageCache.getStages();
+
+        // Build set of recipe IDs the player doesn't have the stage for
+        Set<ResourceLocation> lockedRecipeIds = new java.util.HashSet<>();
+        for (var entry : recipeLocks.entrySet()) {
+            if (!playerStages.contains(entry.getValue())) {
+                lockedRecipeIds.add(entry.getKey());
+            }
+        }
+
+        // Also check client cache for recipe locks synced from server
+        Map<ResourceLocation, StageId> clientRecipeLocks = ClientLockCache.getAllRecipeLocks();
+        for (var entry : clientRecipeLocks.entrySet()) {
+            if (!playerStages.contains(entry.getValue())) {
+                lockedRecipeIds.add(entry.getKey());
+            }
+        }
+
+        if (lockedRecipeIds.isEmpty()) {
+            return;
+        }
+
+        final Set<ResourceLocation> finalLockedRecipeIds = lockedRecipeIds;
+        registry.removeRecipes(recipe -> {
+            ResourceLocation recipeId = recipe.getId();
+            return recipeId != null && finalLockedRecipeIds.contains(recipeId);
+        });
+
+        LOGGER.debug("[ProgressiveStages] EMI: Removed {} locked recipe(s) from recipe viewer", lockedRecipeIds.size());
     }
 
     /**
