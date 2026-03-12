@@ -143,7 +143,7 @@ public class ServerEventHandler {
                 if (server != null) {
                     server.getRecipeManager()
                         .getRecipeFor(net.minecraft.world.item.crafting.RecipeType.CRAFTING,
-                                craftingContainer, player.level())
+                                craftingContainer.asCraftInput(), player.level())
                         .ifPresent(recipe -> {
                             if (RecipeEnforcer.isRecipeLockedForPlayer(player, recipe.id())) {
                                 RecipeEnforcer.notifyLocked(player, recipe.id());

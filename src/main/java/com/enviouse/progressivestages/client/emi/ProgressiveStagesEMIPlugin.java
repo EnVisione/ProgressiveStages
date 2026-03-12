@@ -306,13 +306,12 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
                     reloadPending.set(false);
                     LOGGER.info("[ProgressiveStages] Triggering EMI reload. Current stages: {}", ClientStageCache.getStages());
 
-                    // Try the public EmiApi.reloadEmi() for a full reload (item index + plugins).
-                    // Fall back to EmiReloadManager.reloadRecipes() for older EMI versions.
-                    try {
-                        dev.emi.emi.api.EmiApi.reloadEmi();
-                    } catch (NoSuchMethodError | NoClassDefFoundError e) {
-                        EmiReloadManager.reloadRecipes();
-                    }
+                    // EmiReloadManager.reloadRecipes() triggers a full EMI reload cycle:
+                    // - Clears all data
+                    // - Re-runs all plugin register() methods (including ours)
+                    // - Rebuilds search index
+                    // This is the same codepath as when Minecraft syncs recipes on world join.
+                    EmiReloadManager.reloadRecipes();
 
                     LOGGER.info("[ProgressiveStages] EMI reload triggered successfully");
                 } catch (Exception e) {
