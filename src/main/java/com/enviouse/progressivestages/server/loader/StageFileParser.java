@@ -290,10 +290,18 @@ public class StageFileParser {
             for (Config interactionConfig : interactionConfigs) {
                 String type = interactionConfig.getOrElse("type", "item_on_block");
                 String heldItem = interactionConfig.get("held_item");
-                String targetBlock = interactionConfig.get("target_block");
                 String description = interactionConfig.get("description");
 
-                interactions.add(new LockDefinition.InteractionLock(type, heldItem, targetBlock, description));
+                // item_on_entity uses target_entity; all other types use target_block.
+                // We store the target in the targetBlock field (reused as a generic "target" slot).
+                String target;
+                if ("item_on_entity".equals(type)) {
+                    target = interactionConfig.get("target_entity");
+                } else {
+                    target = interactionConfig.get("target_block");
+                }
+
+                interactions.add(new LockDefinition.InteractionLock(type, heldItem, target, description));
             }
             builder.interactions(interactions);
         }

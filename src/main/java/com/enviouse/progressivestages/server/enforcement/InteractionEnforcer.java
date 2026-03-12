@@ -14,16 +14,19 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 
+import net.minecraft.world.entity.EntityType;
+
 import java.util.Optional;
 
 /**
- * Handles interaction locking (item-on-block, block right-click, etc.)
+ * Handles interaction locking (item-on-block, block right-click, item-on-entity, etc.)
  * Useful for Create mod style interactions
  */
 public class InteractionEnforcer {
 
     public static final String TYPE_ITEM_ON_BLOCK = "item_on_block";
     public static final String TYPE_BLOCK_RIGHT_CLICK = "block_right_click";
+    public static final String TYPE_ITEM_ON_ENTITY = "item_on_entity";
 
     /**
      * Check if an interaction is allowed
@@ -178,6 +181,103 @@ public class InteractionEnforcer {
             // Direct ID matching
             ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
             return itemId != null && itemId.toString().equals(pattern);
+        }
+    }
+
+    /**
+     * Check if a player is allowed to interact with an entity while holding the given item.
+     * Handles item_on_entity interaction locks, including wildcard and tag patterns.
+     *
+     * @param player     The player performing the interaction
+     * @param heldItem   The item held by the player
+     * @param entityType The entity type being interacted with
+     * @return true if allowed, false if blocked
+     */
+    public static boolean canInteractWithEntity(ServerPlayer player, ItemStack heldItem, EntityType<?> entityType) {
+        if (!StageConfig.isBlockInteractions()) {
+            return true;
+        }
+
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
+            return true;
+        }
+
+        String heldItemId = getItemId(heldItem);
+        String entityTypeId = getEntityTypeId(entityType);
+
+        // Check exact / wildcard match first
+        Optional<StageId> required = LockRegistry.getInstance().getRequiredStageForInteraction(
+            TYPE_ITEM_ON_ENTITY, heldItemId, entityTypeId
+        );
+        if (required.isPresent() && !StageManager.getInstance().hasStage(player, required.get())) {
+            return false;
+        }
+
+        // Runtime tag-pattern matching
+        for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(TYPE_ITEM_ON_ENTITY)) {
+            boolean heldIsTag = entry.heldItem != null && entry.heldItem.startsWith("#");
+            boolean targetIsTag = entry.targetBlock != null && entry.targetBlock.startsWith("#");
+            if (!heldIsTag && !targetIsTag) {
+                continue;
+            }
+            if (itemMatches(heldItem, entry.heldItem) && entityTypeMatches(entityType, entry.targetBlock)) {
+                if (!StageManager.getInstance().hasStage(player, entry.requiredStage)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Notify player that an entity interaction is locked
+     */
+    public static void notifyEntityInteractionLocked(ServerPlayer player, ItemStack heldItem, EntityType<?> entityType) {
+        String heldItemId = getItemId(heldItem);
+        String entityTypeId = getEntityTypeId(entityType);
+
+        Optional<StageId> required = LockRegistry.getInstance().getRequiredStageForInteraction(
+            TYPE_ITEM_ON_ENTITY, heldItemId, entityTypeId
+        );
+        if (required.isPresent()) {
+            ItemEnforcer.notifyLocked(player, required.get(), "This interaction");
+            return;
+        }
+        // Tag-pattern fallback
+        for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(TYPE_ITEM_ON_ENTITY)) {
+            if (itemMatches(heldItem, entry.heldItem) && entityTypeMatches(entityType, entry.targetBlock)) {
+                ItemEnforcer.notifyLocked(player, entry.requiredStage, "This interaction");
+                return;
+            }
+        }
+    }
+
+    private static String getEntityTypeId(EntityType<?> entityType) {
+        ResourceLocation rl = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
+        return rl != null ? rl.toString() : "*";
+    }
+
+    /**
+     * Check if an entity type matches a pattern (supports tags with #)
+     */
+    public static boolean entityTypeMatches(EntityType<?> entityType, String pattern) {
+        if (pattern == null || pattern.equals("*")) {
+            return true;
+        }
+
+        if (pattern.startsWith("#")) {
+            String tagName = pattern.substring(1);
+            try {
+                ResourceLocation tagLoc = ResourceLocation.parse(tagName);
+                TagKey<EntityType<?>> tagKey = TagKey.create(Registries.ENTITY_TYPE, tagLoc);
+                return entityType.builtInRegistryHolder().is(tagKey);
+            } catch (Exception e) {
+                return false;
+            }
+        } else {
+            ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
+            return entityId != null && entityId.toString().equals(pattern);
         }
     }
 

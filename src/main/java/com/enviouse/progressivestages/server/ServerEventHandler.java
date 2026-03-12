@@ -260,6 +260,19 @@ public class ServerEventHandler {
         }
     }
 
+    // ============ Entity Interaction Enforcement (item_on_entity) ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            var entityType = event.getTarget().getType();
+            if (!InteractionEnforcer.canInteractWithEntity(player, event.getItemStack(), entityType)) {
+                event.setCanceled(true);
+                InteractionEnforcer.notifyEntityInteractionLocked(player, event.getItemStack(), entityType);
+            }
+        }
+    }
+
     // ============ Entity Attack Enforcement ============
 
     @SubscribeEvent(priority = EventPriority.HIGH)
