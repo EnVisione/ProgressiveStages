@@ -79,16 +79,22 @@ public abstract class AbstractContainerMenuMixin {
 
             // Strictest: block_item_inventory blocks ALL interaction
             if (StageConfig.isBlockItemInventory()) {
-                ci.cancel();
-                ItemEnforcer.notifyLockedWithCooldown(serverPlayer, stack.getItem());
-                return;
+                // Check per-stage inventory exemption
+                if (!LockRegistry.getInstance().isExemptFromInventory(stack.getItem())) {
+                    ci.cancel();
+                    ItemEnforcer.notifyLockedWithCooldown(serverPlayer, stack.getItem());
+                    return;
+                }
             }
 
             // Medium: block_item_mouse_pickup blocks picking up the locked item with mouse
             if (StageConfig.isBlockItemMousePickup()) {
-                ci.cancel();
-                ItemEnforcer.notifyLockedWithCooldown(serverPlayer, stack.getItem());
-                return;
+                // Check per-stage mouse pickup exemption
+                if (!LockRegistry.getInstance().isExemptFromMousePickup(stack.getItem())) {
+                    ci.cancel();
+                    ItemEnforcer.notifyLockedWithCooldown(serverPlayer, stack.getItem());
+                    return;
+                }
             }
 
             // Softest: only block_item_hotbar — allow free movement but check destination

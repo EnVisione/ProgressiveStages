@@ -653,8 +653,8 @@ public class Progressivestages {
     private String getDiamondAgeContent() {
         return """
             # ============================================================================
-            # Stage definition for Diamond Age (v1.4)
-            # This file demonstrates ALL features available in ProgressiveStages v1.4
+            # Stage definition for Diamond Age (v1.5)
+            # This file demonstrates ALL features available in ProgressiveStages v1.5
             # ============================================================================
             #
             # QUICK REFERENCE - Lock Types:
@@ -795,6 +795,40 @@ public class Progressivestages {
                 
                 # Lock all items from Botania (but not Botania blocks)
                 # "botania"
+            ]
+            
+            # =============================================================================
+            # RECIPE_ITEMS (v1.5) - Lock recipes by OUTPUT item ID (recipe-only lock)
+            # =============================================================================
+            # ⚠️ This is DIFFERENT from items = [...] !
+            #
+            # recipe_items locks ONLY the crafting recipe — the item itself is NOT locked.
+            # Players CAN:
+            #   ✅ Pick up the item (from loot chests, mob drops, etc.)
+            #   ✅ Hold it in inventory
+            #   ✅ Use it (right-click, mine, attack, etc.)
+            #   ✅ See it in EMI (item stays visible)
+            # Players CANNOT:
+            #   ❌ Craft the item (recipe is blocked)
+            #   ❌ See the recipe in EMI (recipe is hidden)
+            #
+            # Use case: Allow players to use items found in loot but prevent crafting
+            # until they unlock the stage. Perfect for progression-gated gear.
+            #
+            # Tooltip shows: "🔒 Recipe Locked" (vs "🔒 Item Locked" for items = [...])
+            # If BOTH items AND recipe_items contain the same item, tooltip shows:
+            #   "🔒 Item and Recipe Locked"
+            #
+            # Format: "namespace:item_id"
+            # =============================================================================
+            recipe_items = [
+                # Lock crafting of diamond tools (but allow using them if found in loot)
+                # "minecraft:diamond_pickaxe",
+                # "minecraft:diamond_sword",
+                # "minecraft:diamond_axe",
+                
+                # Lock crafting enchanting table (but allow using one found in a dungeon)
+                # "minecraft:enchanting_table"
             ]
             
             # =============================================================================
@@ -1104,6 +1138,65 @@ public class Progressivestages {
             # held_item = "minecraft:diamond"
             # target_entity = "minecraft:villager"
             # description = "Trade with Villager using Diamond"
+            
+            # ============================================================================
+            # ENFORCEMENT EXCEPTIONS (v1.5) - Per-stage overrides for global enforcement
+            # ============================================================================
+            #
+            # Even though items are locked by this stage, these exceptions allow specific
+            # items/tags/mods to bypass certain enforcement types. The item is still
+            # considered "locked" (shows lock icon, requires stage) but the specific
+            # enforcement action is allowed.
+            #
+            # Each list accepts three formats:
+            #   - Item IDs:   "minecraft:diamond_pickaxe"
+            #   - Item tags:  "#c:gems/diamond"
+            #   - Mod IDs:    "mekanism" (matches ALL items from that mod)
+            #
+            # Use case: Lock diamond items but allow picking up diamond ore so players
+            # can stockpile it for when they unlock the stage.
+            #
+            # ⚠️ These exceptions only apply when the corresponding global enforcement
+            # setting is enabled in progressivestages.toml (e.g., block_item_use = true).
+            # If a global enforcement is disabled, these have no effect.
+            # ============================================================================
+            
+            [enforcement]
+            
+            # Items that can be USED (right-click, left-click, mine, attack) even when locked
+            # Example: Allow using diamond ore (it's locked but you can still mine it with other tools)
+            allowed_use = [
+                # "minecraft:diamond_ore",
+                # "minecraft:deepslate_diamond_ore"
+            ]
+            
+            # Items that can be PICKED UP from the ground even when locked
+            # Example: Allow picking up raw diamonds so players can stockpile them
+            allowed_pickup = [
+                # "minecraft:diamond",
+                # "#c:gems/diamond"
+            ]
+            
+            # Items that can remain in the HOTBAR even when locked
+            # Example: Allow keeping diamond ore in hotbar for quick access
+            allowed_hotbar = [
+                # "minecraft:diamond"
+            ]
+            
+            # Items that can be MOVED with mouse in GUIs even when locked
+            # Example: Allow storing diamonds in chests even though they're locked
+            allowed_mouse_pickup = [
+                # "minecraft:diamond",
+                # "minecraft:diamond_ore"
+            ]
+            
+            # Items that can remain in INVENTORY even when locked (won't be auto-dropped)
+            # Example: Allow holding raw diamonds in inventory
+            allowed_inventory = [
+                # "minecraft:diamond",
+                # "minecraft:diamond_ore",
+                # "minecraft:deepslate_diamond_ore"
+            ]
             """;
     }
 

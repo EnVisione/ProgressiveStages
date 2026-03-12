@@ -10,6 +10,8 @@ import java.util.List;
  * <p>v1.3 changes: Added unlockedItems for whitelist exceptions.
  * <p>v1.4 changes: Added unlockedBlocks, unlockedFluids for whitelist exceptions.
  *                  Added fluids, fluidTags, fluidMods for fluid locking.
+ * <p>v1.5 changes: Added recipeItems for recipe-only locks by output item ID.
+ *                  Added per-stage enforcement exceptions (allowed_use, allowed_pickup, etc.)
  */
 public class LockDefinition {
 
@@ -18,6 +20,7 @@ public class LockDefinition {
     private final List<String> itemMods;
     private final List<String> recipes;
     private final List<String> recipeTags;
+    private final List<String> recipeItems;
     private final List<String> blocks;
     private final List<String> blockTags;
     private final List<String> blockMods;
@@ -36,12 +39,20 @@ public class LockDefinition {
     private final List<String> entityTags;
     private final List<String> entityMods;
 
+    // Per-stage enforcement exceptions (items/tags/mods exempt from specific enforcement types)
+    private final List<String> allowedUse;
+    private final List<String> allowedPickup;
+    private final List<String> allowedHotbar;
+    private final List<String> allowedMousePickup;
+    private final List<String> allowedInventory;
+
     private LockDefinition(Builder builder) {
         this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
         this.itemTags = Collections.unmodifiableList(new ArrayList<>(builder.itemTags));
         this.itemMods = Collections.unmodifiableList(new ArrayList<>(builder.itemMods));
         this.recipes = Collections.unmodifiableList(new ArrayList<>(builder.recipes));
         this.recipeTags = Collections.unmodifiableList(new ArrayList<>(builder.recipeTags));
+        this.recipeItems = Collections.unmodifiableList(new ArrayList<>(builder.recipeItems));
         this.blocks = Collections.unmodifiableList(new ArrayList<>(builder.blocks));
         this.blockTags = Collections.unmodifiableList(new ArrayList<>(builder.blockTags));
         this.blockMods = Collections.unmodifiableList(new ArrayList<>(builder.blockMods));
@@ -59,6 +70,11 @@ public class LockDefinition {
         this.entities = Collections.unmodifiableList(new ArrayList<>(builder.entities));
         this.entityTags = Collections.unmodifiableList(new ArrayList<>(builder.entityTags));
         this.entityMods = Collections.unmodifiableList(new ArrayList<>(builder.entityMods));
+        this.allowedUse = Collections.unmodifiableList(new ArrayList<>(builder.allowedUse));
+        this.allowedPickup = Collections.unmodifiableList(new ArrayList<>(builder.allowedPickup));
+        this.allowedHotbar = Collections.unmodifiableList(new ArrayList<>(builder.allowedHotbar));
+        this.allowedMousePickup = Collections.unmodifiableList(new ArrayList<>(builder.allowedMousePickup));
+        this.allowedInventory = Collections.unmodifiableList(new ArrayList<>(builder.allowedInventory));
     }
 
     public static LockDefinition empty() {
@@ -87,6 +103,15 @@ public class LockDefinition {
 
     public List<String> getRecipeTags() {
         return recipeTags;
+    }
+
+    /**
+     * Get item IDs whose recipes are locked (recipe-only lock).
+     * The item itself is NOT locked — only its crafting recipe.
+     * Players can still hold, use, and receive these items from loot.
+     */
+    public List<String> getRecipeItems() {
+        return recipeItems;
     }
 
     public List<String> getBlocks() {
@@ -197,9 +222,37 @@ public class LockDefinition {
         return entityMods;
     }
 
+    // ============ Per-stage enforcement exceptions ============
+
+    /**
+     * Get items/tags/mods exempt from item use blocking for this stage.
+     * Accepts item IDs, tags (#namespace:tag), or mod IDs.
+     */
+    public List<String> getAllowedUse() { return allowedUse; }
+
+    /**
+     * Get items/tags/mods exempt from item pickup blocking for this stage.
+     */
+    public List<String> getAllowedPickup() { return allowedPickup; }
+
+    /**
+     * Get items/tags/mods exempt from hotbar blocking for this stage.
+     */
+    public List<String> getAllowedHotbar() { return allowedHotbar; }
+
+    /**
+     * Get items/tags/mods exempt from mouse pickup blocking in GUIs for this stage.
+     */
+    public List<String> getAllowedMousePickup() { return allowedMousePickup; }
+
+    /**
+     * Get items/tags/mods exempt from inventory holding blocking for this stage.
+     */
+    public List<String> getAllowedInventory() { return allowedInventory; }
+
     public boolean isEmpty() {
         return items.isEmpty() && itemTags.isEmpty() && itemMods.isEmpty() &&
-            recipes.isEmpty() && recipeTags.isEmpty() &&
+            recipes.isEmpty() && recipeTags.isEmpty() && recipeItems.isEmpty() &&
             blocks.isEmpty() && blockTags.isEmpty() && blockMods.isEmpty() &&
             fluids.isEmpty() && fluidTags.isEmpty() && fluidMods.isEmpty() &&
             dimensions.isEmpty() && mods.isEmpty() && names.isEmpty() &&
@@ -217,6 +270,7 @@ public class LockDefinition {
         private List<String> itemMods = new ArrayList<>();
         private List<String> recipes = new ArrayList<>();
         private List<String> recipeTags = new ArrayList<>();
+        private List<String> recipeItems = new ArrayList<>();
         private List<String> blocks = new ArrayList<>();
         private List<String> blockTags = new ArrayList<>();
         private List<String> blockMods = new ArrayList<>();
@@ -234,6 +288,11 @@ public class LockDefinition {
         private List<String> entities = new ArrayList<>();
         private List<String> entityTags = new ArrayList<>();
         private List<String> entityMods = new ArrayList<>();
+        private List<String> allowedUse = new ArrayList<>();
+        private List<String> allowedPickup = new ArrayList<>();
+        private List<String> allowedHotbar = new ArrayList<>();
+        private List<String> allowedMousePickup = new ArrayList<>();
+        private List<String> allowedInventory = new ArrayList<>();
 
         public Builder items(List<String> items) {
             this.items = items != null ? items : new ArrayList<>();
@@ -257,6 +316,11 @@ public class LockDefinition {
 
         public Builder recipeTags(List<String> recipeTags) {
             this.recipeTags = recipeTags != null ? recipeTags : new ArrayList<>();
+            return this;
+        }
+
+        public Builder recipeItems(List<String> recipeItems) {
+            this.recipeItems = recipeItems != null ? recipeItems : new ArrayList<>();
             return this;
         }
 
@@ -397,6 +461,33 @@ public class LockDefinition {
 
         public Builder addEntityMod(String mod) {
             this.entityMods.add(mod);
+            return this;
+        }
+
+        // ============ Per-stage enforcement exceptions ============
+
+        public Builder allowedUse(List<String> allowedUse) {
+            this.allowedUse = allowedUse != null ? allowedUse : new ArrayList<>();
+            return this;
+        }
+
+        public Builder allowedPickup(List<String> allowedPickup) {
+            this.allowedPickup = allowedPickup != null ? allowedPickup : new ArrayList<>();
+            return this;
+        }
+
+        public Builder allowedHotbar(List<String> allowedHotbar) {
+            this.allowedHotbar = allowedHotbar != null ? allowedHotbar : new ArrayList<>();
+            return this;
+        }
+
+        public Builder allowedMousePickup(List<String> allowedMousePickup) {
+            this.allowedMousePickup = allowedMousePickup != null ? allowedMousePickup : new ArrayList<>();
+            return this;
+        }
+
+        public Builder allowedInventory(List<String> allowedInventory) {
+            this.allowedInventory = allowedInventory != null ? allowedInventory : new ArrayList<>();
             return this;
         }
 

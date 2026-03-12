@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages.server.enforcement;
 
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -101,13 +102,29 @@ public class InventoryScanner {
             return 0;
         }
 
+        // Creative bypass
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
+            return 0;
+        }
+
         Inventory inventory = player.getInventory();
         int movedCount = 0;
 
         // Hotbar slots are indices 0-8 in inventory.items
         for (int hotbarSlot = 0; hotbarSlot < 9; hotbarSlot++) {
             ItemStack stack = inventory.items.get(hotbarSlot);
-            if (stack.isEmpty() || ItemEnforcer.canHoldItem(player, stack)) {
+            if (stack.isEmpty()) {
+                continue;
+            }
+
+            // Use isItemLockedForPlayer directly — canHoldItem is gated by block_item_inventory
+            // which may be false when using the softer block_item_hotbar option
+            if (!ItemEnforcer.isItemLockedForPlayer(player, stack.getItem())) {
+                continue;
+            }
+
+            // Check per-stage hotbar exemption
+            if (LockRegistry.getInstance().isExemptFromHotbar(stack.getItem())) {
                 continue;
             }
 

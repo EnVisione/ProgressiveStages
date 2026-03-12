@@ -37,6 +37,9 @@ public class LockRegistry {
     // Recipe Tag -> Required Stage
     private final Map<ResourceLocation, StageId> recipeTagLocks = new ConcurrentHashMap<>();
 
+    // Recipe Item Locks: Output Item ID -> Required Stage (lock recipe by output item, not item itself)
+    private final Map<ResourceLocation, StageId> recipeItemLocks = new ConcurrentHashMap<>();
+
     // Block ID -> Required Stage
     private final Map<ResourceLocation, StageId> blockLocks = new ConcurrentHashMap<>();
 
@@ -88,6 +91,14 @@ public class LockRegistry {
     // v1.4: Global whitelist of fluids that are ALWAYS unlocked (bypass mod locks in EMI/JEI)
     private final Set<ResourceLocation> unlockedFluids = ConcurrentHashMap.newKeySet();
 
+    // v1.5: Per-stage enforcement exceptions — items exempt from specific enforcement types
+    // Each list stores raw strings: item IDs ("minecraft:diamond"), tags ("#c:gems"), or mod IDs ("mekanism")
+    private final List<String> useExemptions = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> pickupExemptions = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> hotbarExemptions = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> mousePickupExemptions = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> inventoryExemptions = Collections.synchronizedList(new ArrayList<>());
+
     // Cache for item -> stage lookups (rebuilt when registry changes)
     private final Map<Item, Optional<StageId>> itemStageCache = new ConcurrentHashMap<>();
 
@@ -111,6 +122,7 @@ public class LockRegistry {
         itemModLocks.clear();
         recipeLocks.clear();
         recipeTagLocks.clear();
+        recipeItemLocks.clear();
         blockLocks.clear();
         blockTagLocks.clear();
         blockModLocks.clear();
@@ -128,6 +140,11 @@ public class LockRegistry {
         unlockedBlocks.clear();
         unlockedEntities.clear();
         unlockedFluids.clear();
+        useExemptions.clear();
+        pickupExemptions.clear();
+        hotbarExemptions.clear();
+        mousePickupExemptions.clear();
+        inventoryExemptions.clear();
         clearCache();
     }
 
@@ -169,6 +186,11 @@ public class LockRegistry {
         // Register recipe tag locks
         for (String tagId : locks.getRecipeTags()) {
             registerRecipeTagLock(tagId, stageId);
+        }
+
+        // Register recipe item locks (lock recipe by output item ID, not the item itself)
+        for (String itemId : locks.getRecipeItems()) {
+            registerRecipeItemLock(itemId, stageId);
         }
 
         // Register block locks
@@ -280,6 +302,13 @@ public class LockRegistry {
             }
         }
 
+        // Register per-stage enforcement exceptions (v1.5)
+        useExemptions.addAll(locks.getAllowedUse());
+        pickupExemptions.addAll(locks.getAllowedPickup());
+        hotbarExemptions.addAll(locks.getAllowedHotbar());
+        mousePickupExemptions.addAll(locks.getAllowedMousePickup());
+        inventoryExemptions.addAll(locks.getAllowedInventory());
+
         LOGGER.debug("Registered locks for stage: {}", stageId);
     }
 
@@ -318,6 +347,16 @@ public class LockRegistry {
             recipeTagLocks.put(rl, stageId);
         } else {
             LOGGER.warn("Invalid recipe tag in stage {}: {}", stageId, tagId);
+        }
+    }
+
+    private void registerRecipeItemLock(String itemId, StageId stageId) {
+        ResourceLocation rl = parseResourceLocation(itemId);
+        if (rl != null) {
+            recipeItemLocks.put(rl, stageId);
+            LOGGER.debug("Registered recipe-item lock for stage {}: {}", stageId, itemId);
+        } else {
+            LOGGER.warn("Invalid recipe-item ID in stage {}: {}", stageId, itemId);
         }
     }
 
@@ -520,6 +559,102 @@ public class LockRegistry {
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Get the required stage for a recipe based on the output item.
+     * This is used for recipe-only locks (recipe_items = ["..."]) where the item itself is NOT locked.
+     */
+    public Optional<StageId> getRequiredStageForRecipeByOutput(Item outputItem) {
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(outputItem);
+        if (itemId == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(recipeItemLocks.get(itemId));
+    }
+
+    /**
+     * Check if a recipe output item has a recipe-only lock (separate from item lock).
+     */
+    public boolean hasRecipeOnlyLock(Item item) {
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
+        return itemId != null && recipeItemLocks.containsKey(itemId);
+    }
+
+    /**
+     * Get all recipe item locks (output item ID → stage, for syncing to client)
+     */
+    public Map<ResourceLocation, StageId> getAllRecipeItemLocks() {
+        return Collections.unmodifiableMap(recipeItemLocks);
+    }
+
+    // ==================== Enforcement Exemption Checks ====================
+
+    /**
+     * Check if an item is exempt from a specific enforcement type.
+     * Matches against: exact item IDs, tags (#namespace:tag), and mod IDs.
+     */
+    public boolean isExemptFromUse(Item item) {
+        return matchesExemptionList(item, useExemptions);
+    }
+
+    public boolean isExemptFromPickup(Item item) {
+        return matchesExemptionList(item, pickupExemptions);
+    }
+
+    public boolean isExemptFromHotbar(Item item) {
+        return matchesExemptionList(item, hotbarExemptions);
+    }
+
+    public boolean isExemptFromMousePickup(Item item) {
+        return matchesExemptionList(item, mousePickupExemptions);
+    }
+
+    public boolean isExemptFromInventory(Item item) {
+        return matchesExemptionList(item, inventoryExemptions);
+    }
+
+    /**
+     * Check if an item matches any entry in an exemption list.
+     * Supports: exact item IDs, tags (#namespace:tag), mod IDs (plain string without colon).
+     */
+    private boolean matchesExemptionList(Item item, List<String> exemptions) {
+        if (exemptions.isEmpty()) {
+            return false;
+        }
+
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
+        if (itemId == null) {
+            return false;
+        }
+
+        String itemIdStr = itemId.toString();
+        String modId = itemId.getNamespace();
+
+        for (String entry : exemptions) {
+            if (entry.startsWith("#")) {
+                // Tag match: #namespace:tag_path
+                String tagStr = entry.substring(1);
+                try {
+                    ResourceLocation tagLoc = ResourceLocation.parse(tagStr);
+                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagLoc);
+                    if (item.builtInRegistryHolder().is(tagKey)) {
+                        return true;
+                    }
+                } catch (Exception ignored) {}
+            } else if (entry.contains(":")) {
+                // Exact item ID match: namespace:item_path
+                if (itemIdStr.equals(entry)) {
+                    return true;
+                }
+            } else {
+                // Mod ID match: just the namespace (e.g., "mekanism")
+                if (modId.equals(entry)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

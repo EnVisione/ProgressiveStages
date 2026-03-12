@@ -240,7 +240,9 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
     private void hideLockedRecipes(EmiRegistry registry) {
         LockRegistry lockReg = LockRegistry.getInstance();
         Map<ResourceLocation, StageId> recipeLocks = lockReg.getAllRecipeLocks();
-        if (recipeLocks.isEmpty()) {
+        Map<ResourceLocation, StageId> recipeItemLocks = lockReg.getAllRecipeItemLocks();
+
+        if (recipeLocks.isEmpty() && recipeItemLocks.isEmpty()) {
             return;
         }
 
@@ -262,17 +264,46 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             }
         }
 
-        if (lockedRecipeIds.isEmpty()) {
+        // Build set of locked output item IDs (recipe_items = [...] locks)
+        Set<ResourceLocation> lockedRecipeItemIds = new java.util.HashSet<>();
+        for (var entry : recipeItemLocks.entrySet()) {
+            if (!playerStages.contains(entry.getValue())) {
+                lockedRecipeItemIds.add(entry.getKey());
+            }
+        }
+
+        if (lockedRecipeIds.isEmpty() && lockedRecipeItemIds.isEmpty()) {
             return;
         }
 
         final Set<ResourceLocation> finalLockedRecipeIds = lockedRecipeIds;
+        final Set<ResourceLocation> finalLockedRecipeItemIds = lockedRecipeItemIds;
         registry.removeRecipes(recipe -> {
             ResourceLocation recipeId = recipe.getId();
-            return recipeId != null && finalLockedRecipeIds.contains(recipeId);
+
+            // Check direct recipe ID lock
+            if (recipeId != null && finalLockedRecipeIds.contains(recipeId)) {
+                return true;
+            }
+
+            // Check recipe-item lock: remove recipe if any output item is in the locked set
+            if (!finalLockedRecipeItemIds.isEmpty()) {
+                for (var output : recipe.getOutputs()) {
+                    var outputStack = output.getItemStack();
+                    if (!outputStack.isEmpty()) {
+                        ResourceLocation outputId = BuiltInRegistries.ITEM.getKey(outputStack.getItem());
+                        if (finalLockedRecipeItemIds.contains(outputId)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
         });
 
-        LOGGER.debug("[ProgressiveStages] EMI: Removed {} locked recipe(s) from recipe viewer", lockedRecipeIds.size());
+        LOGGER.debug("[ProgressiveStages] EMI: Removed locked recipe(s) ({} by ID, {} by output item)",
+            lockedRecipeIds.size(), lockedRecipeItemIds.size());
     }
 
     /**

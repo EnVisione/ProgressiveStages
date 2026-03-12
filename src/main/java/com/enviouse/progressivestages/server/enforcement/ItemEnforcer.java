@@ -52,6 +52,11 @@ public class ItemEnforcer {
             return true;
         }
 
+        // Check enforcement exemption before blocking
+        if (LockRegistry.getInstance().isExemptFromUse(stack.getItem())) {
+            return true;
+        }
+
         return !isItemLockedForPlayer(player, stack.getItem());
     }
 
@@ -73,6 +78,11 @@ public class ItemEnforcer {
             return true;
         }
 
+        // Check enforcement exemption before blocking
+        if (LockRegistry.getInstance().isExemptFromPickup(stack.getItem())) {
+            return true;
+        }
+
         return !isItemLockedForPlayer(player, stack.getItem());
     }
 
@@ -91,6 +101,11 @@ public class ItemEnforcer {
         }
 
         if (stack.isEmpty()) {
+            return true;
+        }
+
+        // Check enforcement exemption before blocking
+        if (LockRegistry.getInstance().isExemptFromInventory(stack.getItem())) {
             return true;
         }
 

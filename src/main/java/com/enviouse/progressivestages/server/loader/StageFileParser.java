@@ -253,6 +253,7 @@ public class StageFileParser {
         builder.itemMods(getStringList(locksSection, "item_mods"));
         builder.recipes(getStringList(locksSection, "recipes"));
         builder.recipeTags(getStringList(locksSection, "recipe_tags"));
+        builder.recipeItems(getStringList(locksSection, "recipe_items"));
         builder.blocks(getStringList(locksSection, "blocks"));
         builder.blockTags(getStringList(locksSection, "block_tags"));
         builder.blockMods(getStringList(locksSection, "block_mods"));
@@ -306,7 +307,27 @@ public class StageFileParser {
             builder.interactions(interactions);
         }
 
+        // Parse enforcement exceptions from the [enforcement] section at root level
+        parseEnforcementExceptions(config, builder);
+
         return builder.build();
+    }
+
+    /**
+     * Parse the [enforcement] section from a stage config file.
+     * Contains per-stage enforcement exceptions (allowed_use, allowed_pickup, etc.)
+     */
+    private static void parseEnforcementExceptions(Config config, LockDefinition.Builder builder) {
+        Config enforcementSection = config.get("enforcement");
+        if (enforcementSection == null) {
+            return;
+        }
+
+        builder.allowedUse(getStringList(enforcementSection, "allowed_use"));
+        builder.allowedPickup(getStringList(enforcementSection, "allowed_pickup"));
+        builder.allowedHotbar(getStringList(enforcementSection, "allowed_hotbar"));
+        builder.allowedMousePickup(getStringList(enforcementSection, "allowed_mouse_pickup"));
+        builder.allowedInventory(getStringList(enforcementSection, "allowed_inventory"));
     }
 
     private static List<String> getStringList(Config config, String key) {

@@ -59,12 +59,22 @@ public abstract class CraftingMenuMixin {
             return;
         }
 
-        // Check if the recipe output item is locked
+        // Check if the recipe output item is locked (items = [...] lock)
         Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStage(result.getItem());
         if (requiredStage.isPresent()) {
             if (!StageManager.getInstance().hasStage(serverPlayer, requiredStage.get())) {
                 // Clear the result slot - player hasn't unlocked this
                 resultSlots.setItem(0, ItemStack.EMPTY);
+                return;
+            }
+        }
+
+        // Check recipe-only item lock (recipe_items = [...] — locks crafting but not item itself)
+        Optional<StageId> recipeItemStage = LockRegistry.getInstance().getRequiredStageForRecipeByOutput(result.getItem());
+        if (recipeItemStage.isPresent()) {
+            if (!StageManager.getInstance().hasStage(serverPlayer, recipeItemStage.get())) {
+                resultSlots.setItem(0, ItemStack.EMPTY);
+                return;
             }
         }
 

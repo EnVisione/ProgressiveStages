@@ -42,21 +42,25 @@ public class ClientEventHandler {
             requiredStageOpt = LockRegistry.getInstance().getRequiredStage(item);
         }
 
-        if (requiredStageOpt.isEmpty()) {
-            return;
+        // Check recipe-only lock (recipe_items = [...])
+        Optional<StageId> recipeOnlyStageOpt = LockRegistry.getInstance().getRequiredStageForRecipeByOutput(item);
+        boolean recipeOnlyLocked = recipeOnlyStageOpt.isPresent() &&
+            !ClientStageCache.hasStage(recipeOnlyStageOpt.get());
+
+        boolean itemLocked = requiredStageOpt.isPresent() &&
+            !ClientStageCache.hasStage(requiredStageOpt.get());
+
+        if (!itemLocked && !recipeOnlyLocked) {
+            return; // Nothing to show
         }
 
-        StageId requiredStage = requiredStageOpt.get();
-        boolean hasStage = ClientStageCache.hasStage(requiredStage);
-
-        if (hasStage) {
-            return; // Don't modify tooltip if unlocked
-        }
+        // Determine the stage to display (item lock takes priority for display)
+        StageId displayStage = itemLocked ? requiredStageOpt.get() : recipeOnlyStageOpt.get();
 
         List<Component> tooltip = event.getToolTip();
 
-        // Mask item name if configured
-        if (StageConfig.isMaskLockedItemNames() && !tooltip.isEmpty()) {
+        // Mask item name if configured (only for full item lock)
+        if (itemLocked && StageConfig.isMaskLockedItemNames() && !tooltip.isEmpty()) {
             // Replace the first line (item name) with "Unknown Item"
             tooltip.set(0, Component.literal("Unknown Item").withStyle(ChatFormatting.RED));
         }
@@ -66,9 +70,9 @@ public class ClientEventHandler {
         }
 
         // Get stage info
-        String stageDisplayName = StageOrder.getInstance().getStageDefinition(requiredStage)
+        String stageDisplayName = StageOrder.getInstance().getStageDefinition(displayStage)
             .map(StageDefinition::getDisplayName)
-            .orElse(requiredStage.getPath());
+            .orElse(displayStage.getPath());
 
         String currentStageName = ClientStageCache.getCurrentStage()
             .flatMap(id -> StageOrder.getInstance().getStageDefinition(id))
@@ -80,8 +84,18 @@ public class ClientEventHandler {
         // Add blank line before our tooltip
         tooltip.add(Component.empty());
 
+        // Determine lock label based on what's locked
+        String lockLabel;
+        if (itemLocked && recipeOnlyLocked) {
+            lockLabel = "🔒 Item and Recipe Locked";
+        } else if (itemLocked) {
+            lockLabel = "🔒 Item Locked";
+        } else {
+            lockLabel = "🔒 Recipe Locked";
+        }
+
         // Add lock indicator
-        tooltip.add(Component.literal("🔒 Locked").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+        tooltip.add(Component.literal(lockLabel).withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
 
         // Required stage
         tooltip.add(Component.literal("Stage required: ")
