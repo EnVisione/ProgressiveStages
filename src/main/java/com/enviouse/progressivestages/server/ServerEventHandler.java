@@ -84,12 +84,13 @@ public class ServerEventHandler {
             // Send stage definitions to client first (v1.3 - includes dependencies)
             NetworkHandler.sendStageDefinitionsSync(player);
 
-            // Send stage data to client
+            // Sync lock registry to player BEFORE stage data so that when EMI reload
+            // fires on stage sync arrival, ClientLockCache is already populated.
+            NetworkHandler.sendLockSync(player);
+
+            // Send stage data to client (triggers EMI reload on arrival)
             var stages = StageManager.getInstance().getStages(player);
             NetworkHandler.sendStageSync(player, stages);
-
-            // Sync lock registry to player (for EMI integration)
-            NetworkHandler.sendLockSync(player);
 
             // Send initial creative bypass state
             if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {

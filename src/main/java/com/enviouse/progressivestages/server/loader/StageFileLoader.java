@@ -189,6 +189,11 @@ public class StageFileLoader {
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
             for (Path file : stream) {
+                // Skip triggers.toml - it's not a stage definition file
+                String fileName = file.getFileName().toString().toLowerCase();
+                if (fileName.equals("triggers.toml")) {
+                    continue;
+                }
                 results.add(validateStageFile(file));
             }
         } catch (IOException e) {
