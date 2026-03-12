@@ -34,6 +34,7 @@ public class FTBTeamsIntegration {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static boolean initialized = false;
+    private static boolean initChecked = false;
 
     // Track each player's current team to detect changes
     private static final Map<UUID, UUID> lastKnownTeams = new HashMap<>();
@@ -43,27 +44,29 @@ public class FTBTeamsIntegration {
     private static final Map<UUID, Set<String>> lastKnownFtbTeamStages = new HashMap<>();
 
     /**
-     * Initialize FTB Teams integration if the mod is present.
-     * Call this during mod setup.
+     * Lazy initialization — called on first server tick.
+     * Detects FTB Teams availability without requiring an explicit call from startup code.
      */
-    public static void tryRegister() {
+    private static void ensureInitialized() {
+        if (initChecked) return;
+        initChecked = true;
+
         if (ModList.get().isLoaded("ftbteams")) {
             try {
-                // Test if we can access FTB Teams API
                 Class.forName("dev.ftb.mods.ftbteams.api.FTBTeamsAPI");
                 initialized = true;
-                LOGGER.info("FTB Teams detected, team integration enabled");
+                LOGGER.info("[ProgressiveStages] FTB Teams detected, team stage monitoring enabled");
             } catch (ClassNotFoundException e) {
-                LOGGER.warn("FTB Teams found but API not accessible: {}", e.getMessage());
+                LOGGER.warn("[ProgressiveStages] FTB Teams found but API not accessible: {}", e.getMessage());
                 initialized = false;
             }
         } else {
-            LOGGER.info("FTB Teams not found, using solo mode");
             initialized = false;
         }
     }
 
     public static boolean isInitialized() {
+        ensureInitialized();
         return initialized;
     }
 
@@ -74,6 +77,7 @@ public class FTBTeamsIntegration {
      */
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
+        ensureInitialized();
         if (!initialized) return;
 
         // Only check once per second to reduce overhead
@@ -90,6 +94,7 @@ public class FTBTeamsIntegration {
      */
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        ensureInitialized();
         if (!initialized) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
@@ -123,6 +128,7 @@ public class FTBTeamsIntegration {
      */
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        ensureInitialized();
         if (!initialized) return;
 
         UUID playerId = event.getEntity().getUUID();
@@ -172,10 +178,13 @@ public class FTBTeamsIntegration {
             }
 
             // Grant newly added stages (FTB Teams → our system)
+            // Use grantStageBypassDependencies because quest rewards are explicitly
+            // configured by the modpack developer and should not be blocked by dependencies
             for (String stageName : added) {
                 StageId stageId = StageId.parse(stageName);
                 if (ProgressiveStagesAPI.stageExists(stageId) && !ProgressiveStagesAPI.hasStage(player, stageId)) {
-                    ProgressiveStagesAPI.grantStage(player, stageId, StageCause.QUEST_REWARD);
+                    com.enviouse.progressivestages.common.stage.StageManager.getInstance()
+                        .grantStageBypassDependencies(player, stageId, StageCause.QUEST_REWARD);
                     LOGGER.info("[ProgressiveStages] Synced FTB Teams stage '{}' → granted to {} (team reward)",
                         stageId, player.getName().getString());
                 }
