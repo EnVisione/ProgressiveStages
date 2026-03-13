@@ -203,59 +203,152 @@ public class StageConfig {
         .comment("Cache size per player")
         .defineInRange("performance.lock_cache_size", 1024, 128, 8192);
 
-    // ============ Messages Settings ============
-    // All player-facing text is configurable here. Supports & color codes (e.g., &c = red, &l = bold).
-    // Placeholders: {stage} = stage display name, {type} = lock type, {count} = number, {progress} = progress string, {dependencies} = missing deps
+    // ============ Messages Settings (v1.4) ============
+    // Every player-facing and command text is configurable here.
+    // ALL messages support & color codes: &0-&f for colors, &k obfuscated, &l bold, &m strikethrough, &n underline, &o italic, &r reset.
+    // Placeholders are substituted before color code parsing, so you can color placeholders too.
+
+    // --- Tooltip Messages ---
 
     private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_MASKED_NAME = BUILDER
-        .comment("Text shown in place of item name when mask_locked_item_names is true")
-        .define("messages.tooltip_masked_name", "Unknown Item");
+        .comment("Text shown in place of item name when mask_locked_item_names is true.",
+                 "Supports & color codes. Example: '&4&lUnknown Item'")
+        .define("messages.tooltip_masked_name", "&cUnknown Item");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_ITEM_AND_RECIPE_LOCKED = BUILDER
-        .comment("Tooltip header when both the item and its recipe are locked")
-        .define("messages.tooltip_item_and_recipe_locked", "\uD83D\uDD12 Item and Recipe Locked");
+        .comment("Tooltip header when both the item and its recipe are locked.",
+                 "Supports & color codes.")
+        .define("messages.tooltip_item_and_recipe_locked", "&c&l\uD83D\uDD12 Item and Recipe Locked");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_ITEM_LOCKED = BUILDER
-        .comment("Tooltip header when only the item is locked")
-        .define("messages.tooltip_item_locked", "\uD83D\uDD12 Item Locked");
+        .comment("Tooltip header when only the item is locked.",
+                 "Supports & color codes.")
+        .define("messages.tooltip_item_locked", "&c&l\uD83D\uDD12 Item Locked");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_RECIPE_LOCKED = BUILDER
-        .comment("Tooltip header when only the recipe is locked")
-        .define("messages.tooltip_recipe_locked", "\uD83D\uDD12 Recipe Locked");
+        .comment("Tooltip header when only the recipe is locked.",
+                 "Supports & color codes.")
+        .define("messages.tooltip_recipe_locked", "&c&l\uD83D\uDD12 Recipe Locked");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_STAGE_REQUIRED = BUILDER
-        .comment("Tooltip line showing required stage. {stage} = stage display name")
-        .define("messages.tooltip_stage_required", "Stage required: {stage}");
+        .comment("Tooltip line showing required stage. {stage} = stage display name.",
+                 "Supports & color codes.")
+        .define("messages.tooltip_stage_required", "&7Stage required: &f{stage}");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_CURRENT_STAGE = BUILDER
-        .comment("Tooltip line showing current stage. {stage} = current stage name, {progress} = progress string")
-        .define("messages.tooltip_current_stage", "Current stage: {stage} ({progress})");
+        .comment("Tooltip line showing current stage.",
+                 "{stage} = current stage name, {progress} = progress string (e.g. 2/5).",
+                 "Supports & color codes.")
+        .define("messages.tooltip_current_stage", "&7Current stage: &f{stage} &8({progress})");
+
+    // --- Chat / Enforcement Messages ---
 
     private static final ModConfigSpec.ConfigValue<String> MSG_ITEM_LOCKED = BUILDER
-        .comment("Chat message when a player tries to use a locked item. {stage} = required stage display name",
-                 "Supports & color codes (e.g., &c = red, &7 = gray, &f = white, &l = bold)")
+        .comment("Chat message when a player tries to use/pickup a locked item.",
+                 "{stage} = required stage display name. Supports & color codes.")
         .define("messages.item_locked", "&c\uD83D\uDD12 You haven't unlocked this item yet! &7Required: &f{stage}");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_TYPE_LOCKED = BUILDER
         .comment("Chat message for generic locked things (block, dimension, entity, recipe, interaction).",
-                 "{type} = the type description (e.g., 'This block'), {stage} = required stage display name",
-                 "Supports & color codes")
+                 "{type} = description (e.g. 'This block'), {stage} = required stage display name.",
+                 "Supports & color codes.")
         .define("messages.type_locked", "&c\uD83D\uDD12 {type} is locked! &7Required: &f{stage}");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_ITEMS_DROPPED = BUILDER
-        .comment("Chat message when locked items are dropped from inventory. {count} = number of items dropped",
-                 "Supports & color codes")
+        .comment("Chat message when locked items are dropped from inventory.",
+                 "{count} = number of items dropped. Supports & color codes.")
         .define("messages.items_dropped", "&c\uD83D\uDD12 Dropped {count} locked items from your inventory!");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_ITEMS_MOVED_HOTBAR = BUILDER
-        .comment("Chat message when locked items are moved out of the hotbar. {count} = number of items moved",
-                 "Supports & color codes")
+        .comment("Chat message when locked items are moved out of the hotbar.",
+                 "{count} = number of items moved. Supports & color codes.")
         .define("messages.items_moved_hotbar", "&c\uD83D\uDD12 Moved {count} locked item(s) out of your hotbar!");
 
     private static final ModConfigSpec.ConfigValue<String> MSG_MISSING_DEPENDENCIES = BUILDER
         .comment("Chat message when a stage cannot be granted due to missing dependencies.",
-                 "{stage} = stage path, {dependencies} = comma-separated list of missing dependency paths")
-        .define("messages.missing_dependencies", "[ProgressiveStages] Stage '{stage}' could not be granted: missing required stage(s): {dependencies}. Complete the prerequisites first.");
+                 "{stage} = stage path, {dependencies} = comma-separated missing deps.",
+                 "Supports & color codes.")
+        .define("messages.missing_dependencies", "&7[ProgressiveStages] Stage '&f{stage}&7' could not be granted: missing required stage(s): &f{dependencies}&7. Complete the prerequisites first.");
+
+    // --- Command Messages ---
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_STAGE_NOT_FOUND = BUILDER
+        .comment("Command error when a stage ID does not exist.",
+                 "{stage} = the stage name. Supports & color codes.")
+        .define("messages.cmd_stage_not_found", "&cStage not found: {stage}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_ALREADY_HAS_STAGE = BUILDER
+        .comment("Command error when the player already has the stage.",
+                 "{stage} = the stage name. Supports & color codes.")
+        .define("messages.cmd_already_has_stage", "&ePlayer already has stage: {stage}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_GRANT_SUCCESS = BUILDER
+        .comment("Command success when granting a stage.",
+                 "{stage} = stage name, {player} = player name. Supports & color codes.")
+        .define("messages.cmd_grant_success", "&aGranted stage &2{stage} &ato &f{player}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_GRANT_BYPASS = BUILDER
+        .comment("Command success when granting with dependency bypass.",
+                 "{stage} = stage name, {player} = player name. Supports & color codes.")
+        .define("messages.cmd_grant_bypass", "&aGranted stage &2{stage} &ato &f{player} &e(dependency bypass)");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_GRANT_MISSING_DEPS = BUILDER
+        .comment("Command error when dependencies are missing.",
+                 "{stage} = stage name, {player} = player name, {dependencies} = missing deps.",
+                 "Supports & color codes.")
+        .define("messages.cmd_grant_missing_deps", "&cCannot grant {stage}: &f{player} &cis missing dependencies: &6{dependencies}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_GRANT_BYPASS_HINT = BUILDER
+        .comment("Hint shown after missing deps error.",
+                 "Supports & color codes.")
+        .define("messages.cmd_grant_bypass_hint", "&7&oType the command again within 10 seconds to bypass.");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_REVOKE_SUCCESS = BUILDER
+        .comment("Command success when revoking a stage.",
+                 "{stage} = stage name, {player} = player name. Supports & color codes.")
+        .define("messages.cmd_revoke_success", "&aRevoked stage &c{stage} &afrom &f{player}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_SPECIFY_PLAYER = BUILDER
+        .comment("Command error when no player is specified for /stage list.",
+                 "Supports & color codes.")
+        .define("messages.cmd_specify_player", "&cSpecify a player");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_LIST_HEADER = BUILDER
+        .comment("Header for /stage list output.",
+                 "{player} = player name, {count} = unlocked count, {total} = total stages.",
+                 "Supports & color codes.")
+        .define("messages.cmd_list_header", "&6=== Stages for &f{player} &6({count}/{total}) ===");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_LIST_EMPTY = BUILDER
+        .comment("Shown when player has no stages unlocked.",
+                 "Supports & color codes.")
+        .define("messages.cmd_list_empty", "&7  No stages unlocked");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_CHECK_HAS = BUILDER
+        .comment("Shown when player has the checked stage.",
+                 "{player} = player name, {stage} = stage name. Supports & color codes.")
+        .define("messages.cmd_check_has", "&f{player} &ahas &2{stage}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_CHECK_NOT_HAS = BUILDER
+        .comment("Shown when player does NOT have the checked stage.",
+                 "{player} = player name, {stage} = stage name. Supports & color codes.")
+        .define("messages.cmd_check_not_has", "&f{player} &cdoes not have &4{stage}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_RELOAD_SUCCESS = BUILDER
+        .comment("Shown after /progressivestages reload.",
+                 "{count} = number of synced players. Supports & color codes.")
+        .define("messages.cmd_reload_success", "&aReloaded stage definitions and triggers, synced {count} players. EMI will refresh.");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_TRIGGER_INVALID_TYPE = BUILDER
+        .comment("Shown when an invalid trigger type is given.",
+                 "{type} = the invalid type. Supports & color codes.")
+        .define("messages.cmd_trigger_invalid_type", "&cInvalid trigger type: {type}. Must be 'dimension' or 'boss'.");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_TRIGGER_RESET = BUILDER
+        .comment("Shown after resetting a trigger.",
+                 "{type} = trigger type, {key} = trigger key, {player} = player name.",
+                 "Supports & color codes.")
+        .define("messages.cmd_trigger_reset", "&aReset {type} trigger '{key}' for {player}");
 
     // ============ Integration Settings ============
 
@@ -328,6 +421,22 @@ public class StageConfig {
     private static String msgItemsDropped;
     private static String msgItemsMovedHotbar;
     private static String msgMissingDependencies;
+    // Command messages
+    private static String msgCmdStageNotFound;
+    private static String msgCmdAlreadyHasStage;
+    private static String msgCmdGrantSuccess;
+    private static String msgCmdGrantBypass;
+    private static String msgCmdGrantMissingDeps;
+    private static String msgCmdGrantBypassHint;
+    private static String msgCmdRevokeSuccess;
+    private static String msgCmdSpecifyPlayer;
+    private static String msgCmdListHeader;
+    private static String msgCmdListEmpty;
+    private static String msgCmdCheckHas;
+    private static String msgCmdCheckNotHas;
+    private static String msgCmdReloadSuccess;
+    private static String msgCmdTriggerInvalidType;
+    private static String msgCmdTriggerReset;
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
@@ -390,6 +499,22 @@ public class StageConfig {
         msgItemsDropped = MSG_ITEMS_DROPPED.get();
         msgItemsMovedHotbar = MSG_ITEMS_MOVED_HOTBAR.get();
         msgMissingDependencies = MSG_MISSING_DEPENDENCIES.get();
+        // Command messages
+        msgCmdStageNotFound = MSG_CMD_STAGE_NOT_FOUND.get();
+        msgCmdAlreadyHasStage = MSG_CMD_ALREADY_HAS_STAGE.get();
+        msgCmdGrantSuccess = MSG_CMD_GRANT_SUCCESS.get();
+        msgCmdGrantBypass = MSG_CMD_GRANT_BYPASS.get();
+        msgCmdGrantMissingDeps = MSG_CMD_GRANT_MISSING_DEPS.get();
+        msgCmdGrantBypassHint = MSG_CMD_GRANT_BYPASS_HINT.get();
+        msgCmdRevokeSuccess = MSG_CMD_REVOKE_SUCCESS.get();
+        msgCmdSpecifyPlayer = MSG_CMD_SPECIFY_PLAYER.get();
+        msgCmdListHeader = MSG_CMD_LIST_HEADER.get();
+        msgCmdListEmpty = MSG_CMD_LIST_EMPTY.get();
+        msgCmdCheckHas = MSG_CMD_CHECK_HAS.get();
+        msgCmdCheckNotHas = MSG_CMD_CHECK_NOT_HAS.get();
+        msgCmdReloadSuccess = MSG_CMD_RELOAD_SUCCESS.get();
+        msgCmdTriggerInvalidType = MSG_CMD_TRIGGER_INVALID_TYPE.get();
+        msgCmdTriggerReset = MSG_CMD_TRIGGER_RESET.get();
 
         // Parse highlight color
         try {
@@ -481,4 +606,20 @@ public class StageConfig {
     public static String getMsgItemsDropped() { return msgItemsDropped != null ? msgItemsDropped : "&c\uD83D\uDD12 Dropped {count} locked items from your inventory!"; }
     public static String getMsgItemsMovedHotbar() { return msgItemsMovedHotbar != null ? msgItemsMovedHotbar : "&c\uD83D\uDD12 Moved {count} locked item(s) out of your hotbar!"; }
     public static String getMsgMissingDependencies() { return msgMissingDependencies != null ? msgMissingDependencies : "[ProgressiveStages] Stage '{stage}' could not be granted: missing required stage(s): {dependencies}. Complete the prerequisites first."; }
+    // Command message getters
+    public static String getMsgCmdStageNotFound() { return msgCmdStageNotFound != null ? msgCmdStageNotFound : "&cStage not found: {stage}"; }
+    public static String getMsgCmdAlreadyHasStage() { return msgCmdAlreadyHasStage != null ? msgCmdAlreadyHasStage : "&ePlayer already has stage: {stage}"; }
+    public static String getMsgCmdGrantSuccess() { return msgCmdGrantSuccess != null ? msgCmdGrantSuccess : "&aGranted stage &2{stage} &ato &f{player}"; }
+    public static String getMsgCmdGrantBypass() { return msgCmdGrantBypass != null ? msgCmdGrantBypass : "&aGranted stage &2{stage} &ato &f{player} &e(dependency bypass)"; }
+    public static String getMsgCmdGrantMissingDeps() { return msgCmdGrantMissingDeps != null ? msgCmdGrantMissingDeps : "&cCannot grant {stage}: &f{player} &cis missing dependencies: &6{dependencies}"; }
+    public static String getMsgCmdGrantBypassHint() { return msgCmdGrantBypassHint != null ? msgCmdGrantBypassHint : "&7&oType the command again within 10 seconds to bypass."; }
+    public static String getMsgCmdRevokeSuccess() { return msgCmdRevokeSuccess != null ? msgCmdRevokeSuccess : "&aRevoked stage &c{stage} &afrom &f{player}"; }
+    public static String getMsgCmdSpecifyPlayer() { return msgCmdSpecifyPlayer != null ? msgCmdSpecifyPlayer : "&cSpecify a player"; }
+    public static String getMsgCmdListHeader() { return msgCmdListHeader != null ? msgCmdListHeader : "&6=== Stages for &f{player} &6({count}/{total}) ==="; }
+    public static String getMsgCmdListEmpty() { return msgCmdListEmpty != null ? msgCmdListEmpty : "&7  No stages unlocked"; }
+    public static String getMsgCmdCheckHas() { return msgCmdCheckHas != null ? msgCmdCheckHas : "&f{player} &ahas &2{stage}"; }
+    public static String getMsgCmdCheckNotHas() { return msgCmdCheckNotHas != null ? msgCmdCheckNotHas : "&f{player} &cdoes not have &4{stage}"; }
+    public static String getMsgCmdReloadSuccess() { return msgCmdReloadSuccess != null ? msgCmdReloadSuccess : "&aReloaded stage definitions and triggers, synced {count} players. EMI will refresh."; }
+    public static String getMsgCmdTriggerInvalidType() { return msgCmdTriggerInvalidType != null ? msgCmdTriggerInvalidType : "&cInvalid trigger type: {type}. Must be 'dimension' or 'boss'."; }
+    public static String getMsgCmdTriggerReset() { return msgCmdTriggerReset != null ? msgCmdTriggerReset : "&aReset {type} trigger '{key}' for {player}"; }
 }

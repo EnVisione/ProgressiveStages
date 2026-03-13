@@ -8,7 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 public final class Constants {
     public static final String MOD_ID = "progressivestages";
     public static final String MOD_NAME = "ProgressiveStages";
-    public static final String MOD_VERSION = "1.1.0";
+    public static final String MOD_VERSION = "1.4";
 
     // Network packet IDs
     public static final ResourceLocation STAGE_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "stage_sync");

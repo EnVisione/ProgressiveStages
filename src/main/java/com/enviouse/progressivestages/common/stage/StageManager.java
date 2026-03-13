@@ -112,7 +112,7 @@ public class StageManager {
                     .map(id -> id.getPath())
                     .collect(java.util.stream.Collectors.joining(", "));
                 String template = StageConfig.getMsgMissingDependencies();
-                player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                player.sendSystemMessage(TextUtil.parseColorCodes(
                     template.replace("{stage}", stageId.getPath())
                             .replace("{dependencies}", missingStr)));
                 return;

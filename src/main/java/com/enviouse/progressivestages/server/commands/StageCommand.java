@@ -5,6 +5,7 @@ import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
+import com.enviouse.progressivestages.common.util.TextUtil;
 import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.compat.ftbquests.FtbQuestsHooks;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
@@ -156,15 +157,15 @@ public class StageCommand {
         StageId stageId = StageId.of(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {
-            context.getSource().sendFailure(Component.literal("Stage not found: " + stageName)
-                .withStyle(ChatFormatting.RED));
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdStageNotFound().replace("{stage}", stageName)));
             return 0;
         }
         
         // Check if player already has this stage
         if (StageManager.getInstance().hasStage(player, stageId)) {
-            context.getSource().sendFailure(Component.literal("Player already has stage: " + stageName)
-                .withStyle(ChatFormatting.YELLOW));
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdAlreadyHasStage().replace("{stage}", stageName)));
             return 0;
         }
 
@@ -183,11 +184,11 @@ public class StageCommand {
                 StageManager.getInstance().grantStageBypassDependencies(player, stageId, 
                     com.enviouse.progressivestages.common.api.StageCause.COMMAND);
                 
-                context.getSource().sendSuccess(() -> Component.literal("Granted stage ")
-                    .append(Component.literal(stageName).withStyle(ChatFormatting.GREEN))
-                    .append(" to ")
-                    .append(player.getDisplayName())
-                    .append(Component.literal(" (dependency bypass)").withStyle(ChatFormatting.YELLOW)), true);
+                String playerName = player.getName().getString();
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdGrantBypass()
+                        .replace("{stage}", stageName)
+                        .replace("{player}", playerName)), true);
                 return 1;
             } else {
                 // Request confirmation
@@ -199,13 +200,14 @@ public class StageCommand {
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("");
                 
-                context.getSource().sendFailure(Component.literal("Cannot grant " + stageName + ": ")
-                    .append(player.getDisplayName())
-                    .append(" is missing dependencies: ")
-                    .append(Component.literal(missingList).withStyle(ChatFormatting.GOLD))
-                    .append("\n")
-                    .append(Component.literal("Type the command again within 10 seconds to bypass.")
-                        .withStyle(ChatFormatting.ITALIC, ChatFormatting.GRAY)));
+                String playerName = player.getName().getString();
+                context.getSource().sendFailure(TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdGrantMissingDeps()
+                        .replace("{stage}", stageName)
+                        .replace("{player}", playerName)
+                        .replace("{dependencies}", missingList)));
+                context.getSource().sendFailure(TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdGrantBypassHint()));
                 return 0;
             }
         }
@@ -213,10 +215,11 @@ public class StageCommand {
         // No dependency issues or linear_progression is on - grant normally
         StageManager.getInstance().grantStage(player, stageId);
 
-        context.getSource().sendSuccess(() -> Component.literal("Granted stage ")
-            .append(Component.literal(stageName).withStyle(ChatFormatting.GREEN))
-            .append(" to ")
-            .append(player.getDisplayName()), true);
+        String playerName = player.getName().getString();
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdGrantSuccess()
+                .replace("{stage}", stageName)
+                .replace("{player}", playerName)), true);
 
         return 1;
     }
@@ -236,17 +239,18 @@ public class StageCommand {
         StageId stageId = StageId.of(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {
-            context.getSource().sendFailure(Component.literal("Stage not found: " + stageName)
-                .withStyle(ChatFormatting.RED));
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdStageNotFound().replace("{stage}", stageName)));
             return 0;
         }
 
         StageManager.getInstance().revokeStage(player, stageId);
 
-        context.getSource().sendSuccess(() -> Component.literal("Revoked stage ")
-            .append(Component.literal(stageName).withStyle(ChatFormatting.RED))
-            .append(" from ")
-            .append(player.getDisplayName()), true);
+        String playerName = player.getName().getString();
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdRevokeSuccess()
+                .replace("{stage}", stageName)
+                .replace("{player}", playerName)), true);
 
         return 1;
     }
@@ -258,21 +262,25 @@ public class StageCommand {
         } else if (context.getSource().getEntity() instanceof ServerPlayer sp) {
             player = sp;
         } else {
-            context.getSource().sendFailure(Component.literal("Specify a player"));
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdSpecifyPlayer()));
             return 0;
         }
 
         Set<StageId> stages = StageManager.getInstance().getStages(player);
         int total = StageOrder.getInstance().getStageCount();
 
-        context.getSource().sendSuccess(() -> Component.literal("=== Stages for ")
-            .append(player.getDisplayName())
-            .append(" (" + stages.size() + "/" + total + ") ===")
-            .withStyle(ChatFormatting.GOLD), false);
+        String playerName = player.getName().getString();
+        int stageCount = stages.size();
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdListHeader()
+                .replace("{player}", playerName)
+                .replace("{count}", String.valueOf(stageCount))
+                .replace("{total}", String.valueOf(total))), false);
 
         if (stages.isEmpty()) {
-            context.getSource().sendSuccess(() -> Component.literal("  No stages unlocked")
-                .withStyle(ChatFormatting.GRAY), false);
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdListEmpty()), false);
         } else {
             for (StageId stageId : StageOrder.getInstance().getOrderedStages()) {
                 boolean has = stages.contains(stageId);
@@ -283,11 +291,11 @@ public class StageCommand {
                 String depStr = deps.isEmpty() ? "" : " (requires: " +
                     deps.stream().map(StageId::getPath).reduce((a, b) -> a + ", " + b).orElse("") + ")";
 
-                context.getSource().sendSuccess(() -> Component.literal("  • ")
-                    .append(Component.literal(displayName)
-                        .withStyle(has ? ChatFormatting.GREEN : ChatFormatting.DARK_GRAY))
-                    .append(has ? " ✓" : "")
-                    .append(Component.literal(depStr).withStyle(ChatFormatting.GRAY)), false);
+                // Use color codes for stage list items
+                String color = has ? "&a" : "&8";
+                String check = has ? " &a\u2713" : "";
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    "  &7\u2022 " + color + displayName + check + "&7" + depStr), false);
             }
         }
 
@@ -300,17 +308,18 @@ public class StageCommand {
         StageId stageId = StageId.of(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {
-            context.getSource().sendFailure(Component.literal("Stage not found: " + stageName)
-                .withStyle(ChatFormatting.RED));
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdStageNotFound().replace("{stage}", stageName)));
             return 0;
         }
 
         boolean has = StageManager.getInstance().hasStage(player, stageId);
 
-        context.getSource().sendSuccess(() -> Component.empty()
-            .append(player.getDisplayName())
-            .append(has ? " has " : " does not have ")
-            .append(Component.literal(stageName).withStyle(has ? ChatFormatting.GREEN : ChatFormatting.RED)), false);
+        String playerName = player.getName().getString();
+        String template = has ? StageConfig.getMsgCmdCheckHas() : StageConfig.getMsgCmdCheckNotHas();
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            template.replace("{player}", playerName)
+                    .replace("{stage}", stageName)), false);
 
         return has ? 1 : 0;
     }
@@ -425,30 +434,23 @@ public class StageCommand {
         StageFileLoader.getInstance().reload();
 
         // Reload trigger config
-        // Note: This does NOT clear one-time trigger persistence (dimension/boss triggers)
-        // Use /progressivestages trigger reset to reset specific triggers
         com.enviouse.progressivestages.server.triggers.TriggerConfigLoader.reload();
 
         // Re-sync all online players with updated lock data and stage definitions
-        // This will trigger EMI refresh on clients when they receive the lock sync
         var server = context.getSource().getServer();
         int syncedPlayers = 0;
         for (var player : server.getPlayerList().getPlayers()) {
-            // Sync stage definitions (v1.3 - includes dependencies)
             com.enviouse.progressivestages.common.network.NetworkHandler.sendStageDefinitionsSync(player);
-
-            // Sync player stages
             var stages = StageManager.getInstance().getStages(player);
             com.enviouse.progressivestages.common.network.NetworkHandler.sendStageSync(player, stages);
-
-            // Sync updated lock registry (includes resolved name patterns, tags, etc.)
             com.enviouse.progressivestages.common.network.NetworkHandler.sendLockSync(player);
             syncedPlayers++;
         }
 
         final int finalSyncedPlayers = syncedPlayers;
-        context.getSource().sendSuccess(() -> Component.literal("Reloaded stage definitions and triggers, synced " + finalSyncedPlayers + " players. EMI will refresh. Note: One-time trigger history preserved.")
-            .withStyle(ChatFormatting.GREEN), true);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdReloadSuccess()
+                .replace("{count}", String.valueOf(finalSyncedPlayers))), true);
 
         return 1;
     }
@@ -625,8 +627,8 @@ public class StageCommand {
 
         // Validate type
         if (!type.equals("dimension") && !type.equals("boss")) {
-            context.getSource().sendFailure(Component.literal("Invalid trigger type: " + type + ". Must be 'dimension' or 'boss'.")
-                .withStyle(ChatFormatting.RED));
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdTriggerInvalidType().replace("{type}", type)));
             return 0;
         }
 
@@ -634,8 +636,12 @@ public class StageCommand {
         TriggerPersistence persistence = TriggerPersistence.get(context.getSource().getServer());
         persistence.clearTrigger(type, key, player.getUUID());
 
-        context.getSource().sendSuccess(() -> Component.literal("Reset " + type + " trigger '" + key + "' for " + player.getName().getString())
-            .withStyle(ChatFormatting.GREEN), true);
+        String playerName = player.getName().getString();
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdTriggerReset()
+                .replace("{type}", type)
+                .replace("{key}", key)
+                .replace("{player}", playerName)), true);
 
         return 1;
     }

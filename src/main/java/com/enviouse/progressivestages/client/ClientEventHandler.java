@@ -6,6 +6,7 @@ import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.util.Constants;
+import com.enviouse.progressivestages.common.util.TextUtil;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -61,8 +62,8 @@ public class ClientEventHandler {
 
         // Mask item name if configured (only for full item lock)
         if (itemLocked && StageConfig.isMaskLockedItemNames() && !tooltip.isEmpty()) {
-            // Replace the first line (item name) with configurable masked name
-            tooltip.set(0, Component.literal(StageConfig.getMsgTooltipMaskedName()).withStyle(ChatFormatting.RED));
+            // Replace the first line (item name) with configurable masked name (supports & color codes)
+            tooltip.set(0, TextUtil.parseColorCodes(StageConfig.getMsgTooltipMaskedName()));
         }
 
         if (!StageConfig.isShowTooltip()) {
@@ -94,17 +95,17 @@ public class ClientEventHandler {
             lockLabel = StageConfig.getMsgTooltipRecipeLocked();
         }
 
-        // Add lock indicator
-        tooltip.add(Component.literal(lockLabel).withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+        // Add lock indicator (supports & color codes)
+        tooltip.add(TextUtil.parseColorCodes(lockLabel));
 
-        // Required stage
+        // Required stage (supports & color codes)
         String stageRequiredText = StageConfig.getMsgTooltipStageRequired().replace("{stage}", stageDisplayName);
-        tooltip.add(Component.literal(stageRequiredText).withStyle(ChatFormatting.GRAY));
+        tooltip.add(TextUtil.parseColorCodes(stageRequiredText));
 
-        // Current stage
+        // Current stage (supports & color codes)
         String currentStageText = StageConfig.getMsgTooltipCurrentStage()
             .replace("{stage}", currentStageName)
             .replace("{progress}", progress);
-        tooltip.add(Component.literal(currentStageText).withStyle(ChatFormatting.GRAY));
+        tooltip.add(TextUtil.parseColorCodes(currentStageText));
     }
 }
