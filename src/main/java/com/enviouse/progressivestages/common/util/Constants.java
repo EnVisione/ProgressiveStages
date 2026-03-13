@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages.common.util;
 
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.fml.ModList;
 
 /**
  * Constants used throughout the mod
@@ -8,7 +9,15 @@ import net.minecraft.resources.ResourceLocation;
 public final class Constants {
     public static final String MOD_ID = "progressivestages";
     public static final String MOD_NAME = "ProgressiveStages";
-    public static final String MOD_VERSION = "1.4";
+
+    /**
+     * Runtime version read from the mod container (injected from gradle.properties mod_version
+     * into neoforge.mods.toml at build time). Never needs manual updating.
+     */
+    public static String MOD_VERSION = ModList.get()
+        .getModContainerById(MOD_ID)
+        .map(mc -> mc.getModInfo().getVersion().toString())
+        .orElse("unknown");
 
     // Network packet IDs
     public static final ResourceLocation STAGE_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "stage_sync");
