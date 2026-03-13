@@ -203,6 +203,60 @@ public class StageConfig {
         .comment("Cache size per player")
         .defineInRange("performance.lock_cache_size", 1024, 128, 8192);
 
+    // ============ Messages Settings ============
+    // All player-facing text is configurable here. Supports & color codes (e.g., &c = red, &l = bold).
+    // Placeholders: {stage} = stage display name, {type} = lock type, {count} = number, {progress} = progress string, {dependencies} = missing deps
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_MASKED_NAME = BUILDER
+        .comment("Text shown in place of item name when mask_locked_item_names is true")
+        .define("messages.tooltip_masked_name", "Unknown Item");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_ITEM_AND_RECIPE_LOCKED = BUILDER
+        .comment("Tooltip header when both the item and its recipe are locked")
+        .define("messages.tooltip_item_and_recipe_locked", "\uD83D\uDD12 Item and Recipe Locked");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_ITEM_LOCKED = BUILDER
+        .comment("Tooltip header when only the item is locked")
+        .define("messages.tooltip_item_locked", "\uD83D\uDD12 Item Locked");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_RECIPE_LOCKED = BUILDER
+        .comment("Tooltip header when only the recipe is locked")
+        .define("messages.tooltip_recipe_locked", "\uD83D\uDD12 Recipe Locked");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_STAGE_REQUIRED = BUILDER
+        .comment("Tooltip line showing required stage. {stage} = stage display name")
+        .define("messages.tooltip_stage_required", "Stage required: {stage}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_CURRENT_STAGE = BUILDER
+        .comment("Tooltip line showing current stage. {stage} = current stage name, {progress} = progress string")
+        .define("messages.tooltip_current_stage", "Current stage: {stage} ({progress})");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_ITEM_LOCKED = BUILDER
+        .comment("Chat message when a player tries to use a locked item. {stage} = required stage display name",
+                 "Supports & color codes (e.g., &c = red, &7 = gray, &f = white, &l = bold)")
+        .define("messages.item_locked", "&c\uD83D\uDD12 You haven't unlocked this item yet! &7Required: &f{stage}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TYPE_LOCKED = BUILDER
+        .comment("Chat message for generic locked things (block, dimension, entity, recipe, interaction).",
+                 "{type} = the type description (e.g., 'This block'), {stage} = required stage display name",
+                 "Supports & color codes")
+        .define("messages.type_locked", "&c\uD83D\uDD12 {type} is locked! &7Required: &f{stage}");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_ITEMS_DROPPED = BUILDER
+        .comment("Chat message when locked items are dropped from inventory. {count} = number of items dropped",
+                 "Supports & color codes")
+        .define("messages.items_dropped", "&c\uD83D\uDD12 Dropped {count} locked items from your inventory!");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_ITEMS_MOVED_HOTBAR = BUILDER
+        .comment("Chat message when locked items are moved out of the hotbar. {count} = number of items moved",
+                 "Supports & color codes")
+        .define("messages.items_moved_hotbar", "&c\uD83D\uDD12 Moved {count} locked item(s) out of your hotbar!");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_MISSING_DEPENDENCIES = BUILDER
+        .comment("Chat message when a stage cannot be granted due to missing dependencies.",
+                 "{stage} = stage path, {dependencies} = comma-separated list of missing dependency paths")
+        .define("messages.missing_dependencies", "[ProgressiveStages] Stage '{stage}' could not be granted: missing required stage(s): {dependencies}. Complete the prerequisites first.");
+
     // ============ Integration Settings ============
 
     private static final ModConfigSpec.BooleanValue FTB_QUESTS_INTEGRATION = BUILDER
@@ -262,6 +316,19 @@ public class StageConfig {
     private static boolean ftbQuestsIntegration;
     private static int ftbRecheckBudget;
 
+    // Messages
+    private static String msgTooltipMaskedName;
+    private static String msgTooltipItemAndRecipeLocked;
+    private static String msgTooltipItemLocked;
+    private static String msgTooltipRecipeLocked;
+    private static String msgTooltipStageRequired;
+    private static String msgTooltipCurrentStage;
+    private static String msgItemLocked;
+    private static String msgTypeLocked;
+    private static String msgItemsDropped;
+    private static String msgItemsMovedHotbar;
+    private static String msgMissingDependencies;
+
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
         // Starting stages (v1.3 - supports list)
@@ -310,6 +377,19 @@ public class StageConfig {
         lockCacheSize = LOCK_CACHE_SIZE.get();
         ftbQuestsIntegration = FTB_QUESTS_INTEGRATION.get();
         ftbRecheckBudget = FTB_RECHECK_BUDGET.get();
+
+        // Messages
+        msgTooltipMaskedName = MSG_TOOLTIP_MASKED_NAME.get();
+        msgTooltipItemAndRecipeLocked = MSG_TOOLTIP_ITEM_AND_RECIPE_LOCKED.get();
+        msgTooltipItemLocked = MSG_TOOLTIP_ITEM_LOCKED.get();
+        msgTooltipRecipeLocked = MSG_TOOLTIP_RECIPE_LOCKED.get();
+        msgTooltipStageRequired = MSG_TOOLTIP_STAGE_REQUIRED.get();
+        msgTooltipCurrentStage = MSG_TOOLTIP_CURRENT_STAGE.get();
+        msgItemLocked = MSG_ITEM_LOCKED.get();
+        msgTypeLocked = MSG_TYPE_LOCKED.get();
+        msgItemsDropped = MSG_ITEMS_DROPPED.get();
+        msgItemsMovedHotbar = MSG_ITEMS_MOVED_HOTBAR.get();
+        msgMissingDependencies = MSG_MISSING_DEPENDENCIES.get();
 
         // Parse highlight color
         try {
@@ -387,4 +467,18 @@ public class StageConfig {
     public static boolean isSoloMode() {
         return "solo".equalsIgnoreCase(teamMode);
     }
+
+    // ============ Message Getters ============
+
+    public static String getMsgTooltipMaskedName() { return msgTooltipMaskedName != null ? msgTooltipMaskedName : "Unknown Item"; }
+    public static String getMsgTooltipItemAndRecipeLocked() { return msgTooltipItemAndRecipeLocked != null ? msgTooltipItemAndRecipeLocked : "\uD83D\uDD12 Item and Recipe Locked"; }
+    public static String getMsgTooltipItemLocked() { return msgTooltipItemLocked != null ? msgTooltipItemLocked : "\uD83D\uDD12 Item Locked"; }
+    public static String getMsgTooltipRecipeLocked() { return msgTooltipRecipeLocked != null ? msgTooltipRecipeLocked : "\uD83D\uDD12 Recipe Locked"; }
+    public static String getMsgTooltipStageRequired() { return msgTooltipStageRequired != null ? msgTooltipStageRequired : "Stage required: {stage}"; }
+    public static String getMsgTooltipCurrentStage() { return msgTooltipCurrentStage != null ? msgTooltipCurrentStage : "Current stage: {stage} ({progress})"; }
+    public static String getMsgItemLocked() { return msgItemLocked != null ? msgItemLocked : "&c\uD83D\uDD12 You haven't unlocked this item yet! &7Required: &f{stage}"; }
+    public static String getMsgTypeLocked() { return msgTypeLocked != null ? msgTypeLocked : "&c\uD83D\uDD12 {type} is locked! &7Required: &f{stage}"; }
+    public static String getMsgItemsDropped() { return msgItemsDropped != null ? msgItemsDropped : "&c\uD83D\uDD12 Dropped {count} locked items from your inventory!"; }
+    public static String getMsgItemsMovedHotbar() { return msgItemsMovedHotbar != null ? msgItemsMovedHotbar : "&c\uD83D\uDD12 Moved {count} locked item(s) out of your hotbar!"; }
+    public static String getMsgMissingDependencies() { return msgMissingDependencies != null ? msgMissingDependencies : "[ProgressiveStages] Stage '{stage}' could not be granted: missing required stage(s): {dependencies}. Complete the prerequisites first."; }
 }

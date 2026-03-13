@@ -61,8 +61,8 @@ public class ClientEventHandler {
 
         // Mask item name if configured (only for full item lock)
         if (itemLocked && StageConfig.isMaskLockedItemNames() && !tooltip.isEmpty()) {
-            // Replace the first line (item name) with "Unknown Item"
-            tooltip.set(0, Component.literal("Unknown Item").withStyle(ChatFormatting.RED));
+            // Replace the first line (item name) with configurable masked name
+            tooltip.set(0, Component.literal(StageConfig.getMsgTooltipMaskedName()).withStyle(ChatFormatting.RED));
         }
 
         if (!StageConfig.isShowTooltip()) {
@@ -87,24 +87,24 @@ public class ClientEventHandler {
         // Determine lock label based on what's locked
         String lockLabel;
         if (itemLocked && recipeOnlyLocked) {
-            lockLabel = "🔒 Item and Recipe Locked";
+            lockLabel = StageConfig.getMsgTooltipItemAndRecipeLocked();
         } else if (itemLocked) {
-            lockLabel = "🔒 Item Locked";
+            lockLabel = StageConfig.getMsgTooltipItemLocked();
         } else {
-            lockLabel = "🔒 Recipe Locked";
+            lockLabel = StageConfig.getMsgTooltipRecipeLocked();
         }
 
         // Add lock indicator
         tooltip.add(Component.literal(lockLabel).withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
 
         // Required stage
-        tooltip.add(Component.literal("Stage required: ")
-            .withStyle(ChatFormatting.GRAY)
-            .append(Component.literal(stageDisplayName).withStyle(ChatFormatting.WHITE)));
+        String stageRequiredText = StageConfig.getMsgTooltipStageRequired().replace("{stage}", stageDisplayName);
+        tooltip.add(Component.literal(stageRequiredText).withStyle(ChatFormatting.GRAY));
 
         // Current stage
-        tooltip.add(Component.literal("Current stage: ")
-            .withStyle(ChatFormatting.GRAY)
-            .append(Component.literal(currentStageName + " (" + progress + ")").withStyle(ChatFormatting.WHITE)));
+        String currentStageText = StageConfig.getMsgTooltipCurrentStage()
+            .replace("{stage}", currentStageName)
+            .replace("{progress}", progress);
+        tooltip.add(Component.literal(currentStageText).withStyle(ChatFormatting.GRAY));
     }
 }

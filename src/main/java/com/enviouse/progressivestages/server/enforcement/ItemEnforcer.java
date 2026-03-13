@@ -141,9 +141,8 @@ public class ItemEnforcer {
                 .map(StageDefinition::getDisplayName)
                 .orElse(stageId.getPath());
 
-            Component message = TextUtil.parseColorCodes(
-                "&c🔒 You haven't unlocked this item yet! &7Required: &f" + displayName
-            );
+            String template = StageConfig.getMsgItemLocked();
+            Component message = TextUtil.parseColorCodes(template.replace("{stage}", displayName));
             player.sendSystemMessage(message);
         }
 
@@ -163,8 +162,9 @@ public class ItemEnforcer {
                 .map(StageDefinition::getDisplayName)
                 .orElse(requiredStage.getPath());
 
+            String template = StageConfig.getMsgTypeLocked();
             Component message = TextUtil.parseColorCodes(
-                "&c🔒 " + type + " is locked! &7Required: &f" + displayName
+                template.replace("{type}", type).replace("{stage}", displayName)
             );
             player.sendSystemMessage(message);
         }

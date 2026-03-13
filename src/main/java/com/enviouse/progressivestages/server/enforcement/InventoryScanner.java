@@ -71,9 +71,10 @@ public class InventoryScanner {
                 // Generic message for multiple items
                 ItemEnforcer.playLockSound(player);
                 if (StageConfig.isShowLockMessage()) {
+                    String template = StageConfig.getMsgItemsDropped();
                     player.sendSystemMessage(
                         com.enviouse.progressivestages.common.util.TextUtil.parseColorCodes(
-                            "&c🔒 Dropped " + toDrop.size() + " locked items from your inventory!"
+                            template.replace("{count}", String.valueOf(toDrop.size()))
                         )
                     );
                 }
@@ -153,9 +154,10 @@ public class InventoryScanner {
         if (movedCount > 0) {
             ItemEnforcer.playLockSound(player);
             if (StageConfig.isShowLockMessage()) {
+                String template = StageConfig.getMsgItemsMovedHotbar();
                 player.sendSystemMessage(
                     com.enviouse.progressivestages.common.util.TextUtil.parseColorCodes(
-                        "&c🔒 Moved " + movedCount + " locked item" + (movedCount > 1 ? "s" : "") + " out of your hotbar!"
+                        template.replace("{count}", String.valueOf(movedCount))
                     )
                 );
             }

@@ -111,9 +111,10 @@ public class StageManager {
                 String missingStr = missing.stream()
                     .map(id -> id.getPath())
                     .collect(java.util.stream.Collectors.joining(", "));
+                String template = StageConfig.getMsgMissingDependencies();
                 player.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                    "[ProgressiveStages] Stage '" + stageId.getPath() + "' could not be granted: " +
-                    "missing required stage(s): " + missingStr + ". Complete the prerequisites first."));
+                    template.replace("{stage}", stageId.getPath())
+                            .replace("{dependencies}", missingStr)));
                 return;
             }
         }
