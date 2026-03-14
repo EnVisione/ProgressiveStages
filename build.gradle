@@ -105,8 +105,8 @@ dependencies {
     // FTB Library (required for FTB integration) - from libs folder
     compileOnly files("libs/ftb-library-neoforge-2101.1.30.jar")
 
-    // FTB Teams (required) - from libs folder
-    implementation files("libs/ftb-teams-neoforge-2101.1.9.jar")
+    // FTB Teams (optional) - from libs folder
+    compileOnly files("libs/ftb-teams-neoforge-2101.1.9.jar")
 
     // FTB Quests (optional) - from libs folder
     compileOnly files("libs/ftb-quests-neoforge-2101.1.21.jar")

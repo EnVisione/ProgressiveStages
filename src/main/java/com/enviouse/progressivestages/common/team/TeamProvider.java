@@ -34,6 +34,14 @@ public class TeamProvider {
      * Initialize the team provider
      */
     public void initialize() {
+        // Check if FTB Teams integration is enabled in config
+        if (!StageConfig.isFtbTeamsIntegrationEnabled()) {
+            ftbTeamsAvailable = false;
+            LOGGER.info("[ProgressiveStages] FTB Teams integration disabled by config, using solo mode");
+            integration = new SoloIntegration();
+            return;
+        }
+
         // Check if FTB Teams is available
         try {
             Class.forName("dev.ftb.mods.ftbteams.api.FTBTeamsAPI");

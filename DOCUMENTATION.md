@@ -455,6 +455,16 @@ show_tooltip = true
 show_locked_recipes = false
 ```
 
+### Integration: FTB Teams
+```toml
+[integration.ftbteams]
+# Enable/disable FTB Teams integration entirely.
+# If false, ProgressiveStages will NOT load any FTB Teams classes at all.
+# Falls back to solo mode automatically.
+# Default: true (but gracefully degrades if FTB Teams is not installed)
+enabled = true
+```
+
 ### Integration: FTB Quests
 ```toml
 [integration.ftbquests]

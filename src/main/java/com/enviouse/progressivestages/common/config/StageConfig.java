@@ -352,6 +352,13 @@ public class StageConfig {
 
     // ============ Integration Settings ============
 
+    private static final ModConfigSpec.BooleanValue FTB_TEAMS_INTEGRATION = BUILDER
+        .comment("Enable FTB Teams integration",
+                 "If true and FTB Teams is installed, stages are shared across team members",
+                 "If false or FTB Teams is not installed, falls back to solo mode automatically",
+                 "Disabling this prevents ProgressiveStages from loading FTB Teams classes entirely")
+        .define("integration.ftbteams.enabled", true);
+
     private static final ModConfigSpec.BooleanValue FTB_QUESTS_INTEGRATION = BUILDER
         .comment("Enable FTB Quests integration",
                  "If true, ProgressiveStages registers as the stage provider for FTB Quests",
@@ -406,6 +413,7 @@ public class StageConfig {
     private static boolean showLockedRecipes;
     private static boolean enableLockCache;
     private static int lockCacheSize;
+    private static boolean ftbTeamsIntegration;
     private static boolean ftbQuestsIntegration;
     private static int ftbRecheckBudget;
 
@@ -484,6 +492,7 @@ public class StageConfig {
         showLockedRecipes = SHOW_LOCKED_RECIPES.get();
         enableLockCache = ENABLE_LOCK_CACHE.get();
         lockCacheSize = LOCK_CACHE_SIZE.get();
+        ftbTeamsIntegration = FTB_TEAMS_INTEGRATION.get();
         ftbQuestsIntegration = FTB_QUESTS_INTEGRATION.get();
         ftbRecheckBudget = FTB_RECHECK_BUDGET.get();
 
@@ -582,6 +591,7 @@ public class StageConfig {
     public static boolean isShowLockedRecipes() { return showLockedRecipes; }
     public static boolean isEnableLockCache() { return enableLockCache; }
     public static int getLockCacheSize() { return lockCacheSize; }
+    public static boolean isFtbTeamsIntegrationEnabled() { return ftbTeamsIntegration; }
     public static boolean isFtbQuestsIntegrationEnabled() { return ftbQuestsIntegration; }
     public static int getFtbRecheckBudget() { return ftbRecheckBudget; }
 

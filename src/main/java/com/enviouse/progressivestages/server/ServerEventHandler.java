@@ -66,6 +66,17 @@ public class ServerEventHandler {
         NeoForge.EVENT_BUS.register(DimensionStageGrants.class);
         NeoForge.EVENT_BUS.register(BossKillStageGrants.class);
 
+        // Initialize FTB Teams integration (soft dependency)
+        // Only load the FTBTeamsIntegration class if FTB Teams is actually present
+        // to avoid NoClassDefFoundError from its direct FTB Teams API imports
+        if (net.neoforged.fml.ModList.get().isLoaded("ftbteams") && StageConfig.isFtbTeamsIntegrationEnabled()) {
+            try {
+                com.enviouse.progressivestages.server.integration.FTBTeamsIntegration.registerIfAvailable();
+            } catch (NoClassDefFoundError e) {
+                com.mojang.logging.LogUtils.getLogger().warn("[ProgressiveStages] FTB Teams classes not available at runtime, skipping integration: {}", e.getMessage());
+            }
+        }
+
         // Initialize FTB Quests compatibility (soft dependency)
         FTBQuestsCompat.init();
     }

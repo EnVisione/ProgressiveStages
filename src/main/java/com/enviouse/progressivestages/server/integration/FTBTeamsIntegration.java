@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.server.integration;
 import com.enviouse.progressivestages.common.api.ProgressiveStagesAPI;
 import com.enviouse.progressivestages.common.api.StageCause;
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.team.TeamStageSync;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
@@ -12,7 +13,7 @@ import dev.ftb.mods.ftbteams.api.property.TeamProperties;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModList;
-import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
@@ -28,13 +29,19 @@ import java.util.*;
  * (the default), FTB Quests calls {@code TeamStagesHelper.addTeamStage()} which
  * bypasses our StageProvider entirely — the stage is stored in FTB Teams' own
  * property system. This class detects those changes and syncs them to our system.
+ *
+ * <p><b>IMPORTANT:</b> This class is NOT annotated with {@code @EventBusSubscriber}
+ * because it directly imports FTB Teams API classes. If FTB Teams is not installed,
+ * loading this class would cause a {@code NoClassDefFoundError}. Instead, it is
+ * manually registered via {@link #registerIfAvailable()} only after confirming
+ * FTB Teams is present and the config toggle is enabled.
  */
-@EventBusSubscriber(modid = Constants.MOD_ID)
 public class FTBTeamsIntegration {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static boolean initialized = false;
     private static boolean initChecked = false;
+    private static boolean registered = false;
 
     // Track each player's current team to detect changes
     private static final Map<UUID, UUID> lastKnownTeams = new HashMap<>();
@@ -44,12 +51,46 @@ public class FTBTeamsIntegration {
     private static final Map<UUID, Set<String>> lastKnownFtbTeamStages = new HashMap<>();
 
     /**
+     * Safely register this class as an event listener if FTB Teams is available and config is enabled.
+     * Called from ServerEventHandler.onServerStarting() AFTER confirming FTB Teams is present.
+     * This method must only be called when FTB Teams classes are on the classpath.
+     */
+    public static void registerIfAvailable() {
+        if (registered) return;
+
+        if (!StageConfig.isFtbTeamsIntegrationEnabled()) {
+            LOGGER.info("[ProgressiveStages] FTB Teams integration disabled by config");
+            return;
+        }
+
+        if (!ModList.get().isLoaded("ftbteams")) {
+            LOGGER.debug("[ProgressiveStages] FTB Teams not installed, skipping integration registration");
+            return;
+        }
+
+        try {
+            Class.forName("dev.ftb.mods.ftbteams.api.FTBTeamsAPI");
+            NeoForge.EVENT_BUS.register(FTBTeamsIntegration.class);
+            registered = true;
+            LOGGER.info("[ProgressiveStages] FTB Teams integration registered successfully");
+        } catch (ClassNotFoundException e) {
+            LOGGER.warn("[ProgressiveStages] FTB Teams mod found but API not accessible, skipping: {}", e.getMessage());
+        }
+    }
+
+    /**
      * Lazy initialization — called on first server tick.
      * Detects FTB Teams availability without requiring an explicit call from startup code.
      */
     private static void ensureInitialized() {
         if (initChecked) return;
         initChecked = true;
+
+        if (!StageConfig.isFtbTeamsIntegrationEnabled()) {
+            LOGGER.info("[ProgressiveStages] FTB Teams integration disabled by config");
+            initialized = false;
+            return;
+        }
 
         if (ModList.get().isLoaded("ftbteams")) {
             try {
