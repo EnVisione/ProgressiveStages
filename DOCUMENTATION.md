@@ -110,7 +110,7 @@ config/ProgressiveStages/*.toml
 
 That means stages apply to all worlds on that server/instance (not per-save).
 
-### Stage File Format (v1.2)
+### Stage File Format (v1.5)
 ```toml
 [stage]
 # Required
@@ -149,6 +149,15 @@ item_mods = [
   "mekanism"  # Locks all Mekanism items, but NOT blocks or entities
 ]
 
+# Recipe Items (v1.5) — lock the RECIPE only, NOT the item itself
+# Players CAN pick up, hold, and use the item (e.g., from loot chests).
+# Players CANNOT craft the item (recipe is hidden in EMI/JEI).
+# Tooltip shows "🔒 Recipe Locked" instead of "🔒 Item Locked".
+recipe_items = [
+  "minecraft:diamond_pickaxe",  # Can't craft, but can use if found in loot
+  "minecraft:enchanting_table"
+]
+
 # Name patterns (case-insensitive substring matching)
 names = [
   "diamond",  # Locks minecraft:diamond, minecraft:diamond_pickaxe, etc.
@@ -161,11 +170,11 @@ block_mods = [
   "mekanism"  # Locks all Mekanism blocks, but NOT items or entities
 ]
 
-# Mod locks (lock ALL content from a mod: items, blocks, AND entities)
+# Mod locks (lock ALL content from a mod: items, blocks, entities, AND fluids)
 # NOTE: Using mods = ["modid"] locks EVERYTHING from that mod.
-# For finer control, use item_mods, block_mods, or entity_mods separately.
+# For finer control, use item_mods, block_mods, entity_mods, or fluid_mods separately.
 mods = [
-  "create"  # Locks all items, blocks, AND entities from the Create mod
+  "create"  # Locks all items, blocks, entities, AND fluids from the Create mod
 ]
 
 # Blocks
@@ -182,6 +191,11 @@ block_tags = [
 dimensions = [
   "minecraft:the_nether"
 ]
+
+# Fluids (v1.4) — EMI/JEI visibility ONLY (does NOT block fluid transport)
+fluids = ["mekanism:heavy_water"]
+fluid_tags = ["#c:acids"]
+fluid_mods = ["mekanism"]
 
 # Entities (v1.1) - Lock entity types (prevent attacking)
 entities = [
@@ -210,6 +224,11 @@ unlocked_items = [
   "minecraft:diamond_horse_armor"    # Allow this even though "diamond" name pattern is locked
 ]
 
+# Unlocked blocks (v1.4) - Whitelist exceptions for blocks
+unlocked_blocks = [
+  "ae2:charger"  # Allow even if ae2 is locked via mods
+]
+
 # Unlocked entities (v1.2) - Whitelist exceptions for entities
 # These entities can ALWAYS be attacked, even if broader entity locks apply
 # Use case: Lock entire mod entities but allow attacking specific ones
@@ -217,7 +236,60 @@ unlocked_entities = [
   "mekanism:robit",  # Allow attacking robits even though mekanism entities are locked
   "minecraft:zombie" # Allow attacking zombies even if locked via tag/pattern
 ]
+
+# Unlocked fluids (v1.4) - Whitelist exceptions for fluids (EMI/JEI)
+unlocked_fluids = [
+  "mekanism:hydrogen"  # Show in EMI even though mekanism is locked
+]
 ```
+
+### Per-Stage Enforcement Exceptions (v1.5)
+
+Each stage file can include an `[enforcement]` section that exempts specific items from global enforcement rules. The item remains "locked" (shows lock icon, requires the stage) but the specific enforcement action is allowed.
+
+Each list accepts three formats:
+- **Item IDs:** `"minecraft:diamond_pickaxe"`
+- **Item tags:** `"#c:gems/diamond"`
+- **Mod IDs:** `"mekanism"` (matches ALL items from that mod)
+
+```toml
+[enforcement]
+
+# Items that can be USED (right-click, left-click, mine, attack) even when locked
+allowed_use = [
+  "minecraft:diamond_ore",
+  "minecraft:deepslate_diamond_ore"
+]
+
+# Items that can be PICKED UP from the ground even when locked
+allowed_pickup = [
+  "minecraft:diamond",
+  "#c:gems/diamond"
+]
+
+# Items that can remain in the HOTBAR even when locked
+allowed_hotbar = [
+  "minecraft:diamond"
+]
+
+# Items that can be MOVED with mouse in GUIs even when locked
+# (allows storing items in chests even though they're locked)
+allowed_mouse_pickup = [
+  "minecraft:diamond",
+  "minecraft:diamond_ore"
+]
+
+# Items that can remain in INVENTORY even when locked (won't be auto-dropped)
+allowed_inventory = [
+  "minecraft:diamond",
+  "minecraft:diamond_ore",
+  "minecraft:deepslate_diamond_ore"
+]
+```
+
+**Use case:** Lock diamond items globally but allow players to pick up and store raw diamonds so they can stockpile them for when they unlock the stage.
+
+> ⚠️ These exceptions only apply when the corresponding global enforcement setting is enabled in `progressivestages.toml` (e.g., `block_item_use = true`). If a global enforcement is disabled, exceptions have no effect.
 
 ### Notes
 - `stage.id` can be bare (`iron_age`) or namespaced (`progressivestages:iron_age`). Both work.
@@ -228,23 +300,42 @@ unlocked_entities = [
 
 The following table shows which content types are locked by each lock type:
 
-| Lock Type | Items | Blocks | Entities | Fluids (EMI/JEI) |
-|-----------|:-----:|:------:|:--------:|:----------------:|
-| `mods = ["modid"]` | ✅ | ✅ | ✅ | ✅ |
-| `item_mods = ["modid"]` | ✅ | ❌ | ❌ | ❌ |
-| `block_mods = ["modid"]` | ❌ | ✅ | ❌ | ❌ |
-| `entity_mods = ["modid"]` | ❌ | ❌ | ✅ | ❌ |
-| `fluid_mods = ["modid"]` | ❌ | ❌ | ❌ | ✅ |
-| `names = ["pattern"]` | ✅ | ✅ | ✅ | ✅ |
-| `items = [...]` | ✅ | ❌ | ❌ | ❌ |
-| `blocks = [...]` | ❌ | ✅ | ❌ | ❌ |
-| `entities = [...]` | ❌ | ❌ | ✅ | ❌ |
-| `fluids = [...]` | ❌ | ❌ | ❌ | ✅ |
+| Lock Type | Items | Blocks | Entities | Fluids (EMI/JEI) | Recipes |
+|-----------|:-----:|:------:|:--------:|:----------------:|:-------:|
+| `mods = ["modid"]` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `item_mods = ["modid"]` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `block_mods = ["modid"]` | ❌ | ✅ | ❌ | ❌ | ❌ |
+| `entity_mods = ["modid"]` | ❌ | ❌ | ✅ | ❌ | ❌ |
+| `fluid_mods = ["modid"]` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `names = ["pattern"]` | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `items = [...]` | ✅ | ❌ | ❌ | ❌ | ✅* |
+| `blocks = [...]` | ❌ | ✅ | ❌ | ❌ | ❌ |
+| `entities = [...]` | ❌ | ❌ | ✅ | ❌ | ❌ |
+| `fluids = [...]` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `recipe_items = [...]` | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+\* When an item is locked via `items = [...]`, its recipe is also implicitly locked.
 
 **Key Points:**
 - **`mods = ["modid"]`** is the "lock everything" option — locks all items, blocks, entities, AND fluids from that mod.
 - **`names = ["pattern"]`** locks **everything** containing that pattern — items, blocks, entities, AND fluids.
+- **`recipe_items = [...]`** locks **only the crafting recipe** — the item itself remains fully usable (can be picked up, held, and used from loot).
 - **Fluid locks only affect EMI/JEI visibility.** They do NOT prevent players from piping, pumping, or using fluids in machines. To block fluid transport, you need to lock the machines/pipes themselves.
+
+### Recipe-Only Locks (`recipe_items`) vs Item Locks (`items`)
+
+| Behavior | `items = [...]` | `recipe_items = [...]` |
+|----------|:---------------:|:---------------------:|
+| Can pick up item | ❌ | ✅ |
+| Can hold in inventory | ❌ | ✅ |
+| Can use item (right/left click) | ❌ | ✅ |
+| Can craft item | ❌ | ❌ |
+| Visible in EMI | ❌ (hidden) | ✅ (visible) |
+| Recipe visible in EMI | ❌ (hidden) | ❌ (hidden) |
+| Tooltip text | "🔒 Item Locked" | "🔒 Recipe Locked" |
+| Both applied | — | "🔒 Item and Recipe Locked" |
+
+**Use case:** Allow players to use items found in loot chests or mob drops, but prevent crafting until the stage is unlocked. Perfect for progression-gated gear.
 
 ### Whitelist Exceptions
 Each content type has its own whitelist that takes priority over ALL lock types:
@@ -550,10 +641,28 @@ If compatibility breaks (FTB API changes), ProgressiveStages:
 
 ### Item enforcement
 Depending on config, ProgressiveStages can:
-- block item use
-- block pickup
-- block holding in inventory (drop)
-- block crafting
+- block item use (right-click, left-click, mine, attack)
+- block pickup from the ground
+- block holding in hotbar (moves item to main inventory; drops if full)
+- block picking up with mouse cursor in GUIs (prevents moving in containers)
+- block holding in inventory (auto-drops locked items)
+- block crafting (clears recipe output for locked items)
+
+### Soft Enforcement (v1.4) — `block_item_hotbar` and `block_item_mouse_pickup`
+These provide a friendlier alternative to `block_item_inventory`:
+
+| Config Key | What it does | Ignored if |
+|------------|-------------|------------|
+| `block_item_hotbar` | Moves locked items out of hotbar to main inventory (drops if full) | `block_item_inventory = true` |
+| `block_item_mouse_pickup` | Prevents picking up locked items with mouse in GUIs | `block_item_inventory = true` |
+| `block_item_inventory` | Strictest: auto-drops locked items from entire inventory | — |
+
+**Use case:** Set `block_item_inventory = false`, `block_item_hotbar = true`, and `block_item_mouse_pickup = false` to let players store locked items in chests for later use, but prevent equipping them.
+
+### Recipe enforcement
+- `block_crafting = true` — Prevents crafting locked items (clears result slot)
+- `hide_locked_recipe_output = true` — Hides the output item in crafting grid
+- Works with both `items = [...]` (item + recipe locked) and `recipe_items = [...]` (recipe-only lock)
 
 ### Block enforcement
 Depending on config, ProgressiveStages can:
@@ -565,6 +674,9 @@ If `enforcement.allow_creative_bypass = true`, creative mode players bypass enfo
 
 ### Mask locked item names
 If `enforcement.mask_locked_item_names = true`, locked items show as **"Unknown Item"** to the client.
+
+### Per-Stage Enforcement Exceptions (v1.5)
+Each stage file can include an `[enforcement]` section to exempt specific items from global enforcement. See [Per-Stage Enforcement Exceptions](#per-stage-enforcement-exceptions-v15) in the Stage Files section for details.
 
 ---
 
