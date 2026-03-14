@@ -67,13 +67,19 @@ public class ServerEventHandler {
         NeoForge.EVENT_BUS.register(BossKillStageGrants.class);
 
         // Initialize FTB Teams integration (soft dependency)
-        // Only load the FTBTeamsIntegration class if FTB Teams is actually present
-        // to avoid NoClassDefFoundError from its direct FTB Teams API imports
+        // Uses reflection to avoid loading FTBTeamsIntegration class (which imports FTB Teams API)
+        // when FTB Teams is not installed — any direct class reference would cause NoClassDefFoundError
         if (net.neoforged.fml.ModList.get().isLoaded("ftbteams") && StageConfig.isFtbTeamsIntegrationEnabled()) {
             try {
-                com.enviouse.progressivestages.server.integration.FTBTeamsIntegration.registerIfAvailable();
-            } catch (NoClassDefFoundError e) {
-                com.mojang.logging.LogUtils.getLogger().warn("[ProgressiveStages] FTB Teams classes not available at runtime, skipping integration: {}", e.getMessage());
+                Class<?> ftbTeamsIntClass = Class.forName(
+                    "com.enviouse.progressivestages.server.integration.FTBTeamsIntegration");
+                ftbTeamsIntClass.getMethod("registerIfAvailable").invoke(null);
+            } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                com.mojang.logging.LogUtils.getLogger().warn(
+                    "[ProgressiveStages] FTB Teams classes not available, skipping team integration: {}", e.getMessage());
+            } catch (Exception e) {
+                com.mojang.logging.LogUtils.getLogger().warn(
+                    "[ProgressiveStages] Failed to initialize FTB Teams integration: {}", e.getMessage());
             }
         }
 

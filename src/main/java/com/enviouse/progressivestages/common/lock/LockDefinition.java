@@ -10,7 +10,7 @@ import java.util.List;
  * <p>v1.3 changes: Added unlockedItems for whitelist exceptions.
  * <p>v1.4 changes: Added unlockedBlocks, unlockedFluids for whitelist exceptions.
  *                  Added fluids, fluidTags, fluidMods for fluid locking.
- * <p>v1.5 changes: Added recipeItems for recipe-only locks by output item ID.
+ * <p>v1.4 changes: Added recipeItems for recipe-only locks by output item ID.
  *                  Added per-stage enforcement exceptions (allowed_use, allowed_pickup, etc.)
  */
 public class LockDefinition {

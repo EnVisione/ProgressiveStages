@@ -5,7 +5,9 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -42,7 +44,7 @@ public class TeamProvider {
             return;
         }
 
-        // Check if FTB Teams is available
+        // Check if FTB Teams is available via reflection (no direct class references)
         try {
             Class.forName("dev.ftb.mods.ftbteams.api.FTBTeamsAPI");
             ftbTeamsAvailable = true;
@@ -54,7 +56,7 @@ public class TeamProvider {
 
         // Create integration based on config and availability
         if (StageConfig.isFtbTeamsMode() && ftbTeamsAvailable) {
-            integration = new FTBTeamsIntegration();
+            integration = new ReflectiveFTBTeamsIntegration();
         } else {
             integration = new SoloIntegration();
         }
@@ -114,40 +116,87 @@ public class TeamProvider {
     }
 
     /**
-     * FTB Teams implementation
+     * FTB Teams implementation using reflection to avoid any direct class references
+     * to FTB Teams API. This prevents NoClassDefFoundError when FTB Teams is not installed.
      */
-    private static class FTBTeamsIntegration implements ITeamIntegration {
+    private static class ReflectiveFTBTeamsIntegration implements ITeamIntegration {
+
+        private Object cachedApi;
+        private java.lang.reflect.Method getManagerMethod;
+        private java.lang.reflect.Method getTeamForPlayerMethod;
+        private java.lang.reflect.Method getTeamByIDMethod;
+        private java.lang.reflect.Method getIdMethod;
+        private java.lang.reflect.Method getMembersMethod;
+        private boolean reflectionFailed = false;
+
+        private void ensureReflection() {
+            if (cachedApi != null || reflectionFailed) return;
+            try {
+                Class<?> apiClass = Class.forName("dev.ftb.mods.ftbteams.api.FTBTeamsAPI");
+                java.lang.reflect.Method apiMethod = apiClass.getMethod("api");
+                cachedApi = apiMethod.invoke(null);
+                getManagerMethod = cachedApi.getClass().getMethod("getManager");
+            } catch (Exception e) {
+                LOGGER.warn("[ProgressiveStages] FTB Teams reflection init failed: {}", e.getMessage());
+                reflectionFailed = true;
+            }
+        }
+
         @Override
         public UUID getTeamId(ServerPlayer player) {
+            ensureReflection();
+            if (reflectionFailed) return player.getUUID();
+
             try {
-                // Use FTB Teams API to get team ID
-                var api = dev.ftb.mods.ftbteams.api.FTBTeamsAPI.api();
-                var manager = api.getManager();
-                var teamOpt = manager.getTeamForPlayer(player);
+                Object manager = getManagerMethod.invoke(cachedApi);
+
+                if (getTeamForPlayerMethod == null) {
+                    getTeamForPlayerMethod = manager.getClass().getMethod("getTeamForPlayer", ServerPlayer.class);
+                }
+
+                @SuppressWarnings("unchecked")
+                Optional<Object> teamOpt = (Optional<Object>) getTeamForPlayerMethod.invoke(manager, player);
 
                 if (teamOpt.isPresent()) {
-                    return teamOpt.get().getId();
+                    Object team = teamOpt.get();
+                    if (getIdMethod == null) {
+                        getIdMethod = team.getClass().getMethod("getId");
+                    }
+                    return (UUID) getIdMethod.invoke(team);
                 }
             } catch (Exception e) {
                 LOGGER.debug("Failed to get FTB Team for player {}: {}", player.getName().getString(), e.getMessage());
             }
 
-            // Fallback to player UUID if no team
             return player.getUUID();
         }
 
         @Override
         public Set<ServerPlayer> getTeamMembers(UUID teamId, ServerPlayer requester) {
+            ensureReflection();
+            if (reflectionFailed) return Collections.singleton(requester);
+
             try {
-                var api = dev.ftb.mods.ftbteams.api.FTBTeamsAPI.api();
-                var manager = api.getManager();
-                var teamOpt = manager.getTeamByID(teamId);
+                Object manager = getManagerMethod.invoke(cachedApi);
+
+                if (getTeamByIDMethod == null) {
+                    getTeamByIDMethod = manager.getClass().getMethod("getTeamByID", UUID.class);
+                }
+
+                @SuppressWarnings("unchecked")
+                Optional<Object> teamOpt = (Optional<Object>) getTeamByIDMethod.invoke(manager, teamId);
 
                 if (teamOpt.isPresent()) {
-                    var team = teamOpt.get();
+                    Object team = teamOpt.get();
+                    if (getMembersMethod == null) {
+                        getMembersMethod = team.getClass().getMethod("getMembers");
+                    }
+
+                    @SuppressWarnings("unchecked")
+                    Collection<UUID> memberIds = (Collection<UUID>) getMembersMethod.invoke(team);
                     Set<ServerPlayer> members = new java.util.HashSet<>();
 
-                    for (UUID memberId : team.getMembers()) {
+                    for (UUID memberId : memberIds) {
                         ServerPlayer member = requester.getServer().getPlayerList().getPlayer(memberId);
                         if (member != null) {
                             members.add(member);

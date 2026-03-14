@@ -1,4 +1,4 @@
-Supackage com.enviouse.progressivestages.server.loader;
+package com.enviouse.progressivestages.server.loader;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
@@ -664,8 +664,8 @@ public class StageFileLoader {
     private void generateDiamondAgeFile() {
         String content = """
             # ============================================================================
-ite            # Stage definition for Diamond Age (v1.5)
-            # This file demonstrates ALL features available in ProgressiveStages v1.5
+            # Stage definition for Diamond Age (v1.4)
+            # This file demonstrates ALL features available in ProgressiveStages v1.4
             # ============================================================================
             
             [stage]
@@ -791,7 +791,7 @@ ite            # Stage definition for Diamond Age (v1.5)
             ]
             
             # =============================================================================
-            # RECIPE_ITEMS (v1.5) - Lock recipes by OUTPUT item ID (recipe-only lock)
+            # RECIPE_ITEMS (v1.4) - Lock recipes by OUTPUT item ID (recipe-only lock)
             # =============================================================================
             # ⚠️ This is DIFFERENT from items = [...] !
             #
@@ -1131,7 +1131,7 @@ ite            # Stage definition for Diamond Age (v1.5)
             # description = "Trade with Villager using Diamond"
             
             # ============================================================================
-            # ENFORCEMENT EXCEPTIONS (v1.5) - Per-stage overrides for global enforcement
+            # ENFORCEMENT EXCEPTIONS (v1.4) - Per-stage overrides for global enforcement
             # ============================================================================
             #
             # Even though items are locked by this stage, these exceptions allow specific

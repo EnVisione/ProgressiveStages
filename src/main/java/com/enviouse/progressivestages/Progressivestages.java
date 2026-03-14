@@ -653,8 +653,8 @@ public class Progressivestages {
     private String getDiamondAgeContent() {
         return """
             # ============================================================================
-            # Stage definition for Diamond Age (v1.5)
-            # This file demonstrates ALL features available in ProgressiveStages v1.5
+            # Stage definition for Diamond Age (v1.4)
+            # This file demonstrates ALL features available in ProgressiveStages v1.4
             # ============================================================================
             #
             # QUICK REFERENCE - Lock Types:
@@ -798,7 +798,7 @@ public class Progressivestages {
             ]
             
             # =============================================================================
-            # RECIPE_ITEMS (v1.5) - Lock recipes by OUTPUT item ID (recipe-only lock)
+            # RECIPE_ITEMS (v1.4) - Lock recipes by OUTPUT item ID (recipe-only lock)
             # =============================================================================
             # ⚠️ This is DIFFERENT from items = [...] !
             #
@@ -1140,7 +1140,7 @@ public class Progressivestages {
             # description = "Trade with Villager using Diamond"
             
             # ============================================================================
-            # ENFORCEMENT EXCEPTIONS (v1.5) - Per-stage overrides for global enforcement
+            # ENFORCEMENT EXCEPTIONS (v1.4) - Per-stage overrides for global enforcement
             # ============================================================================
             #
             # Even though items are locked by this stage, these exceptions allow specific

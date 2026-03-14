@@ -91,7 +91,7 @@ public class LockRegistry {
     // v1.4: Global whitelist of fluids that are ALWAYS unlocked (bypass mod locks in EMI/JEI)
     private final Set<ResourceLocation> unlockedFluids = ConcurrentHashMap.newKeySet();
 
-    // v1.5: Per-stage enforcement exceptions — items exempt from specific enforcement types
+    // v1.4: Per-stage enforcement exceptions — items exempt from specific enforcement types
     // Each list stores raw strings: item IDs ("minecraft:diamond"), tags ("#c:gems"), or mod IDs ("mekanism")
     private final List<String> useExemptions = Collections.synchronizedList(new ArrayList<>());
     private final List<String> pickupExemptions = Collections.synchronizedList(new ArrayList<>());
@@ -302,7 +302,7 @@ public class LockRegistry {
             }
         }
 
-        // Register per-stage enforcement exceptions (v1.5)
+        // Register per-stage enforcement exceptions (v1.4)
         useExemptions.addAll(locks.getAllowedUse());
         pickupExemptions.addAll(locks.getAllowedPickup());
         hotbarExemptions.addAll(locks.getAllowedHotbar());

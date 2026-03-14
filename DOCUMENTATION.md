@@ -110,7 +110,7 @@ config/ProgressiveStages/*.toml
 
 That means stages apply to all worlds on that server/instance (not per-save).
 
-### Stage File Format (v1.5)
+### Stage File Format (v1.4)
 ```toml
 [stage]
 # Required
@@ -149,7 +149,7 @@ item_mods = [
   "mekanism"  # Locks all Mekanism items, but NOT blocks or entities
 ]
 
-# Recipe Items (v1.5) — lock the RECIPE only, NOT the item itself
+# Recipe Items (v1.4) — lock the RECIPE only, NOT the item itself
 # Players CAN pick up, hold, and use the item (e.g., from loot chests).
 # Players CANNOT craft the item (recipe is hidden in EMI/JEI).
 # Tooltip shows "🔒 Recipe Locked" instead of "🔒 Item Locked".
@@ -243,7 +243,7 @@ unlocked_fluids = [
 ]
 ```
 
-### Per-Stage Enforcement Exceptions (v1.5)
+### Per-Stage Enforcement Exceptions (v1.4)
 
 Each stage file can include an `[enforcement]` section that exempts specific items from global enforcement rules. The item remains "locked" (shows lock icon, requires the stage) but the specific enforcement action is allowed.
 
@@ -685,7 +685,7 @@ If `enforcement.allow_creative_bypass = true`, creative mode players bypass enfo
 ### Mask locked item names
 If `enforcement.mask_locked_item_names = true`, locked items show as **"Unknown Item"** to the client.
 
-### Per-Stage Enforcement Exceptions (v1.5)
+### Per-Stage Enforcement Exceptions (v1.4)
 Each stage file can include an `[enforcement]` section to exempt specific items from global enforcement. See [Per-Stage Enforcement Exceptions](#per-stage-enforcement-exceptions-v15) in the Stage Files section for details.
 
 ---
