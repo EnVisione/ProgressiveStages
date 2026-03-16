@@ -5,13 +5,13 @@ import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.server.enforcement.ItemEnforcer;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.RecipeType;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -27,6 +27,10 @@ import java.util.Optional;
  *
  * This is the authoritative crafting enforcement point. CraftingMenuMixin hides
  * the output visually, but this mixin is the actual gate that prevents item take.
+ *
+ * For recipe ID locks (recipes = [...]), we use the recipe ID stored by
+ * CraftingMenuMixin.slotChangedCraftingGrid (where the recipe is already resolved)
+ * instead of doing a runtime recipe lookup — which can fail due to timing issues.
  */
 @Mixin(ResultSlot.class)
 public abstract class ResultSlotMixin extends Slot {
@@ -84,17 +88,16 @@ public abstract class ResultSlotMixin extends Slot {
             return;
         }
 
-        // 3. Check recipe ID lock (recipes = [...]) — locks one specific recipe by its ID
-        var server = serverPlayer.getServer();
-        if (server != null) {
-            var optRecipe = server.getRecipeManager()
-                .getRecipeFor(RecipeType.CRAFTING, craftSlots.asCraftInput(), player.level());
-            if (optRecipe.isPresent()) {
-                Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(optRecipe.get().id());
-                if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
-                    cir.setReturnValue(false);
-                    ItemEnforcer.notifyLocked(serverPlayer, recipeStage.get(), "This recipe");
-                }
+        // 3. Check recipe ID lock (recipes = [...]) — uses stored recipe from CraftingMenuMixin
+        //    CraftingMenuMixin stores the matched recipe ID when slotChangedCraftingGrid fires,
+        //    so we don't need an unreliable runtime recipe lookup here.
+        ResourceLocation lastRecipeId = CraftingMenuMixin.progressivestages$getLastRecipe(serverPlayer.getUUID());
+        if (lastRecipeId != null) {
+            Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(lastRecipeId);
+            if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
+                cir.setReturnValue(false);
+                ItemEnforcer.notifyLocked(serverPlayer, recipeStage.get(), "This recipe");
+                return;
             }
         }
     }

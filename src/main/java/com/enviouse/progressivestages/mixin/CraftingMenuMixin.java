@@ -4,6 +4,7 @@ import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.CraftingContainer;
@@ -16,14 +17,20 @@ import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Mixin to hide recipe output for locked recipes in the crafting table.
+ * Also stores the last matched recipe ID per player so ResultSlotMixin can
+ * reliably check recipe ID locks without a runtime recipe lookup.
  */
 @Mixin(CraftingMenu.class)
 public abstract class CraftingMenuMixin {
@@ -33,7 +40,30 @@ public abstract class CraftingMenuMixin {
     @Shadow @Final private CraftingContainer craftSlots;
 
     /**
-     * After the crafting result is set, check if the recipe is locked and clear it.
+     * Stores the last recipe ID that matched the crafting grid per player.
+     * Populated here (where the recipe is already resolved), consumed by
+     * ResultSlotMixin.mayPickup() to avoid unreliable runtime recipe lookups.
+     */
+    @Unique
+    private static final Map<UUID, ResourceLocation> progressivestages$lastRecipeByPlayer = new ConcurrentHashMap<>();
+
+    /**
+     * Get the last matched recipe ID for a player.
+     * Called by ResultSlotMixin to check recipe ID locks.
+     */
+    public static ResourceLocation progressivestages$getLastRecipe(UUID playerId) {
+        return progressivestages$lastRecipeByPlayer.get(playerId);
+    }
+
+    /**
+     * Clear stored recipe for a player (e.g., on disconnect).
+     */
+    public static void progressivestages$clearLastRecipe(UUID playerId) {
+        progressivestages$lastRecipeByPlayer.remove(playerId);
+    }
+
+    /**
+     * After the crafting result is set, store the matched recipe and check locks.
      */
     @Inject(method = "slotChangedCraftingGrid", at = @At("TAIL"))
     private static void progressivestages$onSlotChangedCraftingGrid(
@@ -45,6 +75,15 @@ public abstract class CraftingMenuMixin {
             RecipeHolder<CraftingRecipe> recipe,
             CallbackInfo ci
     ) {
+        // Always store the current recipe ID (even if locks aren't checked)
+        // so ResultSlotMixin has reliable data
+        if (player instanceof ServerPlayer serverPlayer && recipe != null) {
+            progressivestages$lastRecipeByPlayer.put(serverPlayer.getUUID(), recipe.id());
+        } else if (player instanceof ServerPlayer serverPlayer) {
+            // No recipe matched — clear the stored recipe
+            progressivestages$lastRecipeByPlayer.remove(serverPlayer.getUUID());
+        }
+
         if (!StageConfig.isHideLockRecipeOutput()) {
             return;
         }
