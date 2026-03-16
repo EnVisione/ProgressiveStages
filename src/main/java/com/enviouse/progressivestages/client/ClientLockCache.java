@@ -28,6 +28,9 @@ public class ClientLockCache {
     // Recipe ID -> Required Stage
     private static final Map<ResourceLocation, StageId> recipeLocks = new ConcurrentHashMap<>();
 
+    // Recipe-Item Locks: Output Item ID -> Required Stage (recipe_items = [...])
+    private static final Map<ResourceLocation, StageId> recipeItemLocks = new ConcurrentHashMap<>();
+
     // Creative bypass flag - when true, all lock checks return false (not locked)
     private static volatile boolean creativeBypass = false;
 
@@ -201,12 +204,44 @@ public class ClientLockCache {
     }
 
     /**
+     * Set all recipe-item locks (replaces existing).
+     * recipe_items = [...] locks ALL recipes whose output matches the item ID.
+     */
+    public static void setRecipeItemLocks(Map<ResourceLocation, StageId> locks) {
+        recipeItemLocks.clear();
+        recipeItemLocks.putAll(locks);
+
+        if (StageConfig.isDebugLogging()) {
+            LOGGER.info("[ProgressiveStages] Client received {} recipe-item locks", locks.size());
+        }
+    }
+
+    /**
+     * Get all recipe-item locks (for EMI recipe hiding by output item)
+     */
+    public static Map<ResourceLocation, StageId> getAllRecipeItemLocks() {
+        return Collections.unmodifiableMap(recipeItemLocks);
+    }
+
+    /**
+     * Get the required stage for a recipe-item lock (recipe_items = [...]).
+     * Returns empty if creative bypass is active.
+     */
+    public static Optional<StageId> getRequiredStageForRecipeByOutput(ResourceLocation itemId) {
+        if (creativeBypass) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(recipeItemLocks.get(itemId));
+    }
+
+    /**
      * Clear all cached data (on disconnect)
      */
     public static void clear() {
         itemLocks.clear();
         blockLocks.clear();
         recipeLocks.clear();
+        recipeItemLocks.clear();
         creativeBypass = false;
 
         if (StageConfig.isDebugLogging()) {
@@ -218,6 +253,6 @@ public class ClientLockCache {
      * Get total number of locks
      */
     public static int getTotalLockCount() {
-        return itemLocks.size() + blockLocks.size() + recipeLocks.size();
+        return itemLocks.size() + blockLocks.size() + recipeLocks.size() + recipeItemLocks.size();
     }
 }

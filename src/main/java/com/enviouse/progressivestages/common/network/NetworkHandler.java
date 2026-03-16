@@ -106,6 +106,7 @@ public class NetworkHandler {
     /**
      * Send lock registry sync to a player.
      * Sends ALL resolved item locks including name patterns, tags, and mod locks.
+     * Also sends recipe locks (by recipe ID) and recipe-item locks (by output item ID).
      */
     public static void sendLockSync(ServerPlayer player) {
         LockRegistry registry = LockRegistry.getInstance();
@@ -116,7 +117,19 @@ public class NetworkHandler {
             itemLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
         }
 
-        PacketDistributor.sendToPlayer(player, new LockSyncPayload(itemLocks));
+        // Get all recipe locks (recipes = [...] — by recipe ID)
+        List<LockEntry> recipeLocks = new ArrayList<>();
+        for (var entry : registry.getAllRecipeLocks().entrySet()) {
+            recipeLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
+        }
+
+        // Get all recipe-item locks (recipe_items = [...] — by output item ID)
+        List<LockEntry> recipeItemLocks = new ArrayList<>();
+        for (var entry : registry.getAllRecipeItemLocks().entrySet()) {
+            recipeItemLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
+        }
+
+        PacketDistributor.sendToPlayer(player, new LockSyncPayload(itemLocks, recipeLocks, recipeItemLocks));
     }
 
     /**
@@ -180,6 +193,20 @@ public class NetworkHandler {
                 itemLocks.put(entry.itemId(), StageId.fromResourceLocation(entry.stageId()));
             }
             ClientLockCache.setItemLocks(itemLocks);
+
+            // Sync recipe locks (recipes = [...] — by recipe ID)
+            Map<ResourceLocation, StageId> recipeLocks = new HashMap<>();
+            for (LockEntry entry : payload.recipeLocks()) {
+                recipeLocks.put(entry.itemId(), StageId.fromResourceLocation(entry.stageId()));
+            }
+            ClientLockCache.setRecipeLocks(recipeLocks);
+
+            // Sync recipe-item locks (recipe_items = [...] — by output item ID)
+            Map<ResourceLocation, StageId> recipeItemLocks = new HashMap<>();
+            for (LockEntry entry : payload.recipeItemLocks()) {
+                recipeItemLocks.put(entry.itemId(), StageId.fromResourceLocation(entry.stageId()));
+            }
+            ClientLockCache.setRecipeItemLocks(recipeItemLocks);
         });
     }
 
@@ -261,14 +288,19 @@ public class NetworkHandler {
     }
 
     /**
-     * Lock registry sync payload
+     * Lock registry sync payload.
+     * Includes item locks, recipe locks (by recipe ID), and recipe-item locks (by output item ID).
      */
-    public record LockSyncPayload(List<LockEntry> itemLocks) implements CustomPacketPayload {
+    public record LockSyncPayload(List<LockEntry> itemLocks, List<LockEntry> recipeLocks, List<LockEntry> recipeItemLocks) implements CustomPacketPayload {
         public static final Type<LockSyncPayload> TYPE = new Type<>(Constants.LOCK_SYNC_PACKET);
 
         public static final StreamCodec<FriendlyByteBuf, LockSyncPayload> STREAM_CODEC = StreamCodec.composite(
             LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
             LockSyncPayload::itemLocks,
+            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            LockSyncPayload::recipeLocks,
+            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            LockSyncPayload::recipeItemLocks,
             LockSyncPayload::new
         );
 
