@@ -242,7 +242,18 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
         Map<ResourceLocation, StageId> recipeLocks = lockReg.getAllRecipeLocks();
         Map<ResourceLocation, StageId> recipeItemLocks = lockReg.getAllRecipeItemLocks();
 
-        if (recipeLocks.isEmpty() && recipeItemLocks.isEmpty()) {
+        // Also check client cache for locks synced from server (dedicated server support)
+        Map<ResourceLocation, StageId> clientRecipeLocks = ClientLockCache.getAllRecipeLocks();
+        Map<ResourceLocation, StageId> clientRecipeItemLocks = ClientLockCache.getAllRecipeItemLocks();
+
+        // Merge server-side and client-cached locks
+        Map<ResourceLocation, StageId> allRecipeLocks = new java.util.HashMap<>(recipeLocks);
+        allRecipeLocks.putAll(clientRecipeLocks);
+
+        Map<ResourceLocation, StageId> allRecipeItemLocks = new java.util.HashMap<>(recipeItemLocks);
+        allRecipeItemLocks.putAll(clientRecipeItemLocks);
+
+        if (allRecipeLocks.isEmpty() && allRecipeItemLocks.isEmpty()) {
             return;
         }
 
@@ -250,15 +261,7 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
         // Build set of recipe IDs the player doesn't have the stage for
         Set<ResourceLocation> lockedRecipeIds = new java.util.HashSet<>();
-        for (var entry : recipeLocks.entrySet()) {
-            if (!playerStages.contains(entry.getValue())) {
-                lockedRecipeIds.add(entry.getKey());
-            }
-        }
-
-        // Also check client cache for recipe locks synced from server
-        Map<ResourceLocation, StageId> clientRecipeLocks = ClientLockCache.getAllRecipeLocks();
-        for (var entry : clientRecipeLocks.entrySet()) {
+        for (var entry : allRecipeLocks.entrySet()) {
             if (!playerStages.contains(entry.getValue())) {
                 lockedRecipeIds.add(entry.getKey());
             }
@@ -266,7 +269,7 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
         // Build set of locked output item IDs (recipe_items = [...] locks)
         Set<ResourceLocation> lockedRecipeItemIds = new java.util.HashSet<>();
-        for (var entry : recipeItemLocks.entrySet()) {
+        for (var entry : allRecipeItemLocks.entrySet()) {
             if (!playerStages.contains(entry.getValue())) {
                 lockedRecipeItemIds.add(entry.getKey());
             }
