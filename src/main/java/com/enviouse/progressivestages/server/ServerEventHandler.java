@@ -145,17 +145,26 @@ public class ServerEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             // Check if the crafted item is locked
             if (!ItemEnforcer.canHoldItem(player, event.getCrafting())) {
-                // We can't truly cancel the craft here, but the inventory scanner will drop it
-                // And the mixin will hide the output slot
+                // Remove the crafted item — the player shouldn't have it
+                event.getCrafting().setCount(0);
                 ItemEnforcer.notifyLocked(player, event.getCrafting().getItem());
                 return;
             }
 
             // Check recipe-only lock (item is not locked but the specific recipe is).
-            // CraftingMenuMixin already blocks the result slot server-side; this is a backstop
+            // ResultSlotMixin is the primary gate (blocks mayPickup), but this is a backstop
             // for crafting paths that bypass the mixin (e.g., recipe book, auto-crafters).
             if (!event.getCrafting().isEmpty() &&
                     event.getInventory() instanceof net.minecraft.world.inventory.CraftingContainer craftingContainer) {
+
+                // Check recipe_items lock (locks ALL recipes for this output item)
+                if (RecipeEnforcer.isOutputItemRecipeLocked(player, event.getCrafting().getItem())) {
+                    RecipeEnforcer.notifyOutputLocked(player, event.getCrafting().getItem());
+                    event.getCrafting().setCount(0);
+                    return;
+                }
+
+                // Check recipes lock (locks ONE specific recipe by ID)
                 var server = player.getServer();
                 if (server != null) {
                     server.getRecipeManager()
@@ -164,6 +173,7 @@ public class ServerEventHandler {
                         .ifPresent(recipe -> {
                             if (RecipeEnforcer.isRecipeLockedForPlayer(player, recipe.id())) {
                                 RecipeEnforcer.notifyLocked(player, recipe.id());
+                                event.getCrafting().setCount(0);
                             }
                         });
                 }
