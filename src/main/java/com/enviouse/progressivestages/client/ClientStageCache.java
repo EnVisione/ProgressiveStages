@@ -80,6 +80,7 @@ public class ClientStageCache {
         // Trigger EMI reload if stages changed
         if (changed) {
             triggerEmiReload();
+            triggerFtbQuestsRefresh();
         }
     }
 
@@ -98,6 +99,7 @@ public class ClientStageCache {
         // Trigger EMI reload if stage was added
         if (changed) {
             triggerEmiReload();
+            triggerFtbQuestsRefresh();
         }
     }
 
@@ -116,6 +118,7 @@ public class ClientStageCache {
         // Trigger EMI reload if stage was removed
         if (changed) {
             triggerEmiReload();
+            triggerFtbQuestsRefresh();
         }
     }
 
@@ -142,6 +145,36 @@ public class ClientStageCache {
             // JEI not installed - ignore
         } catch (Exception e) {
             // Ignore other errors
+        }
+    }
+
+    /**
+     * Trigger FTB Quests QuestScreen to refresh its chapter and quest panels.
+     * This is required because FTB Quests does not automatically re-evaluate
+     * chapter/quest visibility when stages change — the ChapterPanel only
+     * rebuilds its widget list when explicitly told to.
+     *
+     * Without this, chapters gated behind stages will hide correctly on first
+     * evaluation, but will NOT unhide when the player gains the required stage.
+     *
+     * Uses reflection because FTB Quests is a compileOnly dependency.
+     */
+    private static void triggerFtbQuestsRefresh() {
+        try {
+            var minecraft = net.minecraft.client.Minecraft.getInstance();
+            var screen = minecraft.screen;
+            if (screen == null) return;
+
+            Class<?> questScreenClass = Class.forName("dev.ftb.mods.ftbquests.client.gui.quests.QuestScreen");
+            if (questScreenClass.isInstance(screen)) {
+                LOGGER.debug("[ProgressiveStages] Refreshing FTB Quests screen after stage change");
+                questScreenClass.getMethod("refreshChapterPanel").invoke(screen);
+                questScreenClass.getMethod("refreshQuestPanel").invoke(screen);
+            }
+        } catch (ClassNotFoundException e) {
+            // FTB Quests not installed - expected, ignore silently
+        } catch (Exception e) {
+            // Ignore errors (screen might be closing, reflection issues, etc.)
         }
     }
 
