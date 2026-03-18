@@ -4,6 +4,7 @@ import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
+import com.enviouse.progressivestages.common.util.CraftingRecipeTracker;
 import com.enviouse.progressivestages.server.enforcement.ItemEnforcer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -91,7 +92,7 @@ public abstract class ResultSlotMixin extends Slot {
         // 3. Check recipe ID lock (recipes = [...]) — uses stored recipe from CraftingMenuMixin
         //    CraftingMenuMixin stores the matched recipe ID when slotChangedCraftingGrid fires,
         //    so we don't need an unreliable runtime recipe lookup here.
-        ResourceLocation lastRecipeId = CraftingMenuMixin.progressivestages$getLastRecipe(serverPlayer.getUUID());
+        ResourceLocation lastRecipeId = CraftingRecipeTracker.getLastRecipe(serverPlayer.getUUID());
         if (lastRecipeId != null) {
             Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(lastRecipeId);
             if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
