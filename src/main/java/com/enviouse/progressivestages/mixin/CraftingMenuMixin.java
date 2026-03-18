@@ -59,46 +59,48 @@ public abstract class CraftingMenuMixin {
             CraftingRecipeTracker.clearLastRecipe(serverPlayer.getUUID());
         }
 
-        if (!StageConfig.isHideLockRecipeOutput()) {
-            return;
-        }
-
         if (!(player instanceof ServerPlayer serverPlayer)) {
             return;
         }
 
-        // Check if the result item is locked
+        // Creative bypass — don't interfere with creative players
+        if (StageConfig.isAllowCreativeBypass() && serverPlayer.isCreative()) {
+            return;
+        }
+
         ItemStack result = resultSlots.getItem(0);
         if (result.isEmpty()) {
             return;
         }
 
-        // Check if the recipe output item is locked (items = [...] lock)
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStage(result.getItem());
-        if (requiredStage.isPresent()) {
-            if (!StageManager.getInstance().hasStage(serverPlayer, requiredStage.get())) {
-                // Clear the result slot - player hasn't unlocked this
-                resultSlots.setItem(0, ItemStack.EMPTY);
-                return;
-            }
-        }
+        LockRegistry registry = LockRegistry.getInstance();
+        StageManager stageManager = StageManager.getInstance();
 
-        // Check recipe-only item lock (recipe_items = [...] — locks crafting but not item itself)
-        Optional<StageId> recipeItemStage = LockRegistry.getInstance().getRequiredStageForRecipeByOutput(result.getItem());
-        if (recipeItemStage.isPresent()) {
-            if (!StageManager.getInstance().hasStage(serverPlayer, recipeItemStage.get())) {
-                resultSlots.setItem(0, ItemStack.EMPTY);
-                return;
-            }
-        }
-
-        // Also check if the recipe itself is locked
+        // ── Recipe ID lock (recipes = [...]) ──
+        // ALWAYS enforced — clearing the result is the only reliable way to prevent
+        // crafting. If the output is empty, inputs stay in the grid, nothing is voided.
         if (recipe != null) {
-            Optional<StageId> recipeRequired = LockRegistry.getInstance().getRequiredStageForRecipe(recipe.id());
-            if (recipeRequired.isPresent()) {
-                if (!StageManager.getInstance().hasStage(serverPlayer, recipeRequired.get())) {
-                    resultSlots.setItem(0, ItemStack.EMPTY);
-                }
+            Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(recipe.id());
+            if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
+                resultSlots.setItem(0, ItemStack.EMPTY);
+                return;
+            }
+        }
+
+        // ── Recipe-item lock (recipe_items = [...]) ──
+        // ALWAYS enforced — locks ALL recipes that produce this output item.
+        Optional<StageId> recipeItemStage = registry.getRequiredStageForRecipeByOutput(result.getItem());
+        if (recipeItemStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeItemStage.get())) {
+            resultSlots.setItem(0, ItemStack.EMPTY);
+            return;
+        }
+
+        // ── Item lock (items = [...]) hiding output ──
+        // Only hides the crafting output if the config option is enabled.
+        if (StageConfig.isHideLockRecipeOutput()) {
+            Optional<StageId> requiredStage = registry.getRequiredStage(result.getItem());
+            if (requiredStage.isPresent() && !stageManager.hasStage(serverPlayer, requiredStage.get())) {
+                resultSlots.setItem(0, ItemStack.EMPTY);
             }
         }
     }
