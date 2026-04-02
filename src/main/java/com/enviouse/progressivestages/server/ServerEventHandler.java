@@ -315,13 +315,33 @@ public class ServerEventHandler {
 
     // ============ Dimension Travel Enforcement ============
 
+    /**
+     * Primary gate: cancels dimension travel BEFORE it happens.
+     * Works for all teleportation that goes through Entity.changeDimension().
+     */
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onDimensionTravel(net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
+            // Always save the player's current position so the safety net can use it
+            DimensionEnforcer.savePositionBeforeTravel(player);
+
             if (!DimensionEnforcer.canTravelToDimension(player, event.getDimension())) {
                 event.setCanceled(true);
                 DimensionEnforcer.notifyLocked(player, event.getDimension().location());
             }
+        }
+    }
+
+    /**
+     * Safety net: catches dimension changes that bypassed the pre-travel event.
+     * Some mods (e.g., Twilight Forest) use custom teleportation mechanisms that
+     * may not fire EntityTravelToDimensionEvent. This handler detects the player
+     * is now in a locked dimension and teleports them back.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onDimensionChanged(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            DimensionEnforcer.handlePostTravelSafetyNet(player, event.getFrom(), event.getTo());
         }
     }
 
@@ -366,6 +386,7 @@ public class ServerEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             lastScanTime.remove(player.getUUID());
             ItemEnforcer.clearCooldowns(player.getUUID());
+            DimensionEnforcer.cleanupPlayer(player.getUUID());
         }
     }
 }
