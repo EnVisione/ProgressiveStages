@@ -89,10 +89,16 @@ public abstract class ResultSlotMixin extends Slot {
             return;
         }
 
-        // 3. Check recipe ID lock (recipes = [...]) — uses stored recipe from CraftingMenuMixin
-        //    CraftingMenuMixin stores the matched recipe ID when slotChangedCraftingGrid fires,
-        //    so we don't need an unreliable runtime recipe lookup here.
+        // 3. Check recipe ID lock (recipes = [...]) — uses stored recipe from CraftingMenuMixin.
+        //    Primary source: CraftingRecipeTracker (populated by CraftingMenuMixin).
+        //    Fallback: ResultContainer.getRecipeUsed() — vanilla stores the matched recipe here.
         ResourceLocation lastRecipeId = CraftingRecipeTracker.getLastRecipe(serverPlayer.getUUID());
+        if (lastRecipeId == null && this.container instanceof net.minecraft.world.inventory.RecipeCraftingHolder holder) {
+            var storedRecipe = holder.getRecipeUsed();
+            if (storedRecipe != null) {
+                lastRecipeId = storedRecipe.id();
+            }
+        }
         if (lastRecipeId != null) {
             Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(lastRecipeId);
             if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {

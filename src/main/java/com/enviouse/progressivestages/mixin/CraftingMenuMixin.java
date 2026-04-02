@@ -13,10 +13,8 @@ import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.ResultContainer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
-import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -33,9 +31,15 @@ import java.util.Optional;
  * so ResultSlotMixin can reliably check recipe ID locks without a runtime
  * recipe lookup.
  *
- * NOTE: The 'recipe' parameter of slotChangedCraftingGrid is just a cache hint
- * and is null during normal slotsChanged() calls. We always perform our own
- * recipe lookup to get the actual matched recipe ID.
+ * <p>Recipe resolution strategy (v1.4):
+ * <ol>
+ *   <li>Use the {@code recipe} parameter if non-null (passed from recipe book via
+ *       {@code finishPlacingRecipe}).</li>
+ *   <li>Fall back to {@link ResultContainer#getRecipeUsed()} — vanilla stores the
+ *       matched recipe here during {@code slotChangedCraftingGrid}, so by TAIL it
+ *       is always populated. This is the most reliable source and fixes recipe ID
+ *       lock failures with modded recipes (e.g., KubeJS).</li>
+ * </ol>
  */
 @Mixin(CraftingMenu.class)
 public abstract class CraftingMenuMixin {
@@ -62,24 +66,25 @@ public abstract class CraftingMenuMixin {
         }
 
         // ── Resolve the actual matched recipe ──
-        // The 'recipe' parameter is only a cache hint and is null when called from
-        // CraftingMenu.slotsChanged() (the normal path). We must look up the actual
-        // matched recipe ourselves so recipe ID locks work correctly.
-        RecipeHolder<CraftingRecipe> matchedRecipe = recipe;
-        if (matchedRecipe == null) {
-            ItemStack result = resultSlots.getItem(0);
-            if (!result.isEmpty() && level.getServer() != null) {
-                CraftingInput craftInput = craftSlots.asCraftInput();
-                Optional<RecipeHolder<CraftingRecipe>> looked =
-                        level.getServer().getRecipeManager()
-                                .getRecipeFor(RecipeType.CRAFTING, craftInput, level);
-                matchedRecipe = looked.orElse(null);
+        // Strategy: use the 'recipe' parameter if provided (recipe book path), then
+        // fall back to resultSlots.getRecipeUsed() which vanilla already populated
+        // during this same method call. This is more reliable than doing a separate
+        // getRecipeFor() lookup, which can fail for modded recipe types.
+        ResourceLocation matchedRecipeId = null;
+        if (recipe != null) {
+            matchedRecipeId = recipe.id();
+        } else {
+            // Vanilla stores the matched recipe in ResultContainer.recipeUsed during
+            // slotChangedCraftingGrid — by TAIL it's always set if a recipe matched.
+            RecipeHolder<?> storedRecipe = resultSlots.getRecipeUsed();
+            if (storedRecipe != null) {
+                matchedRecipeId = storedRecipe.id();
             }
         }
 
         // Always store the current recipe ID so ResultSlotMixin has reliable data
-        if (matchedRecipe != null) {
-            CraftingRecipeTracker.setLastRecipe(serverPlayer.getUUID(), matchedRecipe.id());
+        if (matchedRecipeId != null) {
+            CraftingRecipeTracker.setLastRecipe(serverPlayer.getUUID(), matchedRecipeId);
         } else {
             CraftingRecipeTracker.clearLastRecipe(serverPlayer.getUUID());
         }
@@ -100,8 +105,8 @@ public abstract class CraftingMenuMixin {
         // ── Recipe ID lock (recipes = [...]) ──
         // ALWAYS enforced — clearing the result is the only reliable way to prevent
         // crafting. If the output is empty, inputs stay in the grid, nothing is voided.
-        if (matchedRecipe != null) {
-            Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(matchedRecipe.id());
+        if (matchedRecipeId != null) {
+            Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(matchedRecipeId);
             if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
                 clearResultAndSync(menu, resultSlots, serverPlayer);
                 return;

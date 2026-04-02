@@ -164,18 +164,25 @@ public class ServerEventHandler {
                     return;
                 }
 
-                // Check recipes lock (locks ONE specific recipe by ID)
-                var server = player.getServer();
-                if (server != null) {
-                    server.getRecipeManager()
-                        .getRecipeFor(net.minecraft.world.item.crafting.RecipeType.CRAFTING,
-                                craftingContainer.asCraftInput(), player.level())
-                        .ifPresent(recipe -> {
-                            if (RecipeEnforcer.isRecipeLockedForPlayer(player, recipe.id())) {
-                                RecipeEnforcer.notifyLocked(player, recipe.id());
-                                event.getCrafting().setCount(0);
-                            }
-                        });
+                // Check recipes lock (locks ONE specific recipe by ID).
+                // Primary: use the recipe ID stored by CraftingMenuMixin (most reliable).
+                // Fallback: do a recipe lookup (for paths that bypass the mixin).
+                net.minecraft.resources.ResourceLocation recipeId =
+                        com.enviouse.progressivestages.common.util.CraftingRecipeTracker.getLastRecipe(player.getUUID());
+                if (recipeId == null) {
+                    var server = player.getServer();
+                    if (server != null) {
+                        var found = server.getRecipeManager()
+                                .getRecipeFor(net.minecraft.world.item.crafting.RecipeType.CRAFTING,
+                                        craftingContainer.asCraftInput(), player.level());
+                        if (found.isPresent()) {
+                            recipeId = found.get().id();
+                        }
+                    }
+                }
+                if (recipeId != null && RecipeEnforcer.isRecipeLockedForPlayer(player, recipeId)) {
+                    RecipeEnforcer.notifyLocked(player, recipeId);
+                    event.getCrafting().setCount(0);
                 }
             }
         }
