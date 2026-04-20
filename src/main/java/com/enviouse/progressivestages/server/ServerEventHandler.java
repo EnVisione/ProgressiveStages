@@ -35,6 +35,7 @@ import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Main event handler for server-side events
@@ -237,7 +238,9 @@ public class ServerEventHandler {
         }
     }
 
-    // ============ Inventory Scanning ============
+    // ============ Inventory Scanning & Dimension Tick Check ============
+
+    private static final Map<UUID, Long> lastDimensionCheck = new ConcurrentHashMap<>();
 
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
@@ -245,13 +248,51 @@ public class ServerEventHandler {
             return;
         }
 
+        UUID playerId = player.getUUID();
+        long currentTime = player.level().getGameTime();
+
+        // ── Tick-based dimension enforcement (safety net for mods that bypass both events) ──
+        if (StageConfig.isBlockDimensionTravel()) {
+            Long lastDimCheck = lastDimensionCheck.get(playerId);
+            if (lastDimCheck == null || currentTime - lastDimCheck >= 20) { // Check every 20 ticks (1 second)
+                lastDimensionCheck.put(playerId, currentTime);
+
+                if (!(StageConfig.isAllowCreativeBypass() && player.isCreative())) {
+                    net.minecraft.resources.ResourceLocation currentDim = player.level().dimension().location();
+                    if (DimensionEnforcer.isDimensionLockedForPlayer(player, currentDim)) {
+                        // Player is in a locked dimension — find a safe dimension to send them to
+                        // Try overworld first, then any unlocked dimension
+                        net.minecraft.server.level.ServerLevel targetLevel = player.server.overworld();
+                        net.minecraft.resources.ResourceLocation overworldId = targetLevel.dimension().location();
+
+                        if (DimensionEnforcer.isDimensionLockedForPlayer(player, overworldId)) {
+                            // Overworld is also locked — try to find any unlocked dimension
+                            for (net.minecraft.server.level.ServerLevel level : player.server.getAllLevels()) {
+                                if (!DimensionEnforcer.isDimensionLockedForPlayer(player, level.dimension().location())) {
+                                    targetLevel = level;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (!DimensionEnforcer.isDimensionLockedForPlayer(player, targetLevel.dimension().location())) {
+                            net.minecraft.core.BlockPos spawn = targetLevel.getSharedSpawnPos();
+                            player.teleportTo(targetLevel,
+                                    spawn.getX() + 0.5, spawn.getY() + 1.0, spawn.getZ() + 0.5,
+                                    java.util.Set.of(), player.getYRot(), player.getXRot());
+                            DimensionEnforcer.notifyLocked(player, currentDim);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Inventory scanning ──
         int scanFrequency = StageConfig.getInventoryScanFrequency();
         if (scanFrequency <= 0) {
             return;
         }
 
-        UUID playerId = player.getUUID();
-        long currentTime = player.level().getGameTime();
         Long lastScan = lastScanTime.get(playerId);
 
         if (lastScan == null || currentTime - lastScan >= scanFrequency) {
@@ -392,6 +433,7 @@ public class ServerEventHandler {
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             lastScanTime.remove(player.getUUID());
+            lastDimensionCheck.remove(player.getUUID());
             ItemEnforcer.clearCooldowns(player.getUUID());
             DimensionEnforcer.cleanupPlayer(player.getUUID());
         }
