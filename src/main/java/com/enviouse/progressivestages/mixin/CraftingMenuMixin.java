@@ -85,6 +85,11 @@ public abstract class CraftingMenuMixin {
         // Always store the current recipe ID so ResultSlotMixin has reliable data
         if (matchedRecipeId != null) {
             CraftingRecipeTracker.setLastRecipe(serverPlayer.getUUID(), matchedRecipeId);
+            if (StageConfig.isDebugLogging()) {
+                com.mojang.logging.LogUtils.getLogger().info(
+                        "[ProgressiveStages] CraftingMenuMixin: Matched recipe ID = {} for player {}",
+                        matchedRecipeId, serverPlayer.getName().getString());
+            }
         } else {
             CraftingRecipeTracker.clearLastRecipe(serverPlayer.getUUID());
         }
@@ -108,6 +113,11 @@ public abstract class CraftingMenuMixin {
         if (matchedRecipeId != null) {
             Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(matchedRecipeId);
             if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
+                if (StageConfig.isDebugLogging()) {
+                    com.mojang.logging.LogUtils.getLogger().info(
+                            "[ProgressiveStages] CraftingMenuMixin: Blocking recipe {} (requires stage {})",
+                            matchedRecipeId, recipeStage.get());
+                }
                 clearResultAndSync(menu, resultSlots, serverPlayer);
                 return;
             }
