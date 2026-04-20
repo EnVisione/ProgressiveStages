@@ -114,6 +114,20 @@ public class StageConfig {
                  "If true, players cannot attack entity types locked behind a stage")
         .define("enforcement.block_entity_attack", true);
 
+    private static final ModConfigSpec.BooleanValue BLOCK_MOB_SPAWNS = BUILDER
+        .comment("Gate mob spawns behind stages",
+                 "If true, mobs listed in spawn_entities / spawn_entity_tags / spawn_entity_mods",
+                 "will be prevented from spawning in the world until the nearest player has the required stage.",
+                 "Useful for 'world responds to progression' setups (e.g., Born In Chaos mobs only spawn after a quest).")
+        .define("enforcement.block_mob_spawns", true);
+
+    private static final ModConfigSpec.IntValue MOB_SPAWN_CHECK_RADIUS = BUILDER
+        .comment("Radius (in blocks) to search for the nearest player when gating mob spawns",
+                 "If no player is within this radius of the spawn, the spawn is ALLOWED (no one will see it).",
+                 "If a player is within range, their stages determine whether the spawn is allowed.",
+                 "Default 128 blocks (~8 chunks, standard mob tracking range).")
+        .defineInRange("enforcement.mob_spawn_check_radius", 128, 16, 512);
+
     private static final ModConfigSpec.BooleanValue ALLOW_CREATIVE_BYPASS = BUILDER
         .comment("Allow creative mode players to bypass stage locks",
                  "If true, players in creative mode can use/place locked items",
@@ -394,6 +408,8 @@ public class StageConfig {
     private static boolean blockLockedMods;
     private static boolean blockInteractions;
     private static boolean blockEntityAttack;
+    private static boolean blockMobSpawns;
+    private static int mobSpawnCheckRadius;
     private static boolean allowCreativeBypass;
     private static boolean maskLockedItemNames;
     private static int notificationCooldown;
@@ -474,6 +490,8 @@ public class StageConfig {
         blockLockedMods = BLOCK_LOCKED_MODS.get();
         blockInteractions = BLOCK_INTERACTIONS.get();
         blockEntityAttack = BLOCK_ENTITY_ATTACK.get();
+        blockMobSpawns = BLOCK_MOB_SPAWNS.get();
+        mobSpawnCheckRadius = MOB_SPAWN_CHECK_RADIUS.get();
         allowCreativeBypass = ALLOW_CREATIVE_BYPASS.get();
         maskLockedItemNames = MASK_LOCKED_ITEM_NAMES.get();
         notificationCooldown = NOTIFICATION_COOLDOWN.get();
@@ -572,6 +590,8 @@ public class StageConfig {
     public static boolean isBlockLockedMods() { return blockLockedMods; }
     public static boolean isBlockInteractions() { return blockInteractions; }
     public static boolean isBlockEntityAttack() { return blockEntityAttack; }
+    public static boolean isBlockMobSpawns() { return blockMobSpawns; }
+    public static int getMobSpawnCheckRadius() { return mobSpawnCheckRadius; }
     public static boolean isAllowCreativeBypass() { return allowCreativeBypass; }
     public static boolean isMaskLockedItemNames() { return maskLockedItemNames; }
     public static int getNotificationCooldown() { return notificationCooldown; }

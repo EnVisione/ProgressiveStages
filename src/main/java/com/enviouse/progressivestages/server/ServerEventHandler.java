@@ -25,6 +25,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
+import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -390,6 +391,24 @@ public class ServerEventHandler {
     public static void onDimensionChanged(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             DimensionEnforcer.handlePostTravelSafetyNet(player, event.getFrom(), event.getTo());
+        }
+    }
+
+    // ============ Mob Spawn Gating (v1.5) ============
+
+    /**
+     * Gates mob spawns behind stages. Uses FinalizeSpawnEvent which is fired for
+     * natural spawns, spawners, spawn eggs, and most modded spawn paths.
+     *
+     * <p>We cancel via {@code setSpawnCancelled(true)} instead of {@code setCanceled(true)}
+     * because the latter only skips {@code finalizeSpawn} — the entity would still be added
+     * to the world. {@code setSpawnCancelled} is the correct API for preventing the spawn.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onFinalizeSpawn(FinalizeSpawnEvent event) {
+        if (MobSpawnEnforcer.shouldCancelSpawn(event.getEntity(), event.getLevel(),
+                event.getX(), event.getY(), event.getZ())) {
+            event.setSpawnCancelled(true);
         }
     }
 

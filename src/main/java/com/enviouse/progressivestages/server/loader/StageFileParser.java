@@ -272,6 +272,11 @@ public class StageFileParser {
         builder.entityTags(getStringList(locksSection, "entity_tags"));
         builder.entityMods(getStringList(locksSection, "entity_mods"));
 
+        // Parse mob spawn gating (v1.5)
+        builder.spawnEntities(getStringList(locksSection, "spawn_entities"));
+        builder.spawnEntityTags(getStringList(locksSection, "spawn_entity_tags"));
+        builder.spawnEntityMods(getStringList(locksSection, "spawn_entity_mods"));
+
         // Parse unlocked_items (v1.3 whitelist exceptions)
         builder.unlockedItems(getStringList(locksSection, "unlocked_items"));
 

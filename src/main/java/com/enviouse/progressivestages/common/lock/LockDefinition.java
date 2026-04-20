@@ -39,6 +39,11 @@ public class LockDefinition {
     private final List<String> entityTags;
     private final List<String> entityMods;
 
+    // v1.5: Mob spawn gating — independent from attack/interaction entity locks
+    private final List<String> spawnEntities;
+    private final List<String> spawnEntityTags;
+    private final List<String> spawnEntityMods;
+
     // Per-stage enforcement exceptions (items/tags/mods exempt from specific enforcement types)
     private final List<String> allowedUse;
     private final List<String> allowedPickup;
@@ -70,6 +75,9 @@ public class LockDefinition {
         this.entities = Collections.unmodifiableList(new ArrayList<>(builder.entities));
         this.entityTags = Collections.unmodifiableList(new ArrayList<>(builder.entityTags));
         this.entityMods = Collections.unmodifiableList(new ArrayList<>(builder.entityMods));
+        this.spawnEntities = Collections.unmodifiableList(new ArrayList<>(builder.spawnEntities));
+        this.spawnEntityTags = Collections.unmodifiableList(new ArrayList<>(builder.spawnEntityTags));
+        this.spawnEntityMods = Collections.unmodifiableList(new ArrayList<>(builder.spawnEntityMods));
         this.allowedUse = Collections.unmodifiableList(new ArrayList<>(builder.allowedUse));
         this.allowedPickup = Collections.unmodifiableList(new ArrayList<>(builder.allowedPickup));
         this.allowedHotbar = Collections.unmodifiableList(new ArrayList<>(builder.allowedHotbar));
@@ -222,6 +230,23 @@ public class LockDefinition {
         return entityMods;
     }
 
+    // ============ v1.5: Mob spawn gating ============
+
+    /**
+     * Get specific entity IDs whose spawns are gated (independent of attack/interaction locks).
+     */
+    public List<String> getSpawnEntities() { return spawnEntities; }
+
+    /**
+     * Get entity tags whose spawns are gated.
+     */
+    public List<String> getSpawnEntityTags() { return spawnEntityTags; }
+
+    /**
+     * Get mod IDs whose entity spawns are gated.
+     */
+    public List<String> getSpawnEntityMods() { return spawnEntityMods; }
+
     // ============ Per-stage enforcement exceptions ============
 
     /**
@@ -288,6 +313,9 @@ public class LockDefinition {
         private List<String> entities = new ArrayList<>();
         private List<String> entityTags = new ArrayList<>();
         private List<String> entityMods = new ArrayList<>();
+        private List<String> spawnEntities = new ArrayList<>();
+        private List<String> spawnEntityTags = new ArrayList<>();
+        private List<String> spawnEntityMods = new ArrayList<>();
         private List<String> allowedUse = new ArrayList<>();
         private List<String> allowedPickup = new ArrayList<>();
         private List<String> allowedHotbar = new ArrayList<>();
@@ -461,6 +489,23 @@ public class LockDefinition {
 
         public Builder addEntityMod(String mod) {
             this.entityMods.add(mod);
+            return this;
+        }
+
+        // ============ v1.5: Mob spawn gating ============
+
+        public Builder spawnEntities(List<String> spawnEntities) {
+            this.spawnEntities = spawnEntities != null ? spawnEntities : new ArrayList<>();
+            return this;
+        }
+
+        public Builder spawnEntityTags(List<String> spawnEntityTags) {
+            this.spawnEntityTags = spawnEntityTags != null ? spawnEntityTags : new ArrayList<>();
+            return this;
+        }
+
+        public Builder spawnEntityMods(List<String> spawnEntityMods) {
+            this.spawnEntityMods = spawnEntityMods != null ? spawnEntityMods : new ArrayList<>();
             return this;
         }
 

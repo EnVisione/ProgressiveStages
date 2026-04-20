@@ -79,6 +79,11 @@ public class LockRegistry {
     // Entity Mod ID -> Required Stage (lock all entities from a mod)
     private final Map<String, StageId> entityModLocks = new ConcurrentHashMap<>();
 
+    // v1.5: Mob spawn gating — independent from attack/interaction entity locks
+    private final Map<ResourceLocation, StageId> spawnEntityLocks = new ConcurrentHashMap<>();
+    private final Map<ResourceLocation, StageId> spawnEntityTagLocks = new ConcurrentHashMap<>();
+    private final Map<String, StageId> spawnEntityModLocks = new ConcurrentHashMap<>();
+
     // v1.3: Global whitelist of items that are ALWAYS unlocked (bypass all lock checks)
     private final Set<ResourceLocation> unlockedItems = ConcurrentHashMap.newKeySet();
 
@@ -136,6 +141,9 @@ public class LockRegistry {
         entityLocks.clear();
         entityTagLocks.clear();
         entityModLocks.clear();
+        spawnEntityLocks.clear();
+        spawnEntityTagLocks.clear();
+        spawnEntityModLocks.clear();
         unlockedItems.clear();
         unlockedBlocks.clear();
         unlockedEntities.clear();
@@ -256,6 +264,22 @@ public class LockRegistry {
         // Register entity mod locks (lock all entities from a mod)
         for (String modId : locks.getEntityMods()) {
             registerEntityModLock(modId, stageId);
+        }
+
+        // v1.5: Register mob spawn gating
+        for (String entityId : locks.getSpawnEntities()) {
+            ResourceLocation rl = parseResourceLocation(entityId);
+            if (rl != null) spawnEntityLocks.put(rl, stageId);
+            else LOGGER.warn("Invalid spawn_entities ID in stage {}: {}", stageId, entityId);
+        }
+        for (String tagId : locks.getSpawnEntityTags()) {
+            String cleanTag = tagId.startsWith("#") ? tagId.substring(1) : tagId;
+            ResourceLocation rl = parseResourceLocation(cleanTag);
+            if (rl != null) spawnEntityTagLocks.put(rl, stageId);
+            else LOGGER.warn("Invalid spawn_entity_tags value in stage {}: {}", stageId, tagId);
+        }
+        for (String modId : locks.getSpawnEntityMods()) {
+            spawnEntityModLocks.put(modId.toLowerCase(), stageId);
         }
 
         // Register unlocked items (v1.3 whitelist exceptions)
@@ -814,6 +838,50 @@ public class LockRegistry {
      */
     public boolean isEntityLocked(net.minecraft.world.entity.EntityType<?> entityType) {
         return getRequiredStageForEntity(entityType).isPresent();
+    }
+
+    /**
+     * v1.5: Get the required stage for a mob spawn.
+     *
+     * <p>Checks (in order): direct spawn_entities → spawn_entity_tags → spawn_entity_mods.
+     * Does NOT fall back to the generic entity/mod locks — spawn gating is a separate,
+     * opt-in system so users can lock spawns independently from attack/interaction.
+     *
+     * <p>Also respects unlockedEntities whitelist.
+     */
+    public Optional<StageId> getRequiredStageForSpawn(net.minecraft.world.entity.EntityType<?> entityType) {
+        ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
+        if (entityId == null) {
+            return Optional.empty();
+        }
+
+        // Whitelist bypass
+        if (unlockedEntities.contains(entityId)) {
+            return Optional.empty();
+        }
+
+        // Direct spawn lock
+        StageId direct = spawnEntityLocks.get(entityId);
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+
+        // Spawn entity tag
+        for (Map.Entry<ResourceLocation, StageId> entry : spawnEntityTagLocks.entrySet()) {
+            TagKey<net.minecraft.world.entity.EntityType<?>> tagKey = TagKey.create(Registries.ENTITY_TYPE, entry.getKey());
+            if (entityType.builtInRegistryHolder().is(tagKey)) {
+                return Optional.of(entry.getValue());
+            }
+        }
+
+        // Spawn entity mod lock
+        String modId = entityId.getNamespace().toLowerCase();
+        StageId modLock = spawnEntityModLocks.get(modId);
+        if (modLock != null) {
+            return Optional.of(modLock);
+        }
+
+        return Optional.empty();
     }
 
     /**
