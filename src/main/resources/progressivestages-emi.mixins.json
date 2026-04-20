@@ -1,14 +1,13 @@
 {
-  "required": true,
+  "required": false,
   "minVersion": "0.8",
   "package": "com.enviouse.progressivestages.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [
-    "CraftingMenuMixin",
-    "AbstractContainerMenuMixin",
-    "ResultSlotMixin"
+  "mixins": [],
+  "client": [
+    "client.EmiStackWidgetMixin",
+    "client.EmiScreenManagerMixin"
   ],
-  "client": [],
   "injectors": {
     "defaultRequire": 0
   },
@@ -16,3 +15,4 @@
     "requireAnnotations": true
   }
 }
+

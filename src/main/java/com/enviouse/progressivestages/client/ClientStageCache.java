@@ -136,7 +136,13 @@ public class ClientStageCache {
         LOGGER.info("[ProgressiveStages] Stage change detected, scheduling EMI/JEI reload...");
 
         // Trigger EMI reload (it will handle its own thread scheduling)
-        ProgressiveStagesEMIPlugin.triggerEmiReload();
+        try {
+            ProgressiveStagesEMIPlugin.triggerEmiReload();
+        } catch (NoClassDefFoundError e) {
+            // EMI not installed - ignore
+        } catch (Exception e) {
+            // Ignore other errors
+        }
 
         // Trigger JEI refresh
         try {

@@ -42,6 +42,10 @@ config = "${mod_id}.mixins.json"
 [[mixins]]
 config = "${mod_id}-ftbquests.mixins.json"
 
+# EMI mixins (optional - only loaded if EMI is present)
+[[mixins]]
+config = "${mod_id}-emi.mixins.json"
+
 # The [[accessTransformers]] block allows you to declare where your AT file is.
 # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg
 #[[accessTransformers]]
@@ -76,13 +80,21 @@ versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
 
-# EMI dependency
+# EMI dependency (optional)
 [[dependencies."${mod_id}"]]
 modId = "emi"
-type = "required"
+type = "optional"
 versionRange = "[1.1,)"
 ordering = "AFTER"
-side = "BOTH"
+side = "CLIENT"
+
+# JEI dependency (optional)
+[[dependencies."${mod_id}"]]
+modId = "jei"
+type = "optional"
+versionRange = "[19.0,)"
+ordering = "AFTER"
+side = "CLIENT"
 
 # FTB Teams dependency
 [[dependencies."${mod_id}"]]

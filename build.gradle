@@ -96,8 +96,8 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 
 dependencies {
-    // EMI (required) - from libs folder
-    implementation files("libs/emi-1.1.22+1.21.1+neoforge.jar")
+    // EMI (optional) - from libs folder
+    compileOnly files("libs/emi-1.1.22+1.21.1+neoforge.jar")
 
     // JEI (optional) - from libs folder
     compileOnly files("libs/jei-1.21.1-neoforge-19.27.0.340.jar")
