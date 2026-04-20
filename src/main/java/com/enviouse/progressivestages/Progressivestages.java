@@ -1102,6 +1102,42 @@ public class Progressivestages {
             ]
             
             # =============================================================================
+            # SPAWN GATING (v1.4) - Gate mob spawns behind this stage
+            # =============================================================================
+            # Mobs listed here will NOT spawn anywhere near players who haven't unlocked
+            # this stage. The world literally "responds" to player progression.
+            #
+            # How it works:
+            #   - On every mob spawn (natural, spawner, spawn egg, modded paths), the mod
+            #     finds the nearest player within mob_spawn_check_radius (default 128 blocks).
+            #   - If that player's team has this stage → spawn is allowed.
+            #   - If not → spawn is cancelled. No creepers until the Diamond Age!
+            #   - If no player is in range, the spawn is allowed (no one is watching).
+            #
+            # INDEPENDENT from the entities/entity_tags/entity_mods locks above — those
+            # block attack/interaction. spawn_* locks control whether the mob APPEARS at all.
+            #
+            # Great for:
+            #   - Gating harder mob mods (Born In Chaos, Alex's Mobs, etc.)
+            #   - "World responds to progression" difficulty ramps
+            #   - Keeping early-game areas peaceful until players are equipped
+            # =============================================================================
+            spawn_entities = [
+                # Creepers only start spawning after players reach the Diamond Age
+                "minecraft:creeper",
+            ]
+            
+            spawn_entity_tags = [
+                # Example: lock all raiders (pillagers, vindicators, etc.) until diamond
+                # "#minecraft:raiders"
+            ]
+            
+            spawn_entity_mods = [
+                # Example: lock ALL Born In Chaos mobs until this stage
+                # "borninchaos_v1"
+            ]
+            
+            # =============================================================================
             # INTERACTIONS - Lock specific player-world interactions
             # =============================================================================
             # Lock specific combinations of "player does X to Y" actions.
