@@ -6,6 +6,7 @@ import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
+import com.enviouse.progressivestages.common.util.StageDisclosure;
 import com.enviouse.progressivestages.common.util.TextUtil;
 import com.mojang.logging.LogUtils;
 import net.minecraft.network.chat.Component;
@@ -43,6 +44,11 @@ public class ItemEnforcer {
             return true;
         }
 
+        // Spectators always bypass — they cannot interact regardless.
+        if (player.isSpectator()) {
+            return true;
+        }
+
         // Creative bypass
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
             return true;
@@ -66,6 +72,11 @@ public class ItemEnforcer {
      */
     public static boolean canPickupItem(ServerPlayer player, ItemStack stack) {
         if (!StageConfig.isBlockItemPickup()) {
+            return true;
+        }
+
+        // Spectators always bypass.
+        if (player.isSpectator()) {
             return true;
         }
 
@@ -95,6 +106,11 @@ public class ItemEnforcer {
             return true;
         }
 
+        // Spectators always bypass.
+        if (player.isSpectator()) {
+            return true;
+        }
+
         // Creative bypass
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
             return true;
@@ -113,22 +129,19 @@ public class ItemEnforcer {
     }
 
     /**
-     * Check if an item is locked for a specific player
+     * Check if an item is locked for a specific player.
+     * v2.0: multi-stage aware — blocked when ANY gating stage is missing.
      */
     public static boolean isItemLockedForPlayer(ServerPlayer player, Item item) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStage(item);
-        if (requiredStage.isEmpty()) {
-            return false;
-        }
-
-        return !StageManager.getInstance().hasStage(player, requiredStage.get());
+        return LockRegistry.getInstance().isItemBlockedFor(player, item);
     }
 
     /**
-     * Send lock message and play sound to player
+     * Send lock message and play sound to player.
+     * v2.0: shows the primary missing stage (first gating stage the player doesn't own).
      */
     public static void notifyLocked(ServerPlayer player, Item item) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStage(item);
+        Optional<StageId> requiredStage = LockRegistry.getInstance().primaryRestrictingStage(player, item);
         if (requiredStage.isEmpty()) {
             return;
         }
@@ -137,12 +150,17 @@ public class ItemEnforcer {
 
         // Send message
         if (StageConfig.isShowLockMessage()) {
-            String displayName = StageOrder.getInstance().getStageDefinition(stageId)
-                .map(StageDefinition::getDisplayName)
-                .orElse(stageId.getPath());
+            Component message;
+            if (StageDisclosure.mayShowRestrictingStageName(player)) {
+                String displayName = StageOrder.getInstance().getStageDefinition(stageId)
+                    .map(StageDefinition::getDisplayName)
+                    .orElse(stageId.getPath());
 
-            String template = StageConfig.getMsgItemLocked();
-            Component message = TextUtil.parseColorCodes(template.replace("{stage}", displayName));
+                String template = StageConfig.getMsgItemLocked();
+                message = TextUtil.parseColorCodes(template.replace("{stage}", displayName));
+            } else {
+                message = TextUtil.parseColorCodes(StageConfig.getMsgItemLockedGeneric());
+            }
             player.sendSystemMessage(message);
         }
 
@@ -158,14 +176,21 @@ public class ItemEnforcer {
     public static void notifyLocked(ServerPlayer player, StageId requiredStage, String type) {
         // Send message
         if (StageConfig.isShowLockMessage()) {
-            String displayName = StageOrder.getInstance().getStageDefinition(requiredStage)
-                .map(StageDefinition::getDisplayName)
-                .orElse(requiredStage.getPath());
+            Component message;
+            if (StageDisclosure.mayShowRestrictingStageName(player)) {
+                String displayName = StageOrder.getInstance().getStageDefinition(requiredStage)
+                    .map(StageDefinition::getDisplayName)
+                    .orElse(requiredStage.getPath());
 
-            String template = StageConfig.getMsgTypeLocked();
-            Component message = TextUtil.parseColorCodes(
-                template.replace("{type}", type).replace("{stage}", displayName)
-            );
+                String template = StageConfig.getMsgTypeLocked();
+                message = TextUtil.parseColorCodes(
+                    template.replace("{type}", type).replace("{stage}", displayName)
+                );
+            } else {
+                message = TextUtil.parseColorCodes(
+                    StageConfig.getMsgTypeLockedGeneric().replace("{type}", type)
+                );
+            }
             player.sendSystemMessage(message);
         }
 

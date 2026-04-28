@@ -185,23 +185,24 @@ public class DimensionEnforcer {
 
     /**
      * Check if a dimension is locked for a player.
+     * v2.0: multi-stage aware.
      */
     public static boolean isDimensionLockedForPlayer(ServerPlayer player, ResourceLocation dimensionId) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForDimension(dimensionId);
-        if (requiredStage.isEmpty()) {
-            return false;
-        }
-
-        return !StageManager.getInstance().hasStage(player, requiredStage.get());
+        return LockRegistry.getInstance().isDimensionBlockedFor(player, dimensionId);
     }
 
     /**
      * Notify player that dimension is locked.
+     * v2.0: shows the primary missing stage.
      */
     public static void notifyLocked(ServerPlayer player, ResourceLocation dimensionId) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForDimension(dimensionId);
-        if (requiredStage.isPresent()) {
-            ItemEnforcer.notifyLocked(player, requiredStage.get(), "This dimension");
+        java.util.Set<StageId> gating = LockRegistry.getInstance().getRequiredStagesForDimension(dimensionId);
+        if (gating.isEmpty()) return;
+        for (StageId s : gating) {
+            if (!StageManager.getInstance().hasStage(player, s)) {
+                ItemEnforcer.notifyLocked(player, s, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelDimension());
+                return;
+            }
         }
     }
 
