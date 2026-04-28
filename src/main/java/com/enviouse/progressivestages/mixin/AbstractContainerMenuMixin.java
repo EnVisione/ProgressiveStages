@@ -68,8 +68,8 @@ public abstract class AbstractContainerMenuMixin {
                 return;
             }
 
-            Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStage(stack.getItem());
-            if (requiredStage.isEmpty() || StageManager.getInstance().hasStage(serverPlayer, requiredStage.get())) {
+            // v2.0 multi-stage: blocked iff ANY gating stage is missing.
+            if (!LockRegistry.getInstance().isItemBlockedFor(serverPlayer, stack.getItem())) {
                 // Item is not locked for this player — but check hotbar destination restriction
                 progressivestages$checkHotbarDestination(slotId, clickType, serverPlayer, ci);
                 return;
@@ -124,8 +124,8 @@ public abstract class AbstractContainerMenuMixin {
             return;
         }
 
-        Optional<StageId> carriedStage = LockRegistry.getInstance().getRequiredStage(carried.getItem());
-        if (carriedStage.isEmpty() || StageManager.getInstance().hasStage(player, carriedStage.get())) {
+        // v2.0 multi-stage
+        if (!LockRegistry.getInstance().isItemBlockedFor(player, carried.getItem())) {
             return; // Carried item is not locked
         }
 

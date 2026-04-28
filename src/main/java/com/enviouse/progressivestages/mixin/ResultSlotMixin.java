@@ -71,27 +71,28 @@ public abstract class ResultSlotMixin extends Slot {
         }
 
         LockRegistry registry = LockRegistry.getInstance();
-        StageManager stageManager = StageManager.getInstance();
 
-        // 1. Check if the output ITEM itself is locked (items = [...])
-        Optional<StageId> itemStage = registry.getRequiredStage(result.getItem());
-        if (itemStage.isPresent() && !stageManager.hasStage(serverPlayer, itemStage.get())) {
+        // 1. v2.0 multi-stage: blocked if any item-gating stage is missing
+        if (registry.isItemBlockedFor(serverPlayer, result.getItem())) {
             cir.setReturnValue(false);
             ItemEnforcer.notifyLockedWithCooldown(serverPlayer, result.getItem());
             return;
         }
 
-        // 2. Check recipe-item lock (recipe_items = [...]) — locks ALL recipes for this output item
-        Optional<StageId> recipeItemStage = registry.getRequiredStageForRecipeByOutput(result.getItem());
-        if (recipeItemStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeItemStage.get())) {
+        // 2. recipe_items multi-stage
+        java.util.Set<StageId> recipeItemGating = registry.getRequiredStagesForRecipeByOutput(result.getItem());
+        if (!recipeItemGating.isEmpty() && !registry.playerHasAllStages(serverPlayer, recipeItemGating)) {
             cir.setReturnValue(false);
-            ItemEnforcer.notifyLocked(serverPlayer, recipeItemStage.get(), "This recipe");
+            for (StageId s : recipeItemGating) {
+                if (!StageManager.getInstance().hasStage(serverPlayer, s)) {
+                    ItemEnforcer.notifyLocked(serverPlayer, s, StageConfig.getMsgTypeLabelRecipe());
+                    break;
+                }
+            }
             return;
         }
 
-        // 3. Check recipe ID lock (recipes = [...]) — uses stored recipe from CraftingMenuMixin.
-        //    Primary source: CraftingRecipeTracker (populated by CraftingMenuMixin).
-        //    Fallback: ResultContainer.getRecipeUsed() — vanilla stores the matched recipe here.
+        // 3. recipe-id multi-stage
         ResourceLocation lastRecipeId = CraftingRecipeTracker.getLastRecipe(serverPlayer.getUUID());
         if (lastRecipeId == null && this.container instanceof net.minecraft.world.inventory.RecipeCraftingHolder holder) {
             var storedRecipe = holder.getRecipeUsed();
@@ -100,11 +101,15 @@ public abstract class ResultSlotMixin extends Slot {
             }
         }
         if (lastRecipeId != null) {
-            Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(lastRecipeId);
-            if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
+            java.util.Set<StageId> rg = registry.getRequiredStagesForRecipe(lastRecipeId);
+            if (!rg.isEmpty() && !registry.playerHasAllStages(serverPlayer, rg)) {
                 cir.setReturnValue(false);
-                ItemEnforcer.notifyLocked(serverPlayer, recipeStage.get(), "This recipe");
-                return;
+                for (StageId s : rg) {
+                    if (!StageManager.getInstance().hasStage(serverPlayer, s)) {
+                        ItemEnforcer.notifyLocked(serverPlayer, s, StageConfig.getMsgTypeLabelRecipe());
+                        break;
+                    }
+                }
             }
         }
     }

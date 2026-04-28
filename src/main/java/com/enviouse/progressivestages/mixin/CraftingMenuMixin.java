@@ -105,18 +105,14 @@ public abstract class CraftingMenuMixin {
         }
 
         LockRegistry registry = LockRegistry.getInstance();
-        StageManager stageManager = StageManager.getInstance();
 
-        // ── Recipe ID lock (recipes = [...]) ──
-        // ALWAYS enforced — clearing the result is the only reliable way to prevent
-        // crafting. If the output is empty, inputs stay in the grid, nothing is voided.
+        // ── Recipe ID lock (recipes = [...]) — v2.0 multi-stage ──
         if (matchedRecipeId != null) {
-            Optional<StageId> recipeStage = registry.getRequiredStageForRecipe(matchedRecipeId);
-            if (recipeStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeStage.get())) {
+            if (registry.isRecipeBlockedFor(serverPlayer, matchedRecipeId)) {
                 if (StageConfig.isDebugLogging()) {
                     com.mojang.logging.LogUtils.getLogger().info(
-                            "[ProgressiveStages] CraftingMenuMixin: Blocking recipe {} (requires stage {})",
-                            matchedRecipeId, recipeStage.get());
+                            "[ProgressiveStages] CraftingMenuMixin: Blocking recipe {} (multi-stage)",
+                            matchedRecipeId);
                 }
                 clearResultAndSync(menu, resultSlots, serverPlayer);
                 return;
@@ -124,18 +120,15 @@ public abstract class CraftingMenuMixin {
         }
 
         // ── Recipe-item lock (recipe_items = [...]) ──
-        // ALWAYS enforced — locks ALL recipes that produce this output item.
-        Optional<StageId> recipeItemStage = registry.getRequiredStageForRecipeByOutput(result.getItem());
-        if (recipeItemStage.isPresent() && !stageManager.hasStage(serverPlayer, recipeItemStage.get())) {
+        java.util.Set<StageId> recipeItemGating = registry.getRequiredStagesForRecipeByOutput(result.getItem());
+        if (!recipeItemGating.isEmpty() && !registry.playerHasAllStages(serverPlayer, recipeItemGating)) {
             clearResultAndSync(menu, resultSlots, serverPlayer);
             return;
         }
 
         // ── Item lock (items = [...]) hiding output ──
-        // Only hides the crafting output if the config option is enabled.
         if (StageConfig.isHideLockRecipeOutput()) {
-            Optional<StageId> requiredStage = registry.getRequiredStage(result.getItem());
-            if (requiredStage.isPresent() && !stageManager.hasStage(serverPlayer, requiredStage.get())) {
+            if (registry.isItemBlockedFor(serverPlayer, result.getItem())) {
                 clearResultAndSync(menu, resultSlots, serverPlayer);
             }
         }
