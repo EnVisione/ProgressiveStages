@@ -4,178 +4,333 @@
 
 ---
 
-A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression locks. Define stages in simple TOML files — ProgressiveStages handles locking items, blocks, entities, fluids, dimensions, and recipes until players earn the right to use them.
+A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression. Define stages as TOML files; ProgressiveStages locks items, blocks, entities, fluids, dimensions, recipes, enchantments, crops, mob spawns, pets, regions, structures, screens, and player interactions until the player has earned the right stage(s).
+
+**ProgressiveStages 2.0** is a ground-up rework: a unified prefix-based lock model, multi-stage gating where a single resource can require all of several stages, per-stage `[unlocks]` carve-outs, and full coverage of crops/mobs/enchants/regions/structures that v1 didn't have.
 
 ---
 
-## Features
+## What's new in 2.0
 
-- **Lock anything** — items, blocks, entities, fluids, dimensions, recipes
-- **Granular mod locks** — lock all items from a mod, or just its blocks, or just its entities — independently
-- **Name pattern matching** — `names = ["diamond"]` locks every item, block, entity, and fluid with "diamond" in its ID across all mods
-- **Whitelist exceptions** — `unlocked_items`, `unlocked_blocks`, `unlocked_entities`, `unlocked_fluids` let you carve out exceptions from broad locks
-- **EMI + JEI integration** — lock icons in recipe viewer and search index, hidden items when locked, full creative bypass
-- **FTB Quests integration** — Stage Tasks, Stage Rewards, and a native "Stage Required" field on quests and chapters
-- **Trigger system** — grant stages automatically on advancement, item pickup, dimension entry, or boss kill
-- **Dependency graph** — stages can require other stages before they can be granted
-- **Team support** — FTB Teams mode or solo per-player mode
-- **Event-driven** — no tick polling, stages update instantly
+- **Unified prefix lock model** — `id:`, `mod:`, `tag:`, `name:` (no prefix = `id:`) replace v1's scattered `items` / `item_tags` / `item_mods` arrays. One list, one syntax.
+- **Multi-stage gating** — the same item can be locked by multiple stages simultaneously. The player must own **all** gating stages to access it. First-match-wins is gone.
+- **Per-stage `[unlocks]` carve-outs** — a stage can lock an entire mod yet exempt specific items via its own `[unlocks]` list. Unlike v1's global per-category whitelist, each stage's carve-outs are scoped to that stage.
+- **`minecraft = true` shorthand** — equivalent to `mods = ["minecraft"]`, with parent-stage inheritance: granting a child stage that doesn't itself set `minecraft = true` doesn't leak vanilla content the parent had locked.
+- **New lock categories**: enchantments, crops, mob spawns, mob replacements (substitute on spawn), pet taming/breeding/commanding, regions, structures, screens, interactions, curio slots.
+- **Vanilla inventory lock icons** — an `IItemDecorator` paints the lock overlay in chests, hotbar, modded backpacks, anvils — every Slot the game renders. EMI's panel still uses the dedicated SlotWidget mixin; JEI's own greying is honored via call-stack detection.
+- **Anvil gate** — `AnvilMenuMixin` clears the result slot when input/result is stage-locked, so anvils can't repair, rename, or combine locked items.
+- **Visual Workbench compat** — block locks apply through VW-replaced workbenches via reflective resolution to the underlying vanilla block.
+- **Reveal-stage-names-only-to-operators** — non-ops see generic lock messages without the stage name (spoiler control); ops always see the full stage.
+- **Every player-visible message is a config template** with `&` color codes and named placeholders (`{stage}`, `{type}`, `{count}`, `{player}`, `{progress}`, ...). Pack devs can retheme the entire UX from `progressivestages.toml`.
+- **JEI deep hiding** — multi-`FluidStack` ingredient-type enumeration, two-pass refresh (JEI clears the blacklist on add), reflective `IngredientFilter.rebuildItemFilter()`, JEI uid embedded namespace regex, generic ingredient sweep for Mekanism gases/pigments via `Class.getModule().getName()`.
+- **EMI hide-by-class** — `removeEmiStacks` predicate covers items, fluids, abstract ids, AND class-module owning mod, catching Mekanism chemicals whose registry id is `mekanism:*` but whose class lives in the mekanism module.
+- **FTB Quests deep gating** — the `Quest` / `Chapter` `required_stage` field now also gates `TeamData.canStartTasks`, so progression is blocked even if visibility is overridden by another mod. Optional `ftbquests_team_mode` reflectively delegates `has` / `add` / `remove` to FTB Teams' `TeamStagesHelper`.
+- **Spectator bypass parity** — spectators always bypass locks (matching the existing creative-bypass pathway).
+- **`reapply_starting_stages_on_login`** opt-in lets pack devs add a starting stage to an existing world and have all online players pick it up next login.
 
 ---
 
 ## Installation
 
-1. Install [NeoForge](https://neoforged.net/) for Minecraft 1.21.1
-2. Drop `progressivestages-x.x.x.jar` into your `mods/` folder
-3. Optional: install EMI or JEI for recipe viewer integration
-4. Optional: install FTB Quests + FTB Library for quest integration
-5. Launch and configure stages in `config/ProgressiveStages/*.toml`
+1. Install [NeoForge](https://neoforged.net/) for Minecraft 1.21.1.
+2. Drop the jar into `mods/`.
+3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
+4. Launch the game once. ProgressiveStages generates `config/progressivestages/` with `stone_age.toml` and `diamond_age.toml` examples plus the main `progressivestages.toml` config file.
+5. Edit or add `config/progressivestages/<stage_id>.toml` files; reload at runtime with `/stage reload`.
 
 ---
 
 ## Quick Start
 
-Create `config/ProgressiveStages/iron_age.toml`:
+`config/progressivestages/iron_age.toml`:
 
 ```toml
 [stage]
 id = "iron_age"
 display_name = "Iron Age"
-dependency = "stone_age"
-unlock_message = "&6Iron Age Unlocked!"
+dependency = ["stone_age"]
+unlock_message = "&6&lIron Age Unlocked!"
 
 [locks]
-items = ["minecraft:iron_pickaxe", "minecraft:iron_ingot"]
-mods = ["create"]
-unlocked_items = ["create:wrench"]
+items = [
+    "id:minecraft:iron_pickaxe",
+    "mod:create",
+    "tag:c:gems/diamond",
+    "name:steel"
+]
+mods = ["thermal"]
+
+[unlocks]
+# carve-out: the Create wrench is allowed even though mod:create is locked above
+items = ["id:create:wrench"]
 ```
 
-Grant the stage in-game:
+Grant it in-game:
 
 ```
 /stage grant YourName iron_age
 ```
 
+The same player can be required to also have `tutorial_done` to use a specific item by listing it under both stages' `[locks].items` — multi-stage gating happens automatically.
+
 ---
 
-## Lock Cascade Table
+## Lock Categories
 
-| Lock Type | Items | Blocks | Entities | Fluids (EMI/JEI) |
-|-----------|:-----:|:------:|:--------:|:----------------:|
-| `mods = ["modid"]` | ✅ | ✅ | ✅ | ✅ |
-| `item_mods` | ✅ | ❌ | ❌ | ❌ |
-| `block_mods` | ❌ | ✅ | ❌ | ❌ |
-| `entity_mods` | ❌ | ❌ | ✅ | ❌ |
-| `fluid_mods` | ❌ | ❌ | ❌ | ✅ |
-| `names = ["pattern"]` | ✅ | ✅ | ✅ | ✅ |
-| `items = [...]` | ✅ | ❌ | ❌ | ❌ |
-| `blocks = [...]` | ❌ | ✅ | ❌ | ❌ |
-| `entities = [...]` | ❌ | ❌ | ✅ | ❌ |
-| `fluids = [...]` | ❌ | ❌ | ❌ | ✅ |
+Every list accepts the unified prefix syntax: `id:`, `mod:`, `tag:`, `name:` (no prefix defaults to `id:`).
 
-Whitelists (`unlocked_items`, `unlocked_blocks`, `unlocked_entities`, `unlocked_fluids`) take priority over ALL lock types.
+| Category | Effect |
+|---|---|
+| `[locks].items` | Block use, pickup, holding in inventory/hotbar |
+| `[locks].blocks` | Block placement and right-click interaction |
+| `[locks].fluids` | Pickup/place buckets, hide from EMI/JEI, prevent submersion effects |
+| `[locks].dimensions` | Cancel travel, eject players from locked dimensions |
+| `[locks].entities` | Block attacking and interacting with entity types |
+| `[locks].recipes` | Block specific recipe IDs (clears result slot, blocks pickup) |
+| `[locks].recipe_items` | Block ALL recipes that produce a given output |
+| `[locks].enchants` | Hide enchants in enchanting table, refuse anvil application, strip from inventory |
+| `[locks].crops` | Block planting, growth ticks, bonemeal application |
+| `[locks].spawn_entities` / `.spawn_entity_tags` / `.spawn_entity_mods` | Cancel mob spawns near gated players |
+| `[[locks.mob_replacements]]` | Substitute one mob type for another at spawn |
+| `[locks].pets.taming` / `.breeding` / `.commanding` | Block pet interactions |
+| `[[locks.regions]]` | 3D bounding-box gates with break/place/explosion rules |
+| `[locks].structures` | Block entry into specific generated structures |
+| `[locks].screens` / `.screen_items` | Block opening containers/GUIs (vanilla blocks or right-click items like backpacks) |
+| `[[locks.interactions]]` | Block right-click / item-on-block / item-on-entity combos |
+| `[locks].curio_slots` | Block equipping into specific Curios slots |
+| `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
 
-> ⚠️ **Fluid locks only affect EMI/JEI visibility.** They do NOT prevent players from piping, pumping, or using fluids in machines. To block fluid transport, lock the machines and pipes themselves.
+Each category's `[unlocks].<same-key>` list carves out exemptions scoped to that stage.
+
+---
+
+## Multi-Stage Gating
+
+When two or more stages list the same resource under their `[locks]`, the player must own **all** gating stages to access it.
+
+```toml
+# stage A
+[locks]
+items = ["id:minecraft:diamond"]
+```
+
+```toml
+# stage B
+[locks]
+items = ["id:minecraft:diamond"]
+```
+
+A player with only stage A still can't use diamond — they need both A and B. This lets pack devs split a single resource between two progression branches (e.g. "you must clear the questline AND defeat the boss").
+
+The single-stage accessor `getRequiredStage(Item)` still exists for callers that don't need the full set; it returns the first gating stage in canonical order. Internally, all enforcers use the multi-stage `isItemBlockedFor` predicate which AND-checks every gating stage against the player's owned set.
+
+---
+
+## Per-Stage `[unlocks]`
+
+Each stage can carve out exceptions from its own `[locks]`:
+
+```toml
+[stage]
+id = "industrial_age"
+
+[locks]
+mods = ["create", "mekanism"]      # locks all of Create and Mekanism
+
+[unlocks]
+items = ["id:create:wrench"]       # but the Create wrench is allowed
+mods  = ["mekanism_tools"]         # and Mekanism Tools is allowed (even though mekanism is locked)
+```
+
+Carve-outs are scoped: `[unlocks]` on stage A removes stage A from the gating set for those resources. If stage B independently locks the same resource without its own `[unlocks]` entry, stage B still gates.
+
+`[unlocks]` accepts the same prefix syntax: `id:`, `mod:`, `tag:`, `name:`.
+
+---
+
+## `minecraft = true` Shorthand
+
+```toml
+[stage]
+id = "civilized"
+
+[locks]
+minecraft = true
+```
+
+is equivalent to `mods = ["minecraft"]` registered into items, blocks, fluids, and entities. Useful for "no vanilla anything until you've earned this stage" packs.
+
+**Parent-stage inheritance**: if `civilized` has `minecraft = true` and `iron_age` depends on `civilized` without setting `minecraft = true`, owning `iron_age` does **not** unlock `civilized`'s vanilla locks — the player must explicitly own `civilized` for vanilla content to be reachable. Without this, granting a child stage would silently leak vanilla content the parent had locked.
+
+---
+
+## Mod Compatibility
+
+| Mod | Integration |
+|---|---|
+| **EMI** | Items + fluids + abstract ingredients hidden via `removeEmiStacks` predicate; class-module fallback for Mekanism gases/pigments |
+| **JEI** | Items + fluids (every `FluidStack` ingredient type, not just `NeoForgeTypes.FLUID_STACK`) hidden; two-pass refresh; reflective ingredient-filter rebuild; uid namespace regex scan; live `IIngredientListener` |
+| **FTB Quests** | `Quest` / `Chapter` `required_stage` field gates both `isVisible` and `canStartTasks`; required-stage entry in the editor config UI |
+| **FTB Library** | `StageProvider` Proxy registration so FTB's native Stage Required, Stage Task, and Stage Reward all flow through ProgressiveStages |
+| **FTB Teams** | Default backend when `team_mode = "ftb_teams"`; optional `integration.ftbquests.team_mode` reflectively delegates FTB Quests stage reads to `TeamStagesHelper` |
+| **Curios** | `CurioCanEquipEvent` gate; per-slot stage locks via `[locks].curio_slots` |
+| **Lootr** | `ILootrFilterProvider` filters stage-locked loot from per-player chest snapshots |
+| **Mekanism** | Entity-join + block-break hooks honor stage gates; gases/pigments hidden in EMI via class-module detection |
+| **KubeJS** | `hasStage` / `requireStage` / `grantStage` script bindings |
+| **NaturesCompass** | Filters dimension/structure search results so locked dimensions don't appear |
+| **Visual Workbench** | Reflective shim — locks targeting `minecraft:crafting_table` apply through VW-replaced workbenches |
+
+All integrations are reflection-loaded; absent mods are silently skipped. Each can be disabled via the `[integration]` config section.
 
 ---
 
 ## Commands
 
 | Command | Permission | Description |
-|---------|------------|-------------|
+|---|---|---|
 | `/stage grant <player> <stage>` | OP | Grant a stage |
 | `/stage revoke <player> <stage>` | OP | Revoke a stage |
-| `/stage list [player]` | OP | List stages |
-| `/stage check <player> <stage>` | OP | Check if player has stage |
-| `/stage info <stage>` | OP | Show stage definition |
-| `/progressivestages reload` | OP | Reload stage + trigger configs |
-| `/progressivestages validate` | OP | Validate stage files |
-| `/progressivestages ftb status [player]` | OP | Debug FTB integration |
+| `/stage list [player]` | OP | Show a player's owned stages |
+| `/stage check <player> <stage>` | OP | Check if a player has a stage |
+| `/stage info <stage>` | OP | Print a stage's full definition |
+| `/stage tree` | OP | Print the stage dependency tree |
+| `/stage validate` | OP | Validate every stage TOML file (registry existence, dependency cycles, malformed entries) |
+| `/stage reload` | OP | Reload stage and trigger configs from disk |
+| `/stage diagnose ftbquests` | OP | Dump FTB Quests integration status (provider registered, team mode, recheck queue) |
+
+Every line of every command's output is a configurable template via `messages.cmd_*` keys in `progressivestages.toml`. `&` color codes and `{placeholder}` substitution work everywhere.
 
 ---
 
 ## Configuration
 
-Config file: `config/progressivestages.toml`
+`config/progressivestages.toml` — high-level groups:
 
-```toml
-[general]
-starting_stages = ["stone_age"]
-team_mode = "ftb_teams"  # or "solo"
-debug_logging = false
-linear_progression = false
+- **`[general]`** — `starting_stages`, `team_mode` (`ftb_teams` / `solo`), `linear_progression`, `reapply_starting_stages_on_login`, `debug_logging`.
+- **`[enforcement]`** — every per-category enforcement toggle (`block_item_use`, `block_block_placement`, `block_dimension_travel`, `block_enchants`, `block_crop_growth`, `block_pet_interact`, `block_loot_drops`, `block_mob_spawns`, `block_mob_replacements`, `block_region_entry`, `block_structure_entry`, `block_screen_open`, ...), plus `allow_creative_bypass`, `mask_locked_item_names`, `notification_cooldown`, `reveal_stage_names_only_to_operators`, lock-sound config, eject-blocked-inventory frequency.
+- **`[messages]`** — every player-facing string. Supports `&` color codes (`&0`–`&f`, `&l/m/n/o/k/r`) and named placeholders. Generic `*_generic` variants are emitted when `reveal_stage_names_only_to_operators = true` and the player is non-op. Includes the `messages.prefix` template, `messages.tooltip_*`, `messages.cmd_*`, `messages.type_label_*`, and `messages.cmd_ftb_status_*` families.
+- **`[emi]`** — `enabled`, `show_lock_icon`, `lock_icon_position`, `lock_icon_size`, `show_highlight`, `highlight_color`, `show_tooltip`, `show_locked_recipes`.
+- **`[integration.ftbquests]`** — `enabled`, `team_mode` (delegates to FTB Teams' `TeamStagesHelper`), `recheck_budget_per_tick`.
+- **`[integration.ftbteams]`** — `enabled`.
+- **`[performance]`** — `enable_lock_cache`, `lock_cache_size`.
 
-[enforcement]
-block_item_use = true
-block_item_pickup = true
-block_item_hotbar = true
-block_item_mouse_pickup = true
-block_item_inventory = true
-block_crafting = true
-block_block_placement = true
-block_block_interaction = true
-block_dimension_travel = true
-block_entity_attack = true
-allow_creative_bypass = true
-mask_locked_item_names = true
-notification_cooldown = 3000
-
-[emi]
-enabled = true
-show_lock_icon = true
-lock_icon_position = "top_left"
-lock_icon_size = 8
-show_highlight = true
-highlight_color = "0x50FFAA40"
-show_locked_recipes = false
-```
+The full list of keys is generated into `progressivestages.toml` on first launch with descriptive comments for each.
 
 ---
 
-## Compatibility
+## Privacy & Disclosure
 
-| Mod | Status |
-|-----|--------|
-| EMI | ✅ Full integration |
-| JEI | ✅ Full integration |
-| FTB Quests | ✅ Full integration |
-| FTB Teams | ✅ Supported |
-| NeoForge 1.21.1 | ✅ Required |
+By default, `enforcement.reveal_stage_names_only_to_operators = true`. Non-operators (permission level &lt; 2) see generic lock messages — `🔒 You haven't unlocked this item yet!` instead of `Required: Iron Age`. Operators always see the stage name in chat and tooltips. The flag is mirrored to the client via a dedicated payload so client-side tooltip rendering also respects it.
+
+Set the flag to `false` in `progressivestages.toml` to expose stage names to everyone.
+
+---
+
+## Architecture (high level)
+
+```
+common/
+  config/StageConfig          — every config key + cached getters + ConfigValue<String> message templates
+  lock/PrefixEntry            — the "id:foo" / "mod:bar" / "tag:c:gems" / "name:diamond" entry type
+  lock/CategoryLocks          — category scaffolding (items / blocks / fluids / ...)
+  lock/LockRegistry           — central registry; multi-stage gating; per-stage [unlocks]; minecraft=true expansion
+  network/NetworkHandler      — payloads (StageSync, LockSync multi-row, RevealPolicy, CreativeBypass, StageDefinitionsSync)
+  stage/StageManager          — grant / revoke, dependency walks, FTB Quests recheck triggers
+  util/StageDisclosure        — chokepoint for op-vs-non-op stage-name reveal
+  util/TextUtil               — & color code parser used by every message template
+
+server/
+  enforcement/*Enforcer       — one per category, all multi-stage; spectator + creative bypass
+  loader/StageFileParser      — parses the unified [locks] / [unlocks] / minecraft=true schema
+  loader/DefaultStageTemplates — first-launch templates (stone_age, diamond_age)
+  ServerEventHandler          — wires every NeoForge event (block-place, item-pickup, dim-travel, mob-spawn, ...)
+  triggers/                   — advancement / item-pickup / boss-kill / dimension grants
+
+client/
+  jei/ProgressiveStagesJEIPlugin   — multi-FluidStack types, 2-pass refresh, filter rebuild, uid regex, IIngredientListener
+  emi/ProgressiveStagesEMIPlugin   — removeEmiStacks predicate covering items + fluids + class-module
+  renderer/LockedItemDecorator     — IItemDecorator for vanilla inventories
+  renderer/LockIconRenderer        — z=1000 lock icon + z=199 highlight
+  ClientLockCache + ClientStageCache — multi-stage maps + reveal-policy mirror
+  ClientEventHandler               — tooltip emission with multi-stage stage-list
+  ClientModBusEvents               — RegisterItemDecorationsEvent subscription on the mod-event bus
+
+mixin/
+  AbstractContainerMenuMixin       — multi-stage carried-item gate
+  AnvilMenuMixin                   — clears result slot when locked
+  CraftingMenuMixin                — recipe + recipe-item gate
+  ResultSlotMixin                  — pickup gate
+  EnchantmentMenuMixin             — clears clues + refuses click
+  ServerPlayerMerchantMixin        — gates villager trades
+  client/EmiStackWidgetMixin       — paints lock in EMI panel
+  client/EmiScreenManagerMixin     — EMI search / sidebar
+  ftbquests/QuestMixin             — required_stage field + isVisible
+  ftbquests/ChapterMixin           — required_stage field + isVisible
+  ftbquests/TeamDataMixin          — canStartTasks gate
+
+compat/
+  curios/                — CurioCanEquipEvent gate
+  ftbquests/             — StageProvider Proxy + RequiredStageHolder + ftbquests_team_mode
+  kubejs/                — script bindings
+  lootr/                 — ILootrFilterProvider implementation (registered via META-INF/services)
+  mekanism/              — entity + block hooks
+  naturescompass/        — search filter
+  recipeviewer/          — RecipeViewerModHints (Class.getModule().getName())
+  visualworkbench/       — reflective vanilla-equivalent resolution
+```
 
 ---
 
 ## Changelog
 
+### v2.0
+- **Unified prefix lock model** — `id:`, `mod:`, `tag:`, `name:` replace v1's scattered arrays.
+- **Multi-stage gating** — player must own ALL gating stages to access a resource.
+- **Per-stage `[unlocks]`** — scoped carve-outs, no more global-only whitelist.
+- **`minecraft = true`** namespace shorthand with parent-stage inheritance.
+- **New lock categories**: enchants, crops, mob spawns + replacements, pets, regions, structures, screens, interactions, curio slots.
+- **Vanilla inventory lock icons** via `IItemDecorator` — chests, hotbar, modded backpacks all show lock overlays.
+- **AnvilMenuMixin** result-slot gate.
+- **Visual Workbench compat** via reflective shim.
+- **Reveal-stage-names-only-to-operators** privacy flag with client mirror.
+- **All player-visible text configurable** with `&` color codes and named placeholders.
+- **JEI deep hiding**: multi-FluidStack types, 2-pass refresh, ingredient-filter rebuild, uid namespace regex, `IIngredientListener`.
+- **EMI hide-by-class** for Mekanism gases / pigments / chemicals.
+- **FTB Quests `canStartTasks` gate** — task progression blocked even if visibility is overridden.
+- **`ftbquests_team_mode`** reflective delegation to FTB Teams' `TeamStagesHelper`.
+- **Spectator bypass parity** across every enforcer.
+- **`reapply_starting_stages_on_login`** opt-in.
+- **Mod compat added**: Curios, KubeJS, Lootr, Mekanism, NaturesCompass, Visual Workbench. FTB Library `StageProvider` proxy.
+- **`isValidStageName` regex** validation on `starting_stages` to skip malformed config entries.
+
+### v1.4
+- Mob spawn gating with creeper example in default `diamond_age.toml`.
+- Tick-based dimension safety net for modded portals.
+- Recipe ID lock debug logging in `CraftingMenuMixin`.
+- EMI / JEI / FTB Teams / FTB Quests all optional dependencies.
+
+### v1.3
+- Linear progression mode (auto-grant dependencies).
+- Multiple `starting_stages` support.
+- Admin bypass confirmation for missing dependencies.
+- Stage definitions sync to client with dependencies.
+
 ### v1.2
-- Entity locks — `entities`, `entity_tags`, `entity_mods`, `unlocked_entities`
-- `mods` cascade now includes entities
-- `block_entity_attack` config toggle
-- Fixed creative bypass missing from block placement, crafting, and dimension travel
-- Fixed EMI/JEI not refreshing after `/stage grant`
-- Dependency graph replaces linear `order` field
-- `item_mods` and `block_mods` for granular mod locking
-- Multiple `starting_stages` support
-- Admin bypass confirmation for missing dependencies
-- `unlocked_blocks` and `unlocked_entities` whitelist fields
-- Fluid locks — `fluids`, `fluid_tags`, `fluid_mods`, `unlocked_fluids`
-- `names` pattern now matches items, blocks, entities, AND fluids
-- `mods` cascade now includes fluids
-- NBT-aware EMI/JEI hiding — catches all stack variants (Mekanism Chemical Tanks, Meka-Suit, etc.)
-- EMI search index lock icons via `EmiScreenManagerMixin`
-- Creative mode toggle instantly refreshes EMI/JEI index without relog
-- `unlocked_blocks` whitelist field
+- Entity locks, fluid locks, name pattern matching.
+- NBT-aware EMI/JEI hiding for all stack variants (Mekanism Chemical Tanks, Meka-Suit, etc.).
+- EMI search index lock icons via `EmiScreenManagerMixin`.
+- Creative-mode toggle instantly refreshes EMI/JEI without relog.
 
 ### v1.1
-- FTB Quests integration
-- EMI handling improvements
-- Expanded trigger system
-- Expanded default stages
+- FTB Quests integration.
+- EMI handling improvements.
+- Trigger system expanded.
 
 ---
 
 ## Documentation
 
-Full documentation is in [DOCUMENTATION.md](DOCUMENTATION.md).
+Per-feature documentation: [DOCUMENTATION.md](DOCUMENTATION.md).
 
 ## License
 
