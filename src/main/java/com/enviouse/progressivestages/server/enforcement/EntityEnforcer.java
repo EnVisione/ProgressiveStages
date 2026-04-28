@@ -38,23 +38,24 @@ public class EntityEnforcer {
 
     /**
      * Check if an entity type is locked for a specific player.
+     * v2.0: multi-stage aware.
      */
     public static boolean isEntityLockedForPlayer(ServerPlayer player, EntityType<?> entityType) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForEntity(entityType);
-        if (requiredStage.isEmpty()) {
-            return false;
-        }
-
-        return !StageManager.getInstance().hasStage(player, requiredStage.get());
+        return LockRegistry.getInstance().isEntityBlockedFor(player, entityType);
     }
 
     /**
      * Notify player that entity interaction is locked.
+     * v2.0: shows the primary missing stage.
      */
     public static void notifyLocked(ServerPlayer player, EntityType<?> entityType) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForEntity(entityType);
-        if (requiredStage.isPresent()) {
-            ItemEnforcer.notifyLockedWithCooldown(player, requiredStage.get(), "This entity");
+        java.util.Set<StageId> gating = LockRegistry.getInstance().getRequiredStagesForEntity(entityType);
+        if (gating.isEmpty()) return;
+        for (StageId s : gating) {
+            if (!StageManager.getInstance().hasStage(player, s)) {
+                ItemEnforcer.notifyLockedWithCooldown(player, s, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelEntity());
+                return;
+            }
         }
     }
 }

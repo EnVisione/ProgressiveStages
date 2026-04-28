@@ -6,11 +6,10 @@ import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 /**
  * v1.5: Gates mob spawns behind stages.
@@ -49,13 +48,11 @@ public final class MobSpawnEnforcer {
             return false;
         }
 
-        // Look up required stage for this entity type's spawn
-        Optional<StageId> requiredStageOpt =
-                LockRegistry.getInstance().getRequiredStageForSpawn(mob.getType());
-        if (requiredStageOpt.isEmpty()) {
+        // v2.0: multi-stage spawn gate. Cancel if the nearest player misses ANY required stage.
+        Set<StageId> gating = LockRegistry.getInstance().getRequiredStagesForSpawn(mob.getType());
+        if (gating.isEmpty()) {
             return false; // Not gated
         }
-        StageId requiredStage = requiredStageOpt.get();
 
         // Find the nearest player in the same level
         if (!(level.getLevel() instanceof net.minecraft.server.level.ServerLevel serverLevel)) {
@@ -90,9 +87,12 @@ public final class MobSpawnEnforcer {
             return false;
         }
 
-        // If the nearest player's team has the stage, allow the spawn.
-        // Otherwise, cancel it.
-        return !StageManager.getInstance().hasStage(nearest, requiredStage);
+        // Multi-stage: any missing → cancel.
+        StageManager sm = StageManager.getInstance();
+        for (StageId s : gating) {
+            if (!sm.hasStage(nearest, s)) return true;
+        }
+        return false;
     }
 }
 

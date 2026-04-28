@@ -3,7 +3,6 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
-import com.enviouse.progressivestages.common.stage.StageManager;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
@@ -43,51 +42,39 @@ public class RecipeEnforcer {
 
     /**
      * Check if a recipe is locked for a player by recipe ID (recipes = [...]).
+     * v2.0: multi-stage aware — blocked when ANY gating stage is missing.
      */
     public static boolean isRecipeLockedForPlayer(ServerPlayer player, ResourceLocation recipeId) {
-        if (recipeId == null) {
-            return false;
-        }
-
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForRecipe(recipeId);
-        if (requiredStage.isEmpty()) {
-            return false;
-        }
-
-        return !StageManager.getInstance().hasStage(player, requiredStage.get());
+        return LockRegistry.getInstance().isRecipeBlockedFor(player, recipeId);
     }
 
     /**
      * Check if a recipe output item is locked for a player (recipe_items = [...]).
-     * This locks ALL recipes that produce the given item.
+     * v2.0: multi-stage aware — blocked when ANY gating stage is missing.
      */
     public static boolean isOutputItemRecipeLocked(ServerPlayer player, Item outputItem) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForRecipeByOutput(outputItem);
-        if (requiredStage.isEmpty()) {
-            return false;
-        }
-
-        return !StageManager.getInstance().hasStage(player, requiredStage.get());
+        return LockRegistry.getInstance().isRecipeOutputBlockedFor(player, outputItem);
     }
 
     /**
-     * Notify player that recipe is locked
+     * Notify player that recipe is locked.
+     * v2.0: shows the first gating stage the player is missing.
      */
     public static void notifyLocked(ServerPlayer player, ResourceLocation recipeId) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForRecipe(recipeId);
-        if (requiredStage.isPresent()) {
-            ItemEnforcer.notifyLocked(player, requiredStage.get(), "This recipe");
-            return;
-        }
+        Optional<StageId> requiredStage =
+            LockRegistry.getInstance().primaryRestrictingStageForRecipe(player, recipeId);
+        requiredStage.ifPresent(stage ->
+            ItemEnforcer.notifyLocked(player, stage, StageConfig.getMsgTypeLabelRecipe()));
     }
 
     /**
-     * Notify player that the recipe for this output item is locked
+     * Notify player that the recipe for this output item is locked.
+     * v2.0: shows the first gating stage the player is missing.
      */
     public static void notifyOutputLocked(ServerPlayer player, Item outputItem) {
-        Optional<StageId> requiredStage = LockRegistry.getInstance().getRequiredStageForRecipeByOutput(outputItem);
-        if (requiredStage.isPresent()) {
-            ItemEnforcer.notifyLocked(player, requiredStage.get(), "This recipe");
-        }
+        Optional<StageId> requiredStage =
+            LockRegistry.getInstance().primaryRestrictingStageForRecipeOutput(player, outputItem);
+        requiredStage.ifPresent(stage ->
+            ItemEnforcer.notifyLocked(player, stage, StageConfig.getMsgTypeLabelRecipe()));
     }
 }
