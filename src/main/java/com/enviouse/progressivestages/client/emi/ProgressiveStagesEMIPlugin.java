@@ -91,14 +91,13 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
         Set<StageId> playerStages = ClientStageCache.getStages();
 
-        // Build a set of locked item IDs for fast lookup
+        // Build a set of locked item IDs for fast lookup.
+        // v2.0: multi-stage — locked iff player is missing ANY gating stage.
         Set<ResourceLocation> lockedItemIds = new java.util.HashSet<>();
         for (var entry : lockedItems.entrySet()) {
             ResourceLocation itemId = entry.getKey();
-            StageId requiredStage = entry.getValue();
 
-            // Only add to locked set if player doesn't have the required stage
-            if (!playerStages.contains(requiredStage)) {
+            if (!ClientLockCache.playerOwnsAllStagesFor(itemId)) {
                 lockedItemIds.add(itemId);
             }
         }
@@ -110,19 +109,51 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
 
         LOGGER.debug("[ProgressiveStages] Hiding {} locked item types from EMI", lockedItemIds.size());
 
+        // Build a parallel set of blocked mod ids (mods the player hasn't unlocked).
+        // Used as a fallback class-based check for EmiStack subclasses whose registry id
+        // is e.g. "minecraft:" but whose Java class lives inside a blocked mod's module.
+        Set<String> blockedModIds = new java.util.HashSet<>();
+        LockRegistry _reg = LockRegistry.getInstance();
+        for (String modId : _reg.getAllLockedMods()) {
+            var requiredStage = _reg.getModLockStage(modId);
+            if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
+                blockedModIds.add(modId.toLowerCase());
+            }
+        }
+
         // Use predicate-based removal to catch ALL NBT variants of each locked item
         // This is crucial for mods like Mekanism that register multiple stacks per item type
         final Set<ResourceLocation> finalLockedItemIds = lockedItemIds;
+        final Set<String> finalBlockedModIds = blockedModIds;
         registry.removeEmiStacks(stack -> {
             // Get the underlying ItemStack from the EmiStack
             var itemStack = stack.getItemStack();
-            if (itemStack.isEmpty()) {
-                return false; // Don't remove empty stacks
+            if (!itemStack.isEmpty()) {
+                ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
+                if (finalLockedItemIds.contains(itemId)) return true;
             }
 
-            // Check by Item registry ID, ignoring NBT
-            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
-            return finalLockedItemIds.contains(itemId);
+            // Class-based fallback: catches Mekanism gases/pigments whose registry id is
+            // "minecraft:" but whose class lives inside a blocked mod's module.
+            if (!finalBlockedModIds.isEmpty()) {
+                try {
+                    var stackOwner = com.enviouse.progressivestages.compat.recipeviewer.RecipeViewerModHints.owningModIdForClass(stack.getClass());
+                    if (stackOwner.isPresent() && finalBlockedModIds.contains(stackOwner.get().toLowerCase())) {
+                        return true;
+                    }
+                    Object key = stack.getKey();
+                    if (key != null) {
+                        var keyOwner = com.enviouse.progressivestages.compat.recipeviewer.RecipeViewerModHints.owningModIdForClass(key.getClass());
+                        if (keyOwner.isPresent() && finalBlockedModIds.contains(keyOwner.get().toLowerCase())) {
+                            return true;
+                        }
+                    }
+                } catch (Throwable ignored) {
+                    // EmiStack subclasses vary; never fail the predicate
+                }
+            }
+
+            return false;
         });
 
         LOGGER.info("[ProgressiveStages] EMI: Set up removal predicate for {} locked item types (catches all NBT variants)", lockedItemIds.size());
@@ -376,8 +407,13 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
     }
 
     /**
-     * Get the required stage for an item (for display purposes)
+     * Get the required stage for an item (for display purposes).
+     *
+     * @deprecated v2.0: items can now be locked by multiple stages. This returns only
+     *             the FIRST gating stage; use {@link LockRegistry#getRequiredStages(Item)}
+     *             for the full set when displaying multi-stage requirements.
      */
+    @Deprecated
     public static Optional<StageId> getRequiredStage(Item item) {
         return LockRegistry.getInstance().getRequiredStage(item);
     }
