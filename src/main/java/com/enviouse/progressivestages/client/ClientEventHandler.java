@@ -34,29 +34,30 @@ public class ClientEventHandler {
 
         Item item = event.getItemStack().getItem();
 
-        // Get required stage from ClientLockCache (synced from server) with LockRegistry fallback
+        // v2.0: gather ALL gating stages (multi-stage). Use cache first, fall back to LockRegistry for integrated.
         var itemId = BuiltInRegistries.ITEM.getKey(item);
-        Optional<StageId> requiredStageOpt = ClientLockCache.getRequiredStageForItem(itemId);
-
-        // Fallback to LockRegistry for integrated server/singleplayer
-        if (requiredStageOpt.isEmpty()) {
-            requiredStageOpt = LockRegistry.getInstance().getRequiredStage(item);
+        java.util.Set<StageId> itemGating = ClientLockCache.getRequiredStagesForItem(itemId);
+        if (itemGating.isEmpty()) {
+            itemGating = LockRegistry.getInstance().getRequiredStages(item);
         }
+        java.util.LinkedHashSet<StageId> missingItemStages = new java.util.LinkedHashSet<>();
+        for (StageId s : itemGating) if (!ClientStageCache.hasStage(s)) missingItemStages.add(s);
+        boolean itemLocked = !missingItemStages.isEmpty();
 
-        // Check recipe-only lock (recipe_items = [...])
-        Optional<StageId> recipeOnlyStageOpt = LockRegistry.getInstance().getRequiredStageForRecipeByOutput(item);
-        boolean recipeOnlyLocked = recipeOnlyStageOpt.isPresent() &&
-            !ClientStageCache.hasStage(recipeOnlyStageOpt.get());
-
-        boolean itemLocked = requiredStageOpt.isPresent() &&
-            !ClientStageCache.hasStage(requiredStageOpt.get());
+        java.util.Set<StageId> recipeGating = ClientLockCache.getRequiredStagesForRecipeByOutput(itemId);
+        if (recipeGating.isEmpty()) {
+            recipeGating = LockRegistry.getInstance().getRequiredStagesForRecipeByOutput(item);
+        }
+        java.util.LinkedHashSet<StageId> missingRecipeStages = new java.util.LinkedHashSet<>();
+        for (StageId s : recipeGating) if (!ClientStageCache.hasStage(s)) missingRecipeStages.add(s);
+        boolean recipeOnlyLocked = !missingRecipeStages.isEmpty();
 
         if (!itemLocked && !recipeOnlyLocked) {
             return; // Nothing to show
         }
 
-        // Determine the stage to display (item lock takes priority for display)
-        StageId displayStage = itemLocked ? requiredStageOpt.get() : recipeOnlyStageOpt.get();
+        // Determine the primary stage to display (item lock takes priority); kept for masked-name usage.
+        StageId displayStage = itemLocked ? missingItemStages.iterator().next() : missingRecipeStages.iterator().next();
 
         List<Component> tooltip = event.getToolTip();
 
@@ -70,15 +71,19 @@ public class ClientEventHandler {
             return;
         }
 
-        // Get stage info
-        String stageDisplayName = StageOrder.getInstance().getStageDefinition(displayStage)
-            .map(StageDefinition::getDisplayName)
-            .orElse(displayStage.getPath());
+        // Aggregate all missing stage names for the multi-stage tooltip line.
+        java.util.LinkedHashSet<StageId> allMissing = new java.util.LinkedHashSet<>();
+        allMissing.addAll(missingItemStages);
+        allMissing.addAll(missingRecipeStages);
+        String stageDisplayName = allMissing.stream()
+            .map(s -> StageOrder.getInstance().getStageDefinition(s)
+                .map(StageDefinition::getDisplayName).orElse(s.getPath()))
+            .collect(java.util.stream.Collectors.joining(", "));
 
         String currentStageName = ClientStageCache.getCurrentStage()
             .flatMap(id -> StageOrder.getInstance().getStageDefinition(id))
             .map(StageDefinition::getDisplayName)
-            .orElse("None");
+            .orElse(StageConfig.getMsgTooltipCurrentStageNone());
 
         String progress = ClientStageCache.getProgressString();
 
@@ -98,8 +103,13 @@ public class ClientEventHandler {
         // Add lock indicator (supports & color codes)
         tooltip.add(TextUtil.parseColorCodes(lockLabel));
 
-        // Required stage (supports & color codes)
-        String stageRequiredText = StageConfig.getMsgTooltipStageRequired().replace("{stage}", stageDisplayName);
+        // Required stage (supports & color codes). Hide stage name from non-ops if configured.
+        String stageRequiredText;
+        if (com.enviouse.progressivestages.common.util.StageDisclosure.mayShowRestrictingStageNameClient()) {
+            stageRequiredText = StageConfig.getMsgTooltipStageRequired().replace("{stage}", stageDisplayName);
+        } else {
+            stageRequiredText = StageConfig.getMsgTooltipStageRequiredGeneric();
+        }
         tooltip.add(TextUtil.parseColorCodes(stageRequiredText));
 
         // Current stage (supports & color codes)

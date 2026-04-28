@@ -20,6 +20,10 @@ public class ClientStageCache {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Set<StageId> stages = new HashSet<>();
     private static StageId currentStage = null;
+    private static volatile boolean hideStageNamesFromNonOps = false;
+
+    public static boolean isHideStageNamesFromNonOps() { return hideStageNamesFromNonOps; }
+    public static void setHideStageNamesFromNonOps(boolean v) { hideStageNamesFromNonOps = v; }
 
     // v1.3: Stage definitions with dependencies
     private static final Map<StageId, StageDefinitionData> stageDefinitions = new HashMap<>();
@@ -207,49 +211,52 @@ public class ClientStageCache {
 
     /**
      * Check if an item is locked for the client.
-     * Uses ClientLockCache for lock data (synced from server) and local stage cache.
+     * v2.0: multi-stage aware — locked if the player is missing ANY required stage.
+     * Falls back to single-stage view if multi-stage data isn't available.
      */
     public static boolean isItemLocked(Item item) {
-        // Try ClientLockCache first (synced from server)
         var itemId = BuiltInRegistries.ITEM.getKey(item);
-        Optional<StageId> requiredStage = ClientLockCache.getRequiredStageForItem(itemId);
+        if (itemId == null) return false;
 
-        // Fallback to LockRegistry for integrated server/singleplayer
-        if (requiredStage.isEmpty()) {
-            requiredStage = LockRegistry.getInstance().getRequiredStage(item);
-        }
-
-        if (requiredStage.isEmpty()) {
+        // v2.0: check multi-stage data first (populated by network sync)
+        Set<StageId> gating = ClientLockCache.getRequiredStagesForItem(itemId);
+        if (!gating.isEmpty()) {
+            for (StageId s : gating) if (!hasStage(s)) return true;
             return false;
         }
-        return !hasStage(requiredStage.get());
+
+        // Fallback to LockRegistry (integrated server / singleplayer)
+        Set<StageId> registryGating = LockRegistry.getInstance().getRequiredStages(item);
+        if (registryGating.isEmpty()) return false;
+        for (StageId s : registryGating) if (!hasStage(s)) return true;
+        return false;
     }
 
     /**
      * Check if an item is locked for the client by ResourceLocation.
-     * Uses ClientLockCache for lock data (synced from server) and local stage cache.
+     * v2.0: multi-stage aware.
      */
     public static boolean isItemLocked(net.minecraft.resources.ResourceLocation itemId) {
         if (itemId == null) {
             return false;
         }
 
-        // Try ClientLockCache first (synced from server)
-        Optional<StageId> requiredStage = ClientLockCache.getRequiredStageForItem(itemId);
-
-        // Fallback to LockRegistry for integrated server/singleplayer
-        if (requiredStage.isEmpty()) {
-            // Try to get the item from registry
-            var itemOpt = BuiltInRegistries.ITEM.getOptional(itemId);
-            if (itemOpt.isPresent()) {
-                requiredStage = LockRegistry.getInstance().getRequiredStage(itemOpt.get());
-            }
-        }
-
-        if (requiredStage.isEmpty()) {
+        // v2.0: check multi-stage data first (populated by network sync)
+        Set<StageId> gating = ClientLockCache.getRequiredStagesForItem(itemId);
+        if (!gating.isEmpty()) {
+            for (StageId s : gating) if (!hasStage(s)) return true;
             return false;
         }
-        return !hasStage(requiredStage.get());
+
+        // Fallback to LockRegistry (integrated server / singleplayer)
+        var itemOpt = BuiltInRegistries.ITEM.getOptional(itemId);
+        if (itemOpt.isPresent()) {
+            Set<StageId> registryGating = LockRegistry.getInstance().getRequiredStages(itemOpt.get());
+            if (registryGating.isEmpty()) return false;
+            for (StageId s : registryGating) if (!hasStage(s)) return true;
+            return false;
+        }
+        return false;
     }
 
     /**
