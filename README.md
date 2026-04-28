@@ -46,23 +46,26 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ```toml
 [stage]
-id = "iron_age"
-display_name = "Iron Age"
-dependency = ["stone_age"]
+id             = "iron_age"
+display_name   = "Iron Age"
+dependency     = ["stone_age"]
 unlock_message = "&6&lIron Age Unlocked!"
 
-[locks]
-items = [
+[items]
+locked = [
     "id:minecraft:iron_pickaxe",
     "mod:create",
     "tag:c:gems/diamond",
     "name:steel"
 ]
-mods = ["thermal"]
+# Per-category whitelist: the Create wrench is exempt from any of the locks above.
+always_unlocked = ["id:create:wrench"]
 
-[unlocks]
-# carve-out: the Create wrench is allowed even though mod:create is locked above
-items = ["id:create:wrench"]
+[blocks]
+locked = ["id:minecraft:enchanting_table"]
+
+[fluids]
+locked = ["id:minecraft:lava"]
 ```
 
 Grant it in-game:
@@ -71,56 +74,66 @@ Grant it in-game:
 /stage grant YourName iron_age
 ```
 
-The same player can be required to also have `tutorial_done` to use a specific item by listing it under both stages' `[locks].items` — multi-stage gating happens automatically.
+The same player can be required to also have `tutorial_done` to use a specific item by listing it under both stages' `[items].locked` — multi-stage gating happens automatically.
 
 ---
 
 ## Lock Categories
 
-Every list accepts the unified prefix syntax: `id:`, `mod:`, `tag:`, `name:` (no prefix defaults to `id:`).
+Each category lives in its own TOML section. Lists accept the unified prefix syntax: `id:`, `mod:`, `tag:`, `name:` (no prefix defaults to `id:`).
 
-| Category | Effect |
-|---|---|
-| `[locks].items` | Block use, pickup, holding in inventory/hotbar |
-| `[locks].blocks` | Block placement and right-click interaction |
-| `[locks].fluids` | Pickup/place buckets, hide from EMI/JEI, prevent submersion effects |
-| `[locks].dimensions` | Cancel travel, eject players from locked dimensions |
-| `[locks].entities` | Block attacking and interacting with entity types |
-| `[locks].recipes` | Block specific recipe IDs (clears result slot, blocks pickup) |
-| `[locks].recipe_items` | Block ALL recipes that produce a given output |
-| `[locks].enchants` | Hide enchants in enchanting table, refuse anvil application, strip from inventory |
-| `[locks].crops` | Block planting, growth ticks, bonemeal application |
-| `[locks].spawn_entities` / `.spawn_entity_tags` / `.spawn_entity_mods` | Cancel mob spawns near gated players |
-| `[[locks.mob_replacements]]` | Substitute one mob type for another at spawn |
-| `[locks].pets.taming` / `.breeding` / `.commanding` | Block pet interactions |
-| `[[locks.regions]]` | 3D bounding-box gates with break/place/explosion rules |
-| `[locks].structures` | Block entry into specific generated structures |
-| `[locks].screens` / `.screen_items` | Block opening containers/GUIs (vanilla blocks or right-click items like backpacks) |
-| `[[locks.interactions]]` | Block right-click / item-on-block / item-on-entity combos |
-| `[locks].curio_slots` | Block equipping into specific Curios slots |
-| `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
+| Section | Field | Effect |
+|---|---|---|
+| `[items]` | `locked`, `always_unlocked` | Block use, pickup, holding in inventory/hotbar |
+| `[blocks]` | `locked`, `always_unlocked` | Block placement and right-click interaction |
+| `[fluids]` | `locked`, `always_unlocked` | Pickup/place buckets, hide from EMI/JEI, prevent submersion effects |
+| `[dimensions]` | `locked` (exact ids only) | Cancel travel, eject players from locked dimensions |
+| `[entities]` | `locked`, `always_unlocked` | Block attacking and interacting with entity types |
+| `[recipes]` | `locked_ids`, `locked_items` | `locked_ids` blocks specific recipe IDs; `locked_items` blocks every recipe producing the output item |
+| `[enchants]` | `locked` | Hide enchants in enchanting table, refuse anvil application, strip from inventory |
+| `[crops]` | `locked`, `always_unlocked` | Block planting, growth ticks, bonemeal application |
+| `[screens]` | `locked` | Block opening container / GUI blocks |
+| `[loot]` | `locked` | Filter locked items out of loot tables and mob/block drops |
+| `[pets]` | `locked_taming`, `locked_breeding`, `locked_commanding` | Block taming, breeding, or commanding specific entity types |
+| `[curios]` | `locked_slots` | Block equipping into specific Curios slot ids |
+| `[mobs]` | `locked_spawns` | Cancel mob spawns near gated players |
+| `[[mobs.replacements]]` | `target`, `replace_with` | Substitute one mob type for another at spawn |
+| `[[interactions]]` | `type`, `held_item`, `target_block` / `target_entity`, `description` | Block right-click / item-on-block / item-on-entity combos |
+| `[[regions]]` | `dimension`, `pos1`, `pos2`, `prevent_entry`, `prevent_explosions`, ... | 3D bounding-box gates |
+| `[structures]` | `locked_entry` + `[structures.rules]` (`prevent_block_break`, `prevent_block_place`, `prevent_explosions`, `disable_mob_spawning`) | Block entry into specific generated structures |
+| `[enforcement]` | `allowed_use`, `allowed_pickup`, `allowed_hotbar`, `allowed_mouse_pickup`, `allowed_inventory` | Per-stage exception lists for in-inventory enforcement |
+| (root) | `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
 
-Each category's `[unlocks].<same-key>` list carves out exemptions scoped to that stage.
+Two whitelist mechanisms exist:
+
+- **`always_unlocked`** inside a category — exempts specific entries from THIS stage's locks within THAT category. Simple and local.
+- **`[unlocks]` table** — per-stage carve-outs that subtract this stage from the multi-stage gating set for items / mods / fluids / dimensions / entities. Use this when a stage owns a broad lock (e.g., `mod:create`) and you want a specific carve-out that survives even if other stages also gate the same resource.
 
 ---
 
 ## Multi-Stage Gating
 
-When two or more stages list the same resource under their `[locks]`, the player must own **all** gating stages to access it.
+When two or more stages list the same resource under their category section, the player must own **all** gating stages to access it.
 
 ```toml
-# stage A
-[locks]
-items = ["id:minecraft:diamond"]
+# stage_A.toml
+[stage]
+id = "stage_A"
+
+[items]
+locked = ["id:minecraft:diamond"]
 ```
 
 ```toml
-# stage B
-[locks]
-items = ["id:minecraft:diamond"]
+# stage_B.toml
+[stage]
+id = "stage_B"
+
+[items]
+locked = ["id:minecraft:diamond"]
 ```
 
-A player with only stage A still can't use diamond — they need both A and B. This lets pack devs split a single resource between two progression branches (e.g. "you must clear the questline AND defeat the boss").
+A player with only `stage_A` still can't use diamond — they need both `stage_A` and `stage_B`. This lets pack devs split a single resource between two progression branches (e.g. "you must clear the questline AND defeat the boss").
 
 The single-stage accessor `getRequiredStage(Item)` still exists for callers that don't need the full set; it returns the first gating stage in canonical order. Internally, all enforcers use the multi-stage `isItemBlockedFor` predicate which AND-checks every gating stage against the player's owned set.
 
@@ -128,37 +141,42 @@ The single-stage accessor `getRequiredStage(Item)` still exists for callers that
 
 ## Per-Stage `[unlocks]`
 
-Each stage can carve out exceptions from its own `[locks]`:
+Each stage can carve out scoped exceptions from its own locks:
 
 ```toml
 [stage]
 id = "industrial_age"
 
-[locks]
-mods = ["create", "mekanism"]      # locks all of Create and Mekanism
+[items]
+locked = ["mod:create", "mod:mekanism"]   # all Create and Mekanism items
 
+# Per-stage carve-outs (scoped — only removes this stage from the gating set):
 [unlocks]
-items = ["id:create:wrench"]       # but the Create wrench is allowed
-mods  = ["mekanism_tools"]         # and Mekanism Tools is allowed (even though mekanism is locked)
+items = ["id:create:wrench"]              # Create wrench is allowed
+mods  = ["mekanism_tools"]                # Mekanism Tools is allowed even though mekanism is locked
 ```
 
-Carve-outs are scoped: `[unlocks]` on stage A removes stage A from the gating set for those resources. If stage B independently locks the same resource without its own `[unlocks]` entry, stage B still gates.
+The `[unlocks]` table mirrors the lock side and accepts these fields: `items`, `mods`, `fluids`, `dimensions`, `entities`. Each entry uses bare `namespace:path` (or for `mods`, a bare modid) — the `id:` and `mod:` prefixes are accepted but optional in this table.
 
-`[unlocks]` accepts the same prefix syntax: `id:`, `mod:`, `tag:`, `name:`.
+Carve-outs are scoped to the declaring stage: `[unlocks]` on stage A removes stage A from the gating set for those resources. If stage B independently locks the same resource without its own `[unlocks]` entry, stage B still gates.
+
+For simpler whitelists scoped to a single category, use `always_unlocked` inside that category section instead.
 
 ---
 
 ## `minecraft = true` Shorthand
 
+Set as a root-level key on the stage file:
+
 ```toml
 [stage]
 id = "civilized"
 
-[locks]
+# Root-level shorthand: gates the entire minecraft: namespace.
 minecraft = true
 ```
 
-is equivalent to `mods = ["minecraft"]` registered into items, blocks, fluids, and entities. Useful for "no vanilla anything until you've earned this stage" packs.
+This registers a synthetic `mod:minecraft` entry into items, blocks, fluids, and entities for this stage — equivalent to listing `"mod:minecraft"` under each of `[items].locked`, `[blocks].locked`, etc. Useful for "no vanilla anything until you've earned this stage" packs.
 
 **Parent-stage inheritance**: if `civilized` has `minecraft = true` and `iron_age` depends on `civilized` without setting `minecraft = true`, owning `iron_age` does **not** unlock `civilized`'s vanilla locks — the player must explicitly own `civilized` for vanilla content to be reachable. Without this, granting a child stage would silently leak vanilla content the parent had locked.
 
@@ -173,7 +191,7 @@ is equivalent to `mods = ["minecraft"]` registered into items, blocks, fluids, a
 | **FTB Quests** | `Quest` / `Chapter` `required_stage` field gates both `isVisible` and `canStartTasks`; required-stage entry in the editor config UI |
 | **FTB Library** | `StageProvider` Proxy registration so FTB's native Stage Required, Stage Task, and Stage Reward all flow through ProgressiveStages |
 | **FTB Teams** | Default backend when `team_mode = "ftb_teams"`; optional `integration.ftbquests.team_mode` reflectively delegates FTB Quests stage reads to `TeamStagesHelper` |
-| **Curios** | `CurioCanEquipEvent` gate; per-slot stage locks via `[locks].curio_slots` |
+| **Curios** | `CurioCanEquipEvent` gate; per-slot stage locks via `[curios].locked_slots` |
 | **Lootr** | `ILootrFilterProvider` filters stage-locked loot from per-player chest snapshots |
 | **Mekanism** | Entity-join + block-break hooks honor stage gates; gases/pigments hidden in EMI via class-module detection |
 | **KubeJS** | `hasStage` / `requireStage` / `grantStage` script bindings |
@@ -241,7 +259,7 @@ common/
 
 server/
   enforcement/*Enforcer       — one per category, all multi-stage; spectator + creative bypass
-  loader/StageFileParser      — parses the unified [locks] / [unlocks] / minecraft=true schema
+  loader/StageFileParser      — parses the per-category sections + [unlocks] + minecraft=true schema
   loader/DefaultStageTemplates — first-launch templates (stone_age, diamond_age)
   ServerEventHandler          — wires every NeoForge event (block-place, item-pickup, dim-travel, mob-spawn, ...)
   triggers/                   — advancement / item-pickup / boss-kill / dimension grants
