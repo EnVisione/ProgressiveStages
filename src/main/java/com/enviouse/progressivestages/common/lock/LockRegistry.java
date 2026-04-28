@@ -2,1204 +2,1239 @@ package com.enviouse.progressivestages.common.lock;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
-import com.enviouse.progressivestages.common.util.StageUtil;
 import com.mojang.logging.LogUtils;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.material.Fluid;
 import org.slf4j.Logger;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
- * Central registry for all locks. Maps items, recipes, blocks, dimensions, mods to required stages.
+ * The 2.0 lock registry.
+ *
+ * <p>Internally stores a {@link ResolvedCategory} per category. Each category owns a list of
+ * ({@link PrefixEntry}, {@link StageId}) pairs plus a set of always-unlocked IDs that short-circuit
+ * the category check. Query methods iterate the category's entry list, consulting the element's
+ * {@link Holder} for tag membership.
+ *
+ * <p>Public query signatures are deliberately preserved from the 1.x registry so enforcers,
+ * mixins, network sync, and integrations don't ripple — only the internals have changed.
  */
-public class LockRegistry {
+public final class LockRegistry {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    // Item ID -> Required Stage
-    private final Map<ResourceLocation, StageId> itemLocks = new ConcurrentHashMap<>();
+    // ------- categories (one per registry-like lockable kind) -------
+    private final ResolvedCategory<Item>              itemCat         = new ResolvedCategory<>(Registries.ITEM);
+    private final ResolvedCategory<Block>             blockCat        = new ResolvedCategory<>(Registries.BLOCK);
+    private final ResolvedCategory<Fluid>             fluidCat        = new ResolvedCategory<>(Registries.FLUID);
+    private final ResolvedCategory<EntityType<?>>     entityCat       = new ResolvedCategory<>(Registries.ENTITY_TYPE);
+    private final ResolvedCategory<EntityType<?>>     spawnCat        = new ResolvedCategory<>(Registries.ENTITY_TYPE);
+    private final ResolvedCategory<net.minecraft.world.item.enchantment.Enchantment>
+                                                      enchantCat      = new ResolvedCategory<>(Registries.ENCHANTMENT);
+    private final ResolvedCategory<Block>             cropCat         = new ResolvedCategory<>(Registries.BLOCK);
+    private final ResolvedCategory<Block>             screenCat       = new ResolvedCategory<>(Registries.BLOCK);
+    /** Mirror of {@link #screenCat} typed to Item, so item-opened GUIs (backpacks, portable crafting) also gate. */
+    private final ResolvedCategory<Item>              screenItemCat   = new ResolvedCategory<>(Registries.ITEM);
+    private final ResolvedCategory<Item>              lootCat         = new ResolvedCategory<>(Registries.ITEM);
+    private final ResolvedCategory<EntityType<?>>     petTamingCat      = new ResolvedCategory<>(Registries.ENTITY_TYPE);
+    private final ResolvedCategory<EntityType<?>>     petBreedingCat    = new ResolvedCategory<>(Registries.ENTITY_TYPE);
+    private final ResolvedCategory<EntityType<?>>     petCommandingCat  = new ResolvedCategory<>(Registries.ENTITY_TYPE);
+    /** Used via the id-only path (no holder); tag checks fall back to false. */
+    private final ResolvedCategory<Object>            recipeIdCat     = new ResolvedCategory<>(null);
+    private final ResolvedCategory<Item>              recipeOutputCat = new ResolvedCategory<>(Registries.ITEM);
 
-    // Item Tag -> Required Stage
-    private final Map<ResourceLocation, StageId> itemTagLocks = new ConcurrentHashMap<>();
+    // ------- other lockable structures -------
+    private final Map<ResourceLocation, StageId>            dimensionLocks   = new ConcurrentHashMap<>();
+    private final Map<String, InteractionLockEntry>         interactionLocks = new ConcurrentHashMap<>();
+    private final List<MobReplacementEntry>                 mobReplacements  = Collections.synchronizedList(new ArrayList<>());
+    private final List<RegionLockEntry>                     regions          = Collections.synchronizedList(new ArrayList<>());
+    private final List<OreOverrideEntry>                    oreOverrides     = Collections.synchronizedList(new ArrayList<>());
+    private StructureRulesAggregate                         structures       = StructureRulesAggregate.EMPTY;
+    /** Curios slot identifier → required stage. Populated if the compat module is active. */
+    private final Map<String, StageId>                      curioSlotLocks   = new ConcurrentHashMap<>();
 
-    // Item Mod ID -> Required Stage (lock all items from a mod, but not blocks/entities)
-    private final Map<String, StageId> itemModLocks = new ConcurrentHashMap<>();
+    // ------- enforcement exceptions -------
+    private final List<String> useExemptions          = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> pickupExemptions       = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> hotbarExemptions       = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> mousePickupExemptions  = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> inventoryExemptions    = Collections.synchronizedList(new ArrayList<>());
 
-    // Recipe ID -> Required Stage
-    private final Map<ResourceLocation, StageId> recipeLocks = new ConcurrentHashMap<>();
+    // ------- v2.0: stages that gate the minecraft: namespace via shorthand -------
+    private final Set<StageId> vanillaNamespaceGatingStages = ConcurrentHashMap.newKeySet();
 
-    // Recipe Tag -> Required Stage
-    private final Map<ResourceLocation, StageId> recipeTagLocks = new ConcurrentHashMap<>();
+    // ------- v2.0: per-stage [unlocks] carve-out lists -------
+    private final Map<StageId, LockDefinition.UnlockGateLists> stageUnlocks = new ConcurrentHashMap<>();
 
-    // Recipe Item Locks: Output Item ID -> Required Stage (lock recipe by output item, not item itself)
-    private final Map<ResourceLocation, StageId> recipeItemLocks = new ConcurrentHashMap<>();
-
-    // Block ID -> Required Stage
-    private final Map<ResourceLocation, StageId> blockLocks = new ConcurrentHashMap<>();
-
-    // Block Tag -> Required Stage
-    private final Map<ResourceLocation, StageId> blockTagLocks = new ConcurrentHashMap<>();
-
-    // Block Mod ID -> Required Stage (lock all blocks from a mod, but not items/entities)
-    private final Map<String, StageId> blockModLocks = new ConcurrentHashMap<>();
-
-    // v1.4: Fluid ID -> Required Stage (hide from EMI/JEI)
-    private final Map<ResourceLocation, StageId> fluidLocks = new ConcurrentHashMap<>();
-
-    // v1.4: Fluid Tag -> Required Stage (hide from EMI/JEI)
-    private final Map<ResourceLocation, StageId> fluidTagLocks = new ConcurrentHashMap<>();
-
-    // v1.4: Fluid Mod ID -> Required Stage (hide all fluids from a mod in EMI/JEI)
-    private final Map<String, StageId> fluidModLocks = new ConcurrentHashMap<>();
-
-    // Dimension ID -> Required Stage
-    private final Map<ResourceLocation, StageId> dimensionLocks = new ConcurrentHashMap<>();
-
-    // Mod ID -> Required Stage (locks items, blocks, AND entities)
-    private final Map<String, StageId> modLocks = new ConcurrentHashMap<>();
-
-    // Name patterns -> Required Stage (case-insensitive substring matching)
-    private final Map<String, StageId> nameLocks = new ConcurrentHashMap<>();
-
-    // Interaction locks: key = type:heldItem:targetBlock
-    private final Map<String, InteractionLockEntry> interactionLocks = new ConcurrentHashMap<>();
-
-    // Entity type ID -> Required Stage
-    private final Map<ResourceLocation, StageId> entityLocks = new ConcurrentHashMap<>();
-
-    // Entity Tag -> Required Stage
-    private final Map<ResourceLocation, StageId> entityTagLocks = new ConcurrentHashMap<>();
-
-    // Entity Mod ID -> Required Stage (lock all entities from a mod)
-    private final Map<String, StageId> entityModLocks = new ConcurrentHashMap<>();
-
-    // v1.5: Mob spawn gating — independent from attack/interaction entity locks
-    private final Map<ResourceLocation, StageId> spawnEntityLocks = new ConcurrentHashMap<>();
-    private final Map<ResourceLocation, StageId> spawnEntityTagLocks = new ConcurrentHashMap<>();
-    private final Map<String, StageId> spawnEntityModLocks = new ConcurrentHashMap<>();
-
-    // v1.3: Global whitelist of items that are ALWAYS unlocked (bypass all lock checks)
-    private final Set<ResourceLocation> unlockedItems = ConcurrentHashMap.newKeySet();
-
-    // v1.4: Global whitelist of blocks that are ALWAYS unlocked (bypass all block lock checks)
-    private final Set<ResourceLocation> unlockedBlocks = ConcurrentHashMap.newKeySet();
-
-    // v1.3: Global whitelist of entities that are ALWAYS unlocked (bypass all entity lock checks)
-    private final Set<ResourceLocation> unlockedEntities = ConcurrentHashMap.newKeySet();
-
-    // v1.4: Global whitelist of fluids that are ALWAYS unlocked (bypass mod locks in EMI/JEI)
-    private final Set<ResourceLocation> unlockedFluids = ConcurrentHashMap.newKeySet();
-
-    // v1.4: Per-stage enforcement exceptions — items exempt from specific enforcement types
-    // Each list stores raw strings: item IDs ("minecraft:diamond"), tags ("#c:gems"), or mod IDs ("mekanism")
-    private final List<String> useExemptions = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> pickupExemptions = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> hotbarExemptions = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> mousePickupExemptions = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> inventoryExemptions = Collections.synchronizedList(new ArrayList<>());
-
-    // Cache for item -> stage lookups (rebuilt when registry changes)
+    // ------- caches -------
     private final Map<Item, Optional<StageId>> itemStageCache = new ConcurrentHashMap<>();
+    private Map<ResourceLocation, StageId> resolvedItemLocksCache;
 
     private static LockRegistry INSTANCE;
-
     public static LockRegistry getInstance() {
-        if (INSTANCE == null) {
-            INSTANCE = new LockRegistry();
-        }
+        if (INSTANCE == null) INSTANCE = new LockRegistry();
         return INSTANCE;
     }
-
     private LockRegistry() {}
 
-    /**
-     * Clear all locks and cache
-     */
+    // ================================================================
+    // Mutation
+    // ================================================================
+
     public void clear() {
-        itemLocks.clear();
-        itemTagLocks.clear();
-        itemModLocks.clear();
-        recipeLocks.clear();
-        recipeTagLocks.clear();
-        recipeItemLocks.clear();
-        blockLocks.clear();
-        blockTagLocks.clear();
-        blockModLocks.clear();
-        fluidLocks.clear();
-        fluidTagLocks.clear();
-        fluidModLocks.clear();
+        itemCat.clear(); blockCat.clear(); fluidCat.clear(); entityCat.clear(); spawnCat.clear();
+        enchantCat.clear(); cropCat.clear(); screenCat.clear(); screenItemCat.clear(); lootCat.clear();
+        petTamingCat.clear(); petBreedingCat.clear(); petCommandingCat.clear();
+        recipeIdCat.clear(); recipeOutputCat.clear();
         dimensionLocks.clear();
-        modLocks.clear();
-        nameLocks.clear();
         interactionLocks.clear();
-        entityLocks.clear();
-        entityTagLocks.clear();
-        entityModLocks.clear();
-        spawnEntityLocks.clear();
-        spawnEntityTagLocks.clear();
-        spawnEntityModLocks.clear();
-        unlockedItems.clear();
-        unlockedBlocks.clear();
-        unlockedEntities.clear();
-        unlockedFluids.clear();
-        useExemptions.clear();
-        pickupExemptions.clear();
-        hotbarExemptions.clear();
-        mousePickupExemptions.clear();
-        inventoryExemptions.clear();
+        mobReplacements.clear();
+        regions.clear();
+        oreOverrides.clear();
+        structures = StructureRulesAggregate.EMPTY;
+        curioSlotLocks.clear();
+        useExemptions.clear(); pickupExemptions.clear(); hotbarExemptions.clear();
+        mousePickupExemptions.clear(); inventoryExemptions.clear();
+        vanillaNamespaceGatingStages.clear();
+        stageUnlocks.clear();
         clearCache();
     }
 
-    /**
-     * Clear the cache (call after lock changes)
-     */
     public void clearCache() {
         itemStageCache.clear();
         resolvedItemLocksCache = null;
     }
 
-    /**
-     * Register all locks from a stage definition
-     */
+    public void invalidateResolvedCache() {
+        resolvedItemLocksCache = null;
+    }
+
     public void registerStage(StageDefinition stage) {
-        StageId stageId = stage.getId();
+        StageId id = stage.getId();
         LockDefinition locks = stage.getLocks();
 
-        // Register item locks
-        for (String itemId : locks.getItems()) {
-            registerItemLock(itemId, stageId);
+        itemCat.register(locks.items(), id);
+        blockCat.register(locks.blocks(), id);
+        fluidCat.register(locks.fluids(), id);
+        entityCat.register(locks.entities(), id);
+        spawnCat.register(locks.mobSpawns(), id);
+        enchantCat.register(locks.enchants(), id);
+        cropCat.register(locks.crops(), id);
+        screenCat.register(locks.screens(), id);
+        screenItemCat.register(locks.screens(), id);
+        lootCat.register(locks.loot(), id);
+        petTamingCat.register(locks.petsTaming(), id);
+        petBreedingCat.register(locks.petsBreeding(), id);
+        petCommandingCat.register(locks.petsCommanding(), id);
+        recipeIdCat.register(locks.recipeIds(), id);
+        recipeOutputCat.register(locks.recipeOutputs(), id);
+
+        for (ResourceLocation dim : locks.lockedDimensions()) {
+            dimensionLocks.put(dim, id);
         }
 
-        // Register item tag locks
-        for (String tagId : locks.getItemTags()) {
-            registerItemTagLock(tagId, stageId);
+        for (LockDefinition.InteractionLock i : locks.interactions()) {
+            String key = interactionKey(i.type(), i.heldItem(), i.targetBlock());
+            interactionLocks.put(key, new InteractionLockEntry(
+                i.type(), i.heldItem(), i.targetBlock(), i.description(), id));
         }
 
-        // Register item mod locks (locks only items from a mod, not blocks/entities)
-        for (String modId : locks.getItemMods()) {
-            registerItemModLock(modId, stageId);
+        for (LockDefinition.MobReplacement m : locks.mobReplacements()) {
+            mobReplacements.add(new MobReplacementEntry(m.target(), m.replaceWith(), id));
         }
 
-        // Register recipe locks
-        for (String recipeId : locks.getRecipes()) {
-            registerRecipeLock(recipeId, stageId);
+        for (LockDefinition.RegionLock r : locks.regions()) {
+            regions.add(new RegionLockEntry(r, id));
         }
 
-        // Register recipe tag locks
-        for (String tagId : locks.getRecipeTags()) {
-            registerRecipeTagLock(tagId, stageId);
+        for (LockDefinition.OreOverride o : locks.oreOverrides()) {
+            oreOverrides.add(new OreOverrideEntry(o.target(), o.displayAs(), o.dropAs(), id));
         }
 
-        // Register recipe item locks (lock recipe by output item ID, not the item itself)
-        for (String itemId : locks.getRecipeItems()) {
-            registerRecipeItemLock(itemId, stageId);
+        structures = structures.merge(locks.structures(), id);
+
+        for (String slot : locks.curioLockedSlots()) {
+            if (slot != null && !slot.isEmpty()) curioSlotLocks.putIfAbsent(slot, id);
         }
 
-        // Register block locks
-        for (String blockId : locks.getBlocks()) {
-            registerBlockLock(blockId, stageId);
-        }
+        useExemptions.addAll(locks.allowedUse());
+        pickupExemptions.addAll(locks.allowedPickup());
+        hotbarExemptions.addAll(locks.allowedHotbar());
+        mousePickupExemptions.addAll(locks.allowedMousePickup());
+        inventoryExemptions.addAll(locks.allowedInventory());
 
-        // Register block tag locks
-        for (String tagId : locks.getBlockTags()) {
-            registerBlockTagLock(tagId, stageId);
-        }
-
-        // Register block mod locks (locks only blocks from a mod, not items/entities)
-        for (String modId : locks.getBlockMods()) {
-            registerBlockModLock(modId, stageId);
-        }
-
-        // Register fluid locks (v1.4 - hide from EMI/JEI)
-        for (String fluidId : locks.getFluids()) {
-            registerFluidLock(fluidId, stageId);
-        }
-
-        // Register fluid tag locks (v1.4)
-        for (String tagId : locks.getFluidTags()) {
-            registerFluidTagLock(tagId, stageId);
-        }
-
-        // Register fluid mod locks (v1.4 - hide all fluids from a mod in EMI/JEI)
-        for (String modId : locks.getFluidMods()) {
-            registerFluidModLock(modId, stageId);
-        }
-
-        // Register dimension locks
-        for (String dimId : locks.getDimensions()) {
-            registerDimensionLock(dimId, stageId);
-        }
-
-        // Register mod locks (locks items, blocks, AND entities from a mod)
-        for (String modId : locks.getMods()) {
-            registerModLock(modId, stageId);
-        }
-
-        // Register name locks
-        for (String name : locks.getNames()) {
-            registerNameLock(name, stageId);
-        }
-
-        // Register interaction locks
-        for (LockDefinition.InteractionLock interaction : locks.getInteractions()) {
-            registerInteractionLock(interaction, stageId);
-        }
-
-        // Register entity locks
-        for (String entityId : locks.getEntities()) {
-            registerEntityLock(entityId, stageId);
-        }
-
-        // Register entity tag locks
-        for (String tagId : locks.getEntityTags()) {
-            registerEntityTagLock(tagId, stageId);
-        }
-
-        // Register entity mod locks (lock all entities from a mod)
-        for (String modId : locks.getEntityMods()) {
-            registerEntityModLock(modId, stageId);
-        }
-
-        // v1.5: Register mob spawn gating
-        for (String entityId : locks.getSpawnEntities()) {
-            ResourceLocation rl = parseResourceLocation(entityId);
-            if (rl != null) spawnEntityLocks.put(rl, stageId);
-            else LOGGER.warn("Invalid spawn_entities ID in stage {}: {}", stageId, entityId);
-        }
-        for (String tagId : locks.getSpawnEntityTags()) {
-            String cleanTag = tagId.startsWith("#") ? tagId.substring(1) : tagId;
-            ResourceLocation rl = parseResourceLocation(cleanTag);
-            if (rl != null) spawnEntityTagLocks.put(rl, stageId);
-            else LOGGER.warn("Invalid spawn_entity_tags value in stage {}: {}", stageId, tagId);
-        }
-        for (String modId : locks.getSpawnEntityMods()) {
-            spawnEntityModLocks.put(modId.toLowerCase(), stageId);
-        }
-
-        // Register unlocked items (v1.3 whitelist exceptions)
-        for (String itemId : locks.getUnlockedItems()) {
-            ResourceLocation rl = parseResourceLocation(itemId);
-            if (rl != null) {
-                unlockedItems.add(rl);
-                LOGGER.debug("Registered whitelist item for stage {}: {}", stageId, itemId);
-            } else {
-                LOGGER.warn("Invalid unlocked item ID in stage {}: {}", stageId, itemId);
+        if (locks.minecraftNamespace()) {
+            vanillaNamespaceGatingStages.add(id);
+            // v2.0 fix: shorthand `minecraft = true` is equivalent to `mods = ["minecraft"]`
+            // across the primary lockable categories. Without this, the flag would be
+            // recorded but never consulted by `getRequiredStages*` (the gating set would
+            // be empty for `minecraft:` resources unless the user also added `mod:minecraft`
+            // explicitly). Register a synthetic MOD entry into the items, blocks, fluids,
+            // and entities categories so a stage's vanilla gating is non-empty.
+            PrefixEntry mc = PrefixEntry.fromMod("minecraft");
+            if (mc != null) {
+                itemCat.registerSingle(mc, id);
+                blockCat.registerSingle(mc, id);
+                fluidCat.registerSingle(mc, id);
+                entityCat.registerSingle(mc, id);
             }
         }
 
-        // Register unlocked blocks (v1.4 whitelist exceptions for blocks)
-        for (String blockId : locks.getUnlockedBlocks()) {
-            ResourceLocation rl = parseResourceLocation(blockId);
-            if (rl != null) {
-                unlockedBlocks.add(rl);
-                LOGGER.debug("Registered whitelist block for stage {}: {}", stageId, blockId);
-            } else {
-                LOGGER.warn("Invalid unlocked block ID in stage {}: {}", stageId, blockId);
-            }
+        LockDefinition.UnlockGateLists u = locks.unlocks();
+        if (u != null && !u.isEmpty()) {
+            stageUnlocks.put(id, u);
         }
 
-        // Register unlocked entities (v1.3 whitelist exceptions for entities)
-        for (String entityId : locks.getUnlockedEntities()) {
-            ResourceLocation rl = parseResourceLocation(entityId);
-            if (rl != null) {
-                unlockedEntities.add(rl);
-                LOGGER.debug("Registered whitelist entity for stage {}: {}", stageId, entityId);
-            } else {
-                LOGGER.warn("Invalid unlocked entity ID in stage {}: {}", stageId, entityId);
-            }
-        }
-
-        // Register unlocked fluids (v1.4 whitelist exceptions for fluids)
-        for (String fluidId : locks.getUnlockedFluids()) {
-            ResourceLocation rl = parseResourceLocation(fluidId);
-            if (rl != null) {
-                unlockedFluids.add(rl);
-                LOGGER.debug("Registered whitelist fluid for stage {}: {}", stageId, fluidId);
-            } else {
-                LOGGER.warn("Invalid unlocked fluid ID in stage {}: {}", stageId, fluidId);
-            }
-        }
-
-        // Register per-stage enforcement exceptions (v1.4)
-        useExemptions.addAll(locks.getAllowedUse());
-        pickupExemptions.addAll(locks.getAllowedPickup());
-        hotbarExemptions.addAll(locks.getAllowedHotbar());
-        mousePickupExemptions.addAll(locks.getAllowedMousePickup());
-        inventoryExemptions.addAll(locks.getAllowedInventory());
-
-        LOGGER.debug("Registered locks for stage: {}", stageId);
+        LOGGER.debug("Registered locks for stage: {}", id);
     }
 
-    private void registerItemLock(String itemId, StageId stageId) {
-        ResourceLocation rl = parseResourceLocation(itemId);
-        if (rl != null) {
-            itemLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid item ID in stage {}: {}", stageId, itemId);
-        }
-    }
+    // ================================================================
+    // Query — items
+    // ================================================================
 
-    private void registerItemTagLock(String tagId, StageId stageId) {
-        String cleanTag = tagId.startsWith("#") ? tagId.substring(1) : tagId;
-        ResourceLocation rl = parseResourceLocation(cleanTag);
-        if (rl != null) {
-            itemTagLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid item tag in stage {}: {}", stageId, tagId);
-        }
-    }
-
-    private void registerRecipeLock(String recipeId, StageId stageId) {
-        ResourceLocation rl = parseResourceLocation(recipeId);
-        if (rl != null) {
-            recipeLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid recipe ID in stage {}: {}", stageId, recipeId);
-        }
-    }
-
-    private void registerRecipeTagLock(String tagId, StageId stageId) {
-        String cleanTag = tagId.startsWith("#") ? tagId.substring(1) : tagId;
-        ResourceLocation rl = parseResourceLocation(cleanTag);
-        if (rl != null) {
-            recipeTagLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid recipe tag in stage {}: {}", stageId, tagId);
-        }
-    }
-
-    private void registerRecipeItemLock(String itemId, StageId stageId) {
-        ResourceLocation rl = parseResourceLocation(itemId);
-        if (rl != null) {
-            recipeItemLocks.put(rl, stageId);
-            LOGGER.debug("Registered recipe-item lock for stage {}: {}", stageId, itemId);
-        } else {
-            LOGGER.warn("Invalid recipe-item ID in stage {}: {}", stageId, itemId);
-        }
-    }
-
-    private void registerBlockLock(String blockId, StageId stageId) {
-        ResourceLocation rl = parseResourceLocation(blockId);
-        if (rl != null) {
-            blockLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid block ID in stage {}: {}", stageId, blockId);
-        }
-    }
-
-    private void registerBlockTagLock(String tagId, StageId stageId) {
-        String cleanTag = tagId.startsWith("#") ? tagId.substring(1) : tagId;
-        ResourceLocation rl = parseResourceLocation(cleanTag);
-        if (rl != null) {
-            blockTagLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid block tag in stage {}: {}", stageId, tagId);
-        }
-    }
-
-    private void registerDimensionLock(String dimId, StageId stageId) {
-        ResourceLocation rl = parseResourceLocation(dimId);
-        if (rl != null) {
-            dimensionLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid dimension ID in stage {}: {}", stageId, dimId);
-        }
-    }
-
-    private void registerModLock(String modId, StageId stageId) {
-        modLocks.put(modId.toLowerCase(), stageId);
-    }
-
-    private void registerItemModLock(String modId, StageId stageId) {
-        itemModLocks.put(modId.toLowerCase(), stageId);
-        LOGGER.debug("Registered item mod lock for stage {}: {}", stageId, modId);
-    }
-
-    private void registerBlockModLock(String modId, StageId stageId) {
-        blockModLocks.put(modId.toLowerCase(), stageId);
-        LOGGER.debug("Registered block mod lock for stage {}: {}", stageId, modId);
-    }
-
-    private void registerFluidLock(String fluidId, StageId stageId) {
-        ResourceLocation rl = parseResourceLocation(fluidId);
-        if (rl != null) {
-            fluidLocks.put(rl, stageId);
-            LOGGER.debug("Registered fluid lock for stage {}: {}", stageId, fluidId);
-        } else {
-            LOGGER.warn("Invalid fluid ID in stage {}: {}", stageId, fluidId);
-        }
-    }
-
-    private void registerFluidTagLock(String tagId, StageId stageId) {
-        String cleanTag = tagId.startsWith("#") ? tagId.substring(1) : tagId;
-        ResourceLocation rl = parseResourceLocation(cleanTag);
-        if (rl != null) {
-            fluidTagLocks.put(rl, stageId);
-            LOGGER.debug("Registered fluid tag lock for stage {}: {}", stageId, tagId);
-        } else {
-            LOGGER.warn("Invalid fluid tag in stage {}: {}", stageId, tagId);
-        }
-    }
-
-    private void registerFluidModLock(String modId, StageId stageId) {
-        fluidModLocks.put(modId.toLowerCase(), stageId);
-        LOGGER.debug("Registered fluid mod lock for stage {}: {}", stageId, modId);
-    }
-
-    private void registerNameLock(String name, StageId stageId) {
-        nameLocks.put(name.toLowerCase(), stageId);
-    }
-
-    private void registerInteractionLock(LockDefinition.InteractionLock interaction, StageId stageId) {
-        String key = buildInteractionKey(interaction.getType(), interaction.getHeldItem(), interaction.getTargetBlock());
-        interactionLocks.put(key, new InteractionLockEntry(
-            interaction.getType(),
-            interaction.getHeldItem(),
-            interaction.getTargetBlock(),
-            interaction.getDescription(),
-            stageId
-        ));
-    }
-
-    private void registerEntityLock(String entityId, StageId stageId) {
-        ResourceLocation rl = parseResourceLocation(entityId);
-        if (rl != null) {
-            entityLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid entity ID in stage {}: {}", stageId, entityId);
-        }
-    }
-
-    private void registerEntityTagLock(String tagId, StageId stageId) {
-        String cleanTag = tagId.startsWith("#") ? tagId.substring(1) : tagId;
-        ResourceLocation rl = parseResourceLocation(cleanTag);
-        if (rl != null) {
-            entityTagLocks.put(rl, stageId);
-        } else {
-            LOGGER.warn("Invalid entity tag in stage {}: {}", stageId, tagId);
-        }
-    }
-
-    private void registerEntityModLock(String modId, StageId stageId) {
-        entityModLocks.put(modId.toLowerCase(), stageId);
-        LOGGER.debug("Registered entity mod lock for stage {}: {}", stageId, modId);
-    }
-
-    private String buildInteractionKey(String type, String heldItem, String targetBlock) {
-        return type + ":" + (heldItem != null ? heldItem : "*") + ":" + (targetBlock != null ? targetBlock : "*");
-    }
-
-    private ResourceLocation parseResourceLocation(String str) {
-        try {
-            return ResourceLocation.parse(str);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    // ==================== Query Methods ====================
-
-    /**
-     * Get the required stage for an item (checks all lock types)
-     */
     public Optional<StageId> getRequiredStage(Item item) {
-        return itemStageCache.computeIfAbsent(item, this::computeRequiredStageForItem);
+        // Route through getRequiredStages so per-stage [unlocks] carve-outs
+        // are applied uniformly between single-stage and multi-stage paths.
+        Set<StageId> gating = getRequiredStages(item);
+        return gating.isEmpty() ? Optional.empty() : gating.stream().findFirst();
     }
 
-    private Optional<StageId> computeRequiredStageForItem(Item item) {
-        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
-        if (itemId == null) {
-            return Optional.empty();
-        }
+    public boolean isItemLocked(Item item) {
+        return getRequiredStage(item).isPresent();
+    }
 
-        // v1.3: Check whitelist first - if item is whitelisted, it's never locked
-        if (unlockedItems.contains(itemId)) {
-            return Optional.empty();
-        }
+    public Set<ResourceLocation> getAllLockedItems() {
+        return itemCat.directIds();
+    }
 
-        // Check direct item lock
-        StageId directLock = itemLocks.get(itemId);
-        if (directLock != null) {
-            return Optional.of(directLock);
-        }
-
-        // Check item tags
-        for (Map.Entry<ResourceLocation, StageId> entry : itemTagLocks.entrySet()) {
-            TagKey<Item> tagKey = TagKey.create(Registries.ITEM, entry.getKey());
-            if (item.builtInRegistryHolder().is(tagKey)) {
-                return Optional.of(entry.getValue());
-            }
-        }
-
-        // Check item mod lock (item_mods = ["mekanism"] - locks only items from that mod)
-        String modId = itemId.getNamespace().toLowerCase();
-        StageId itemModLock = itemModLocks.get(modId);
-        if (itemModLock != null) {
-            return Optional.of(itemModLock);
-        }
-
-        // Check general mod lock (mods = ["mekanism"] - locks items, blocks, AND entities)
-        StageId modLock = modLocks.get(modId);
-        if (modLock != null) {
-            return Optional.of(modLock);
-        }
-
-        // Check name locks
-        String itemIdStr = itemId.toString().toLowerCase();
-        for (Map.Entry<String, StageId> entry : nameLocks.entrySet()) {
-            if (itemIdStr.contains(entry.getKey())) {
-                return Optional.of(entry.getValue());
-            }
-        }
-
-        return Optional.empty();
+    public Map<ResourceLocation, StageId> getAllItemLocks() {
+        return itemCat.directIdMap();
     }
 
     /**
-     * Get the required stage for a recipe
+     * Resolve every Item in the registry against the item category, yielding a flat
+     * ID → stage map. Cached until invalidated. Used by network sync and EMI.
      */
+    public Map<ResourceLocation, StageId> getAllResolvedItemLocks() {
+        if (resolvedItemLocksCache != null) return resolvedItemLocksCache;
+
+        long t0 = System.currentTimeMillis();
+        Map<ResourceLocation, StageId> resolved = new HashMap<>();
+        for (Item item : BuiltInRegistries.ITEM) {
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+            if (id == null) continue;
+            itemCat.findStage(id, item.builtInRegistryHolder())
+                .ifPresent(stage -> resolved.put(id, stage));
+        }
+
+        long elapsed = System.currentTimeMillis() - t0;
+        if (elapsed > 100) {
+            LOGGER.info("[ProgressiveStages] Resolved {} item locks in {}ms", resolved.size(), elapsed);
+        }
+        resolvedItemLocksCache = Collections.unmodifiableMap(resolved);
+        return resolvedItemLocksCache;
+    }
+
+    // ================================================================
+    // Query — blocks, fluids, entities, dimensions
+    // ================================================================
+
+    public Optional<StageId> getRequiredStageForBlock(Block block) {
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        // Preserve v1 behavior: a block counts as whitelisted if its item form is whitelisted.
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(block.asItem());
+        if (itemId != null && itemCat.isWhitelisted(itemId)) return Optional.empty();
+        return blockCat.findStage(id, block.builtInRegistryHolder());
+    }
+
+    public boolean isBlockUnlocked(ResourceLocation blockId) {
+        return blockCat.isWhitelisted(blockId);
+    }
+
+    public Set<ResourceLocation> getUnlockedBlocks() {
+        return blockCat.whitelistView();
+    }
+
+    public Optional<StageId> getRequiredStageForFluid(ResourceLocation fluidId) {
+        if (fluidId == null) return Optional.empty();
+        Fluid fluid = BuiltInRegistries.FLUID.get(fluidId);
+        if (fluid == null) {
+            return fluidCat.findStageIdOnly(fluidId);
+        }
+        return fluidCat.findStage(fluidId, fluid.builtInRegistryHolder());
+    }
+
+    public boolean isFluidUnlocked(ResourceLocation fluidId) {
+        return fluidCat.isWhitelisted(fluidId);
+    }
+
+    public Set<ResourceLocation> getUnlockedFluids() {
+        return fluidCat.whitelistView();
+    }
+
+    public Map<ResourceLocation, StageId> getAllFluidLocks() {
+        return fluidCat.directIdMap();
+    }
+
+    public Map<ResourceLocation, StageId> getAllFluidTagLocks() {
+        return fluidCat.tagIdMap();
+    }
+
+    public Set<String> getAllLockedFluidMods() {
+        return fluidCat.modNames();
+    }
+
+    public Optional<StageId> getFluidModLockStage(String modId) {
+        return fluidCat.modStage(modId);
+    }
+
+    public Optional<StageId> getRequiredStageForEntity(EntityType<?> type) {
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        return entityCat.findStage(id, type.builtInRegistryHolder());
+    }
+
+    public boolean isEntityLocked(EntityType<?> type) {
+        return getRequiredStageForEntity(type).isPresent();
+    }
+
+    public Optional<StageId> getRequiredStageForSpawn(EntityType<?> type) {
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        return spawnCat.findStage(id, type.builtInRegistryHolder());
+    }
+
+    public Optional<StageId> getRequiredStageForDimension(ResourceLocation dimId) {
+        if (dimId == null) return Optional.empty();
+        return Optional.ofNullable(dimensionLocks.get(dimId));
+    }
+
+    // ================================================================
+    // Query — recipes
+    // ================================================================
+
     public Optional<StageId> getRequiredStageForRecipe(ResourceLocation recipeId) {
-        if (recipeId == null) {
-            return Optional.empty();
-        }
+        if (recipeId == null) return Optional.empty();
+        return recipeIdCat.findStageIdOnly(recipeId);
+    }
 
-        // Check direct recipe lock
-        StageId directLock = recipeLocks.get(recipeId);
-        if (directLock != null) {
-            return Optional.of(directLock);
-        }
+    public Optional<StageId> getRequiredStageForRecipeByOutput(Item outputItem) {
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(outputItem);
+        if (id == null) return Optional.empty();
+        return recipeOutputCat.findStage(id, outputItem.builtInRegistryHolder());
+    }
 
-        // Check mod lock for recipe
-        String modId = recipeId.getNamespace().toLowerCase();
-        StageId modLock = modLocks.get(modId);
-        if (modLock != null) {
-            return Optional.of(modLock);
-        }
+    public boolean hasRecipeOnlyLock(Item item) {
+        return getRequiredStageForRecipeByOutput(item).isPresent();
+    }
 
+    public Set<ResourceLocation> getAllLockedRecipes() {
+        return recipeIdCat.directIds();
+    }
+
+    public Map<ResourceLocation, StageId> getAllRecipeLocks() {
+        return recipeIdCat.directIdMap();
+    }
+
+    public Map<ResourceLocation, StageId> getAllRecipeItemLocks() {
+        // Resolve recipeOutputCat across every Item so the client receives a flat map.
+        Map<ResourceLocation, StageId> out = new HashMap<>();
+        for (Item item : BuiltInRegistries.ITEM) {
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+            if (id == null) continue;
+            recipeOutputCat.findStage(id, item.builtInRegistryHolder())
+                .ifPresent(stage -> out.put(id, stage));
+        }
+        return Collections.unmodifiableMap(out);
+    }
+
+    // ================================================================
+    // Query — mod/name surface (legacy compat for JEI / commands)
+    // ================================================================
+
+    /**
+     * Every mod namespace that locks at least one item in the item category.
+     * In 1.x this drew from a separate {@code mods} list; in 2.0 we derive it from
+     * {@code mod:} entries in {@code [items].locked}.
+     */
+    public Set<String> getAllLockedMods() {
+        return itemCat.modNames();
+    }
+
+    public Optional<StageId> getModLockStage(String modId) {
+        if (modId == null) return Optional.empty();
+        return itemCat.modStage(modId);
+    }
+
+    public Set<String> getAllNamePatterns() {
+        return itemCat.nameValues();
+    }
+
+    public Optional<StageId> getNamePatternStage(String pattern) {
+        if (pattern == null) return Optional.empty();
+        return itemCat.nameStage(pattern);
+    }
+
+    // ================================================================
+    // Query — interactions
+    // ================================================================
+
+    public Optional<StageId> getRequiredStageForInteraction(String type, String heldItem, String target) {
+        InteractionLockEntry exact = interactionLocks.get(interactionKey(type, heldItem, target));
+        if (exact != null) return Optional.of(exact.requiredStage);
+        for (InteractionLockEntry e : interactionLocks.values()) {
+            if (e.matches(type, heldItem, target)) return Optional.of(e.requiredStage);
+        }
         return Optional.empty();
     }
 
-    /**
-     * Get the required stage for a recipe based on the output item.
-     * This is used for recipe-only locks (recipe_items = ["..."]) where the item itself is NOT locked.
-     */
-    public Optional<StageId> getRequiredStageForRecipeByOutput(Item outputItem) {
-        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(outputItem);
-        if (itemId == null) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(recipeItemLocks.get(itemId));
+    public java.util.Collection<InteractionLockEntry> getAllInteractionLocksOfType(String type) {
+        List<InteractionLockEntry> out = new ArrayList<>();
+        for (InteractionLockEntry e : interactionLocks.values()) if (type.equals(e.type)) out.add(e);
+        return out;
     }
 
-    /**
-     * Check if a recipe output item has a recipe-only lock (separate from item lock).
-     */
-    public boolean hasRecipeOnlyLock(Item item) {
+    private static String interactionKey(String type, String heldItem, String target) {
+        return type + ":" + (heldItem != null ? heldItem : "*") + ":" + (target != null ? target : "*");
+    }
+
+    // ================================================================
+    // Enforcement exemption checks
+    // ================================================================
+
+    public boolean isExemptFromUse(Item item)          { return matchesExemption(item, useExemptions); }
+    public boolean isExemptFromPickup(Item item)       { return matchesExemption(item, pickupExemptions); }
+    public boolean isExemptFromHotbar(Item item)       { return matchesExemption(item, hotbarExemptions); }
+    public boolean isExemptFromMousePickup(Item item)  { return matchesExemption(item, mousePickupExemptions); }
+    public boolean isExemptFromInventory(Item item)    { return matchesExemption(item, inventoryExemptions); }
+
+    private boolean matchesExemption(Item item, List<String> exemptions) {
+        if (exemptions.isEmpty()) return false;
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
-        return itemId != null && recipeItemLocks.containsKey(itemId);
-    }
-
-    /**
-     * Get all recipe item locks (output item ID → stage, for syncing to client)
-     */
-    public Map<ResourceLocation, StageId> getAllRecipeItemLocks() {
-        return Collections.unmodifiableMap(recipeItemLocks);
-    }
-
-    // ==================== Enforcement Exemption Checks ====================
-
-    /**
-     * Check if an item is exempt from a specific enforcement type.
-     * Matches against: exact item IDs, tags (#namespace:tag), and mod IDs.
-     */
-    public boolean isExemptFromUse(Item item) {
-        return matchesExemptionList(item, useExemptions);
-    }
-
-    public boolean isExemptFromPickup(Item item) {
-        return matchesExemptionList(item, pickupExemptions);
-    }
-
-    public boolean isExemptFromHotbar(Item item) {
-        return matchesExemptionList(item, hotbarExemptions);
-    }
-
-    public boolean isExemptFromMousePickup(Item item) {
-        return matchesExemptionList(item, mousePickupExemptions);
-    }
-
-    public boolean isExemptFromInventory(Item item) {
-        return matchesExemptionList(item, inventoryExemptions);
-    }
-
-    /**
-     * Check if an item matches any entry in an exemption list.
-     * Supports: exact item IDs, tags (#namespace:tag), mod IDs (plain string without colon).
-     */
-    private boolean matchesExemptionList(Item item, List<String> exemptions) {
-        if (exemptions.isEmpty()) {
-            return false;
-        }
-
-        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
-        if (itemId == null) {
-            return false;
-        }
-
+        if (itemId == null) return false;
         String itemIdStr = itemId.toString();
         String modId = itemId.getNamespace();
 
         for (String entry : exemptions) {
             if (entry.startsWith("#")) {
-                // Tag match: #namespace:tag_path
-                String tagStr = entry.substring(1);
                 try {
-                    ResourceLocation tagLoc = ResourceLocation.parse(tagStr);
-                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagLoc);
-                    if (item.builtInRegistryHolder().is(tagKey)) {
-                        return true;
-                    }
+                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.substring(1)));
+                    if (item.builtInRegistryHolder().is(tagKey)) return true;
                 } catch (Exception ignored) {}
             } else if (entry.contains(":")) {
-                // Exact item ID match: namespace:item_path
-                if (itemIdStr.equals(entry)) {
-                    return true;
-                }
+                if (itemIdStr.equals(entry)) return true;
             } else {
-                // Mod ID match: just the namespace (e.g., "mekanism")
-                if (modId.equals(entry)) {
-                    return true;
-                }
+                if (modId.equals(entry)) return true;
             }
         }
         return false;
     }
 
-    /**
-     * Get the required stage for a block
-     */
-    public Optional<StageId> getRequiredStageForBlock(Block block) {
-        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
-        if (blockId == null) {
-            return Optional.empty();
-        }
+    // ================================================================
+    // Accessors for the 2.0-only categories (used by future enforcers)
+    // ================================================================
 
-        // v1.4: Check block whitelist first
-        if (unlockedBlocks.contains(blockId)) {
-            return Optional.empty();
+    public Optional<StageId> getRequiredStageForEnchantment(ResourceLocation enchantId, Holder<net.minecraft.world.item.enchantment.Enchantment> holder) {
+        return enchantCat.findStage(enchantId, holder);
+    }
+
+    public Optional<StageId> getRequiredStageForCrop(Block block) {
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        return cropCat.findStage(id, block.builtInRegistryHolder());
+    }
+
+    public Optional<StageId> getRequiredStageForScreen(Block block) {
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        return screenCat.findStage(id, block.builtInRegistryHolder());
+    }
+
+    /**
+     * Item-side of the screens category: matches the {@code [screens] locked} list against
+     * an item ID so item-opened GUIs (backpacks, portable crafting tables, shulker-in-hand
+     * via mods) gate on the same config as block-opened GUIs.
+     */
+    public Optional<StageId> getRequiredStageForScreenItem(Item item) {
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        if (id == null) return Optional.empty();
+        return screenItemCat.findStage(id, item.builtInRegistryHolder());
+    }
+
+    public Optional<StageId> getRequiredStageForLoot(Item item) {
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        if (id == null) return Optional.empty();
+        return lootCat.findStage(id, item.builtInRegistryHolder());
+    }
+
+    public Optional<StageId> getRequiredStageForPetTaming(EntityType<?> type) {
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        return petTamingCat.findStage(id, type.builtInRegistryHolder());
+    }
+
+    public Optional<StageId> getRequiredStageForPetBreeding(EntityType<?> type) {
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        return petBreedingCat.findStage(id, type.builtInRegistryHolder());
+    }
+
+    public Optional<StageId> getRequiredStageForPetCommanding(EntityType<?> type) {
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        return petCommandingCat.findStage(id, type.builtInRegistryHolder());
+    }
+
+    public List<MobReplacementEntry> getMobReplacements() {
+        return Collections.unmodifiableList(mobReplacements);
+    }
+
+    public List<RegionLockEntry> getRegions() {
+        return Collections.unmodifiableList(regions);
+    }
+
+    public StructureRulesAggregate getStructures() {
+        return structures;
+    }
+
+    public List<OreOverrideEntry> getOreOverrides() {
+        return Collections.unmodifiableList(oreOverrides);
+    }
+
+    /** Unmodifiable view of locked Curios slot identifiers → required stage. */
+    public Map<String, StageId> getCurioSlotLocks() {
+        return Collections.unmodifiableMap(curioSlotLocks);
+    }
+
+    public Optional<StageId> getRequiredStageForCurioSlot(String slotIdentifier) {
+        if (slotIdentifier == null) return Optional.empty();
+        return Optional.ofNullable(curioSlotLocks.get(slotIdentifier));
+    }
+
+    // ================================================================
+    // v2.0: minecraft=true shorthand + child-stage inheritance
+    // ================================================================
+
+    /** True if {@code stage} declares {@code minecraft=true} (gates the minecraft: namespace). */
+    public boolean isVanillaNamespaceGatedByStage(StageId stage) {
+        return stage != null && vanillaNamespaceGatingStages.contains(stage);
+    }
+
+    /** All stages with {@code minecraft=true} declared. */
+    public Set<StageId> getStagesGatingVanillaNamespace() {
+        return Collections.unmodifiableSet(vanillaNamespaceGatingStages);
+    }
+
+    /**
+     * Compute the effective access set for the {@code minecraft:} namespace.
+     * Starting from the player's owned stages, this method ALSO pulls in transitively-owned
+     * prerequisite stages with {@code minecraft=true} so that granting a child stage
+     * doesn't accidentally drop a parent's vanilla gating.
+     *
+     * <p>Returns a Set including all of the player's owned stages plus any transitive
+     * prerequisite that is still in the player's owned set AND has {@code minecraft=true}.
+     */
+    public Set<StageId> effectiveLockStagesForVanillaNamespace(Set<StageId> playerOwnedStages) {
+        if (playerOwnedStages == null || playerOwnedStages.isEmpty()) return Collections.emptySet();
+        if (vanillaNamespaceGatingStages.isEmpty()) return Collections.unmodifiableSet(new HashSet<>(playerOwnedStages));
+        Set<StageId> active = new HashSet<>(playerOwnedStages);
+        com.enviouse.progressivestages.common.stage.StageOrder order =
+            com.enviouse.progressivestages.common.stage.StageOrder.getInstance();
+        for (StageId t : new ArrayList<>(playerOwnedStages)) {
+            for (StageId s : order.getAllDependencies(t)) {
+                if (!playerOwnedStages.contains(s)) continue;
+                if (vanillaNamespaceGatingStages.contains(s)) active.add(s);
+            }
         }
-        // v1.1: Also check item whitelist - if block (or its item form) is whitelisted, it's never locked
-        if (unlockedItems.contains(blockId)) {
-            return Optional.empty();
-        }
-        // Also check the item form of the block
+        return Collections.unmodifiableSet(active);
+    }
+
+    // ================================================================
+    // v2.0: per-stage [unlocks] carve-outs
+    // ================================================================
+
+    /**
+     * Apply per-stage unlocks: from {@code gating}, drop any stage S whose
+     * own {@code [unlocks]} carves out the given resource (item or its mod namespace).
+     */
+    public Set<StageId> applyPerStageUnlocks(Set<StageId> gating, ResourceLocation itemId, String modNs) {
+        if (gating == null || gating.isEmpty() || stageUnlocks.isEmpty()) return gating == null ? Set.of() : gating;
+        Set<StageId> filtered = new HashSet<>(gating);
+        boolean changed = filtered.removeIf(sid -> {
+            LockDefinition.UnlockGateLists u = stageUnlocks.get(sid);
+            if (u == null) return false;
+            if (itemId != null && u.items().contains(itemId)) {
+                if (com.enviouse.progressivestages.common.config.StageConfig.isDebugLogging()) {
+                    LOGGER.debug("[ProgressiveStages] Stage {} carves out {} via [unlocks].items", sid, itemId);
+                }
+                return true;
+            }
+            if (modNs != null && u.mods().contains(modNs)) {
+                if (com.enviouse.progressivestages.common.config.StageConfig.isDebugLogging()) {
+                    LOGGER.debug("[ProgressiveStages] Stage {} carves out namespace {} via [unlocks].mods", sid, modNs);
+                }
+                return true;
+            }
+            return false;
+        });
+        if (!changed) return gating;
+        return Set.copyOf(filtered);
+    }
+
+    public Set<StageId> applyPerStageUnlocksFluid(Set<StageId> gating, ResourceLocation fluidId, String modNs) {
+        if (gating == null || gating.isEmpty() || stageUnlocks.isEmpty()) return gating == null ? Set.of() : gating;
+        Set<StageId> filtered = new HashSet<>(gating);
+        filtered.removeIf(sid -> {
+            LockDefinition.UnlockGateLists u = stageUnlocks.get(sid);
+            if (u == null) return false;
+            return (fluidId != null && u.fluids().contains(fluidId))
+                || (modNs != null && u.mods().contains(modNs));
+        });
+        return Set.copyOf(filtered);
+    }
+
+    public Set<StageId> applyPerStageUnlocksDimension(Set<StageId> gating, ResourceLocation dimId) {
+        if (gating == null || gating.isEmpty() || stageUnlocks.isEmpty()) return gating == null ? Set.of() : gating;
+        Set<StageId> filtered = new HashSet<>(gating);
+        filtered.removeIf(sid -> {
+            LockDefinition.UnlockGateLists u = stageUnlocks.get(sid);
+            return u != null && dimId != null && u.dimensions().contains(dimId);
+        });
+        return Set.copyOf(filtered);
+    }
+
+    public Set<StageId> applyPerStageUnlocksEntity(Set<StageId> gating, ResourceLocation entityId, String modNs) {
+        if (gating == null || gating.isEmpty() || stageUnlocks.isEmpty()) return gating == null ? Set.of() : gating;
+        Set<StageId> filtered = new HashSet<>(gating);
+        filtered.removeIf(sid -> {
+            LockDefinition.UnlockGateLists u = stageUnlocks.get(sid);
+            if (u == null) return false;
+            return (entityId != null && u.entities().contains(entityId))
+                || (modNs != null && u.mods().contains(modNs));
+        });
+        return Set.copyOf(filtered);
+    }
+
+    // ================================================================
+    // v2.0: Multi-stage gating API (Set<StageId> returns)
+    // ================================================================
+
+    public Set<StageId> getRequiredStages(Item item) {
+        if (item == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        Set<StageId> raw = itemCat.findStages(id, item.builtInRegistryHolder());
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForBlock(Block block) {
+        if (block == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(block.asItem());
-        if (itemId != null && unlockedItems.contains(itemId)) {
-            return Optional.empty();
-        }
+        if (itemId != null && itemCat.isWhitelisted(itemId)) return Set.of();
+        Set<StageId> raw = blockCat.findStages(id, block.builtInRegistryHolder());
+        // v2.0: apply per-stage [unlocks] carve-outs (mods is the meaningful filter for blocks).
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
 
-        // Check direct block lock
-        StageId directLock = blockLocks.get(blockId);
-        if (directLock != null) {
-            return Optional.of(directLock);
-        }
+    public Set<StageId> getRequiredStagesForFluid(ResourceLocation fluidId) {
+        if (fluidId == null) return Set.of();
+        Fluid fluid = BuiltInRegistries.FLUID.get(fluidId);
+        Set<StageId> raw = (fluid == null)
+            ? fluidCat.findStagesIdOnly(fluidId)
+            : fluidCat.findStages(fluidId, fluid.builtInRegistryHolder());
+        return applyPerStageUnlocksFluid(raw, fluidId, fluidId.getNamespace());
+    }
 
-        // Check block tags
-        for (Map.Entry<ResourceLocation, StageId> entry : blockTagLocks.entrySet()) {
-            TagKey<Block> tagKey = TagKey.create(Registries.BLOCK, entry.getKey());
-            if (block.builtInRegistryHolder().is(tagKey)) {
-                return Optional.of(entry.getValue());
-            }
-        }
+    public Set<StageId> getRequiredStagesForEntity(ResourceLocation entityId) {
+        if (entityId == null) return Set.of();
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(entityId);
+        Set<StageId> raw = (type == null)
+            ? entityCat.findStagesIdOnly(entityId)
+            : entityCat.findStages(entityId, type.builtInRegistryHolder());
+        return applyPerStageUnlocksEntity(raw, entityId, entityId.getNamespace());
+    }
 
-        // Check block mod lock (block_mods = ["mekanism"] - locks only blocks from that mod)
-        String modId = blockId.getNamespace().toLowerCase();
-        StageId blockModLock = blockModLocks.get(modId);
-        if (blockModLock != null) {
-            return Optional.of(blockModLock);
-        }
+    public Set<StageId> getRequiredStagesForEntity(EntityType<?> type) {
+        if (type == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        Set<StageId> raw = entityCat.findStages(id, type.builtInRegistryHolder());
+        return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
+    }
 
-        // Check general mod lock (mods = ["mekanism"] - locks items, blocks, AND entities)
-        StageId modLock = modLocks.get(modId);
-        if (modLock != null) {
-            return Optional.of(modLock);
-        }
+    public Set<StageId> getRequiredStagesForDimension(ResourceLocation dimId) {
+        if (dimId == null) return Set.of();
+        StageId direct = dimensionLocks.get(dimId);
+        Set<StageId> raw = direct != null ? Set.of(direct) : Set.of();
+        return applyPerStageUnlocksDimension(raw, dimId);
+    }
 
-        // Check name locks
-        String blockIdStr = blockId.toString().toLowerCase();
-        for (Map.Entry<String, StageId> entry : nameLocks.entrySet()) {
-            if (blockIdStr.contains(entry.getKey())) {
-                return Optional.of(entry.getValue());
-            }
-        }
+    public Set<StageId> getRequiredStagesForRecipe(ResourceLocation recipeId) {
+        if (recipeId == null) return Set.of();
+        Set<StageId> raw = recipeIdCat.findStagesIdOnly(recipeId);
+        // v2.0: per-stage [unlocks] carve-out (items and mods both meaningful here).
+        return applyPerStageUnlocks(raw, recipeId, recipeId.getNamespace());
+    }
 
+    public Set<StageId> getRequiredStagesForRecipeByOutput(Item output) {
+        if (output == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(output);
+        Set<StageId> raw = recipeOutputCat.findStages(id, output.builtInRegistryHolder());
+        // v2.0: carve-outs apply on the output item and its mod namespace.
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForEnchantment(ResourceLocation id, Holder<net.minecraft.world.item.enchantment.Enchantment> holder) {
+        return enchantCat.findStages(id, holder);
+    }
+
+    public Set<StageId> getRequiredStagesForMod(String modId) {
+        if (modId == null) return Set.of();
+        return itemCat.modStages(modId);
+    }
+
+    public Set<StageId> getRequiredStagesForName(String pattern) {
+        if (pattern == null) return Set.of();
+        String needle = pattern.toLowerCase();
+        Set<StageId> out = null;
+        // we can't access the inner entries here; use existing single-stage as fallback
+        Optional<StageId> single = itemCat.nameStage(pattern);
+        if (single.isPresent()) {
+            out = new java.util.LinkedHashSet<>();
+            out.add(single.get());
+        }
+        return out == null ? Set.of() : Set.copyOf(out);
+    }
+
+    /**
+     * The canonical multi-stage gate predicate for items.
+     * Considers vanilla namespace inheritance for {@code minecraft:} ids.
+     * Returns true if blocked (gating non-empty AND not all gating stages are owned).
+     */
+    public boolean isItemBlockedFor(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return false;
+        Set<StageId> gating = getRequiredStages(item);
+        if (gating.isEmpty()) return false;
+        Set<StageId> access = computeAccessStagesForItem(player, item);
+        return blockedByMissing(gating, access);
+    }
+
+    public Optional<StageId> primaryRestrictingStage(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return Optional.empty();
+        Set<StageId> gating = getRequiredStages(item);
+        if (gating.isEmpty()) return Optional.empty();
+        Set<StageId> access = computeAccessStagesForItem(player, item);
+        for (StageId s : gating) {
+            if (!access.contains(s)) return Optional.of(s);
+        }
         return Optional.empty();
     }
 
-    /**
-     * Get the required stage for a dimension
-     */
-    public Optional<StageId> getRequiredStageForDimension(ResourceLocation dimensionId) {
-        if (dimensionId == null) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(dimensionLocks.get(dimensionId));
+    /** Lists all gating stages the player is missing for the given item. */
+    public Set<StageId> missingStagesForItem(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return Set.of();
+        Set<StageId> gating = getRequiredStages(item);
+        if (gating.isEmpty()) return Set.of();
+        Set<StageId> access = computeAccessStagesForItem(player, item);
+        Set<StageId> missing = new java.util.LinkedHashSet<>();
+        for (StageId s : gating) if (!access.contains(s)) missing.add(s);
+        return Collections.unmodifiableSet(missing);
     }
 
-    /**
-     * Get the required stage for an interaction
-     */
-    public Optional<StageId> getRequiredStageForInteraction(String type, String heldItem, String targetBlock) {
-        // Check exact match
-        String exactKey = buildInteractionKey(type, heldItem, targetBlock);
-        InteractionLockEntry exactMatch = interactionLocks.get(exactKey);
-        if (exactMatch != null) {
-            return Optional.of(exactMatch.requiredStage);
+    private Set<StageId> computeAccessStagesForItem(net.minecraft.server.level.ServerPlayer player, Item item) {
+        Set<StageId> owned = com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        if (id != null && "minecraft".equals(id.getNamespace())) {
+            return effectiveLockStagesForVanillaNamespace(owned);
         }
+        return owned;
+    }
 
-        // Check with wildcards
-        for (InteractionLockEntry entry : interactionLocks.values()) {
-            if (entry.matches(type, heldItem, targetBlock)) {
-                return Optional.of(entry.requiredStage);
-            }
-        }
+    private boolean blockedByMissing(Set<StageId> gating, Set<StageId> access) {
+        return !gating.isEmpty() && !access.containsAll(gating);
+    }
 
+    /** True if {@code player} owns every stage in {@code set}. */
+    public boolean playerHasAllStages(net.minecraft.server.level.ServerPlayer player, Set<StageId> set) {
+        if (set == null || set.isEmpty()) return true;
+        com.enviouse.progressivestages.common.stage.StageManager sm =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+        for (StageId s : set) if (!sm.hasStage(player, s)) return false;
+        return true;
+    }
+
+    public boolean isFluidBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation fluidId) {
+        if (player == null || fluidId == null) return false;
+        Set<StageId> gating = getRequiredStagesForFluid(fluidId);
+        if (gating.isEmpty()) return false;
+        Set<StageId> access = "minecraft".equals(fluidId.getNamespace())
+            ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
+            : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
+        return blockedByMissing(gating, access);
+    }
+
+    public boolean isDimensionBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation dimId) {
+        if (player == null || dimId == null) return false;
+        Set<StageId> gating = getRequiredStagesForDimension(dimId);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public boolean isEntityBlockedFor(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        if (player == null || type == null) return false;
+        Set<StageId> gating = getRequiredStagesForEntity(type);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public boolean isBlockBlockedFor(net.minecraft.server.level.ServerPlayer player, Block block) {
+        if (player == null || block == null) return false;
+        Set<StageId> gating = getRequiredStagesForBlock(block);
+        if (gating.isEmpty()) return false;
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        Set<StageId> access = (id != null && "minecraft".equals(id.getNamespace()))
+            ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
+            : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
+        return blockedByMissing(gating, access);
+    }
+
+    public boolean isRecipeBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation recipeId) {
+        if (player == null || recipeId == null) return false;
+        Set<StageId> gating = getRequiredStagesForRecipe(recipeId);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public boolean isRecipeOutputBlockedFor(net.minecraft.server.level.ServerPlayer player, Item outputItem) {
+        if (player == null || outputItem == null) return false;
+        Set<StageId> gating = getRequiredStagesForRecipeByOutput(outputItem);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForRecipe(net.minecraft.server.level.ServerPlayer player, ResourceLocation recipeId) {
+        if (player == null || recipeId == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForRecipe(recipeId));
+    }
+
+    public Optional<StageId> primaryRestrictingStageForRecipeOutput(net.minecraft.server.level.ServerPlayer player, Item outputItem) {
+        if (player == null || outputItem == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForRecipeByOutput(outputItem));
+    }
+
+    public Optional<StageId> primaryRestrictingStageForEnchantment(net.minecraft.server.level.ServerPlayer player, ResourceLocation enchantId, Holder<net.minecraft.world.item.enchantment.Enchantment> holder) {
+        if (player == null || enchantId == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForEnchantment(enchantId, holder));
+    }
+
+    public boolean isEnchantmentBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation enchantId, Holder<net.minecraft.world.item.enchantment.Enchantment> holder) {
+        if (player == null || enchantId == null) return false;
+        Set<StageId> gating = getRequiredStagesForEnchantment(enchantId, holder);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    /** Multi-stage variant of getModLockStage — returns ALL stages locking this mod. */
+    public Set<StageId> getModLockStages(String modId) {
+        return getRequiredStagesForMod(modId);
+    }
+
+    // ----- Multi-stage variants for secondary categories (v2.0 cleanup pass) -----
+
+    public Set<StageId> getRequiredStagesForSpawn(EntityType<?> type) {
+        if (type == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        Set<StageId> raw = spawnCat.findStages(id, type.builtInRegistryHolder());
+        return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForLoot(Item item) {
+        if (item == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        Set<StageId> raw = lootCat.findStages(id, item.builtInRegistryHolder());
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForCrop(Block block) {
+        if (block == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        Set<StageId> raw = cropCat.findStages(id, block.builtInRegistryHolder());
+        // v2.0: per-stage [unlocks] carve-outs (mods filter is meaningful for crop blocks).
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForScreen(Block block) {
+        if (block == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        Set<StageId> raw = screenCat.findStages(id, block.builtInRegistryHolder());
+        // v2.0: per-stage [unlocks] carve-outs.
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForScreenItem(Item item) {
+        if (item == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        Set<StageId> raw = screenItemCat.findStages(id, item.builtInRegistryHolder());
+        // v2.0: per-stage [unlocks] carve-outs (item/mod filter applies directly here).
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForPetTaming(EntityType<?> type) {
+        if (type == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        Set<StageId> raw = petTamingCat.findStages(id, type.builtInRegistryHolder());
+        // v2.0: per-stage [unlocks] entity carve-outs.
+        return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForPetBreeding(EntityType<?> type) {
+        if (type == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        Set<StageId> raw = petBreedingCat.findStages(id, type.builtInRegistryHolder());
+        return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForPetCommanding(EntityType<?> type) {
+        if (type == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        Set<StageId> raw = petCommandingCat.findStages(id, type.builtInRegistryHolder());
+        return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public Set<StageId> getRequiredStagesForCurioSlot(String slotIdentifier) {
+        if (slotIdentifier == null) return Set.of();
+        StageId direct = curioSlotLocks.get(slotIdentifier);
+        return direct != null ? Set.of(direct) : Set.of();
+    }
+
+    // ----- isXxxBlockedFor + primary helpers for secondary categories -----
+
+    public boolean isEntitySpawnBlockedFor(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        if (player == null || type == null) return false;
+        Set<StageId> gating = getRequiredStagesForSpawn(type);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForSpawn(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        if (player == null || type == null) return Optional.empty();
+        Set<StageId> gating = getRequiredStagesForSpawn(type);
+        return firstMissing(player, gating);
+    }
+
+    public boolean isLootBlockedFor(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return false;
+        Set<StageId> gating = getRequiredStagesForLoot(item);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForLoot(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForLoot(item));
+    }
+
+    public boolean isCropBlockedFor(net.minecraft.server.level.ServerPlayer player, Block block) {
+        if (player == null || block == null) return false;
+        Set<StageId> gating = getRequiredStagesForCrop(block);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForCrop(net.minecraft.server.level.ServerPlayer player, Block block) {
+        if (player == null || block == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForCrop(block));
+    }
+
+    public boolean isScreenBlockedFor(net.minecraft.server.level.ServerPlayer player, Block block) {
+        if (player == null || block == null) return false;
+        Set<StageId> gating = getRequiredStagesForScreen(block);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForScreen(net.minecraft.server.level.ServerPlayer player, Block block) {
+        if (player == null || block == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForScreen(block));
+    }
+
+    public boolean isScreenItemBlockedFor(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return false;
+        Set<StageId> gating = getRequiredStagesForScreenItem(item);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForScreenItem(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForScreenItem(item));
+    }
+
+    public boolean isPetTamingBlockedFor(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        return !playerHasAllStages(player, getRequiredStagesForPetTaming(type));
+    }
+
+    public boolean isPetBreedingBlockedFor(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        return !playerHasAllStages(player, getRequiredStagesForPetBreeding(type));
+    }
+
+    public boolean isPetCommandingBlockedFor(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        return !playerHasAllStages(player, getRequiredStagesForPetCommanding(type));
+    }
+
+    public Optional<StageId> primaryRestrictingStageForPetTaming(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        if (player == null || type == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForPetTaming(type));
+    }
+
+    public Optional<StageId> primaryRestrictingStageForPetBreeding(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        if (player == null || type == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForPetBreeding(type));
+    }
+
+    public Optional<StageId> primaryRestrictingStageForPetCommanding(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        if (player == null || type == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForPetCommanding(type));
+    }
+
+    public boolean isCurioSlotBlockedFor(net.minecraft.server.level.ServerPlayer player, String slotIdentifier) {
+        if (player == null || slotIdentifier == null) return false;
+        Set<StageId> gating = getRequiredStagesForCurioSlot(slotIdentifier);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForCurioSlot(net.minecraft.server.level.ServerPlayer player, String slotIdentifier) {
+        if (player == null || slotIdentifier == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForCurioSlot(slotIdentifier));
+    }
+
+    public Optional<StageId> primaryRestrictingStageForBlock(net.minecraft.server.level.ServerPlayer player, Block block) {
+        if (player == null || block == null) return Optional.empty();
+        Set<StageId> gating = getRequiredStagesForBlock(block);
+        if (gating.isEmpty()) return Optional.empty();
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        Set<StageId> access = (id != null && "minecraft".equals(id.getNamespace()))
+            ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
+            : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
+        for (StageId s : gating) if (!access.contains(s)) return Optional.of(s);
         return Optional.empty();
     }
 
-    /**
-     * Check if an item is locked (regardless of which stage)
-     */
-    public boolean isItemLocked(Item item) {
-        return getRequiredStage(item).isPresent();
-    }
-
-    /**
-     * Get the required stage for an entity type.
-     * Checks: whitelist → direct entity lock → entity tags → entity mod locks → general mod locks → name locks.
-     */
-    public Optional<StageId> getRequiredStageForEntity(net.minecraft.world.entity.EntityType<?> entityType) {
-        ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
-        if (entityId == null) {
-            return Optional.empty();
-        }
-
-        // v1.3: Check whitelist first - if entity is whitelisted, it's never locked
-        if (unlockedEntities.contains(entityId)) {
-            return Optional.empty();
-        }
-
-        // Check direct entity lock
-        StageId directLock = entityLocks.get(entityId);
-        if (directLock != null) {
-            return Optional.of(directLock);
-        }
-
-        // Check entity tags
-        for (Map.Entry<ResourceLocation, StageId> entry : entityTagLocks.entrySet()) {
-            TagKey<net.minecraft.world.entity.EntityType<?>> tagKey = TagKey.create(Registries.ENTITY_TYPE, entry.getKey());
-            if (entityType.builtInRegistryHolder().is(tagKey)) {
-                return Optional.of(entry.getValue());
-            }
-        }
-
-        // Check entity mod locks (entity_mods = ["mekanism"])
-        String modId = entityId.getNamespace().toLowerCase();
-        StageId entityModLock = entityModLocks.get(modId);
-        if (entityModLock != null) {
-            return Optional.of(entityModLock);
-        }
-
-        // Also check general mod locks (mods = ["mekanism"] also locks entities from that mod)
-        StageId modLock = modLocks.get(modId);
-        if (modLock != null) {
-            return Optional.of(modLock);
-        }
-
-        // Check name locks
-        String entityIdStr = entityId.toString().toLowerCase();
-        for (Map.Entry<String, StageId> entry : nameLocks.entrySet()) {
-            if (entityIdStr.contains(entry.getKey())) {
-                return Optional.of(entry.getValue());
-            }
-        }
-
+    public Optional<StageId> primaryRestrictingStageForFluid(net.minecraft.server.level.ServerPlayer player, ResourceLocation fluidId) {
+        if (player == null || fluidId == null) return Optional.empty();
+        Set<StageId> gating = getRequiredStagesForFluid(fluidId);
+        if (gating.isEmpty()) return Optional.empty();
+        Set<StageId> access = "minecraft".equals(fluidId.getNamespace())
+            ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
+            : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
+        for (StageId s : gating) if (!access.contains(s)) return Optional.of(s);
         return Optional.empty();
     }
 
-    /**
-     * Check if an entity type is locked (regardless of which stage)
-     */
-    public boolean isEntityLocked(net.minecraft.world.entity.EntityType<?> entityType) {
-        return getRequiredStageForEntity(entityType).isPresent();
+    public Optional<StageId> primaryRestrictingStageForDimension(net.minecraft.server.level.ServerPlayer player, ResourceLocation dimId) {
+        return firstMissing(player, getRequiredStagesForDimension(dimId));
     }
 
-    /**
-     * v1.5: Get the required stage for a mob spawn.
-     *
-     * <p>Checks (in order): direct spawn_entities → spawn_entity_tags → spawn_entity_mods.
-     * Does NOT fall back to the generic entity/mod locks — spawn gating is a separate,
-     * opt-in system so users can lock spawns independently from attack/interaction.
-     *
-     * <p>Also respects unlockedEntities whitelist.
-     */
-    public Optional<StageId> getRequiredStageForSpawn(net.minecraft.world.entity.EntityType<?> entityType) {
-        ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
-        if (entityId == null) {
-            return Optional.empty();
-        }
+    public Optional<StageId> primaryRestrictingStageForEntity(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        return firstMissing(player, getRequiredStagesForEntity(type));
+    }
 
-        // Whitelist bypass
-        if (unlockedEntities.contains(entityId)) {
-            return Optional.empty();
-        }
-
-        // Direct spawn lock
-        StageId direct = spawnEntityLocks.get(entityId);
-        if (direct != null) {
-            return Optional.of(direct);
-        }
-
-        // Spawn entity tag
-        for (Map.Entry<ResourceLocation, StageId> entry : spawnEntityTagLocks.entrySet()) {
-            TagKey<net.minecraft.world.entity.EntityType<?>> tagKey = TagKey.create(Registries.ENTITY_TYPE, entry.getKey());
-            if (entityType.builtInRegistryHolder().is(tagKey)) {
-                return Optional.of(entry.getValue());
-            }
-        }
-
-        // Spawn entity mod lock
-        String modId = entityId.getNamespace().toLowerCase();
-        StageId modLock = spawnEntityModLocks.get(modId);
-        if (modLock != null) {
-            return Optional.of(modLock);
-        }
-
+    /** Returns the first stage in {@code gating} the player is missing, or empty if none. */
+    private Optional<StageId> firstMissing(net.minecraft.server.level.ServerPlayer player, Set<StageId> gating) {
+        if (player == null || gating == null || gating.isEmpty()) return Optional.empty();
+        com.enviouse.progressivestages.common.stage.StageManager sm =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+        for (StageId s : gating) if (!sm.hasStage(player, s)) return Optional.of(s);
         return Optional.empty();
     }
 
-    /**
-     * Get all locked items (for EMI integration)
-     */
-    public Set<ResourceLocation> getAllLockedItems() {
-        return Collections.unmodifiableSet(itemLocks.keySet());
-    }
+    // ================================================================
+    // Nested types
+    // ================================================================
 
     /**
-     * Get all item locks with their required stages (for network sync)
+     * Generic bag of {@link PrefixEntry} locks + whitelist. The registry parameter
+     * identifies which registry the holder in {@link #findStage(ResourceLocation, Holder)}
+     * must come from; it's used to build tag keys.
      */
-    public Map<ResourceLocation, StageId> getAllItemLocks() {
-        return Collections.unmodifiableMap(itemLocks);
-    }
+    private static final class ResolvedCategory<T> {
+        private final ResourceKey<? extends Registry<T>> registryKey;
+        private final List<Entry<T>> entries = Collections.synchronizedList(new ArrayList<>());
+        private final Set<ResourceLocation> whitelist = ConcurrentHashMap.newKeySet();
 
-    // Cache for resolved item locks (includes name patterns, tags, mod locks)
-    // Cleared when lock registry changes (via clear() or clearCache())
-    private Map<ResourceLocation, StageId> resolvedItemLocksCache = null;
-
-    /**
-     * Get ALL resolved item locks including name patterns, tags, and mod locks.
-     * This iterates all registered items and checks each one against all lock types.
-     * Used for syncing complete lock data to clients for EMI integration.
-     *
-     * <p>Results are cached for performance. Cache is cleared when registry changes.
-     */
-    public Map<ResourceLocation, StageId> getAllResolvedItemLocks() {
-        // Return cached result if available
-        if (resolvedItemLocksCache != null) {
-            return resolvedItemLocksCache;
+        ResolvedCategory(ResourceKey<? extends Registry<T>> registryKey) {
+            this.registryKey = registryKey;
         }
 
-        long startTime = System.currentTimeMillis();
-        Map<ResourceLocation, StageId> resolved = new HashMap<>();
+        void clear() { entries.clear(); whitelist.clear(); }
 
-        // Start with direct item locks
-        resolved.putAll(itemLocks);
+        void register(CategoryLocks locks, StageId stage) {
+            if (locks == null) return;
+            for (PrefixEntry e : locks.locked()) entries.add(new Entry<>(e, stage));
+            whitelist.addAll(locks.alwaysUnlocked());
+        }
 
-        // Only iterate all items if we have pattern-based locks
-        boolean hasPatternLocks = !itemTagLocks.isEmpty() || !itemModLocks.isEmpty() || !modLocks.isEmpty() || !nameLocks.isEmpty();
+        /** Register a single {@link PrefixEntry} → stage pair (used for synthetic entries). */
+        void registerSingle(PrefixEntry entry, StageId stage) {
+            if (entry == null || stage == null) return;
+            entries.add(new Entry<>(entry, stage));
+        }
 
-        if (hasPatternLocks) {
-            // Debug: log which mod locks are active
-            if (!modLocks.isEmpty()) {
-                LOGGER.debug("[ProgressiveStages] Active mod locks: {}", modLocks.keySet());
+        Optional<StageId> findStage(ResourceLocation id, Holder<T> holder) {
+            if (id == null) return Optional.empty();
+            if (whitelist.contains(id)) return Optional.empty();
+            for (Entry<T> e : entries) {
+                if (e.prefix.matches(id, holder, registryKey)) return Optional.of(e.stage);
             }
-            if (!itemModLocks.isEmpty()) {
-                LOGGER.debug("[ProgressiveStages] Active item mod locks: {}", itemModLocks.keySet());
-            }
+            return Optional.empty();
+        }
 
-            int modLockCount = 0;
-            int itemModLockCount = 0;
-            int tagLockCount = 0;
-            int nameLockCount = 0;
-
-            // Iterate all registered items and check name patterns, tags, and mod locks
-            for (Item item : BuiltInRegistries.ITEM) {
-                ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
-                if (itemId == null) continue;
-
-                // Skip if already has direct lock
-                if (resolved.containsKey(itemId)) continue;
-
-                // Check item tags
-                boolean lockedByTag = false;
-                for (Map.Entry<ResourceLocation, StageId> entry : itemTagLocks.entrySet()) {
-                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, entry.getKey());
-                    if (item.builtInRegistryHolder().is(tagKey)) {
-                        resolved.put(itemId, entry.getValue());
-                        tagLockCount++;
-                        lockedByTag = true;
-                        break;
-                    }
+        /** v2.0 multi-stage: every gating stage for this id (deduplicated, insertion order). */
+        Set<StageId> findStages(ResourceLocation id, Holder<T> holder) {
+            if (id == null) return Set.of();
+            if (whitelist.contains(id)) return Set.of();
+            Set<StageId> out = null;
+            for (Entry<T> e : entries) {
+                if (e.prefix.matches(id, holder, registryKey)) {
+                    if (out == null) out = new java.util.LinkedHashSet<>();
+                    out.add(e.stage);
                 }
-
-                // Skip if already locked by tag
-                if (lockedByTag) continue;
-
-                // Check item mod locks (item_mods = ["mekanism"])
-                String modId = itemId.getNamespace().toLowerCase();
-                StageId itemModLock = itemModLocks.get(modId);
-                if (itemModLock != null) {
-                    resolved.put(itemId, itemModLock);
-                    itemModLockCount++;
-                    continue;
-                }
-
-                // Check general mod locks (mods = ["mekanism"])
-                StageId modLock = modLocks.get(modId);
-                if (modLock != null) {
-                    resolved.put(itemId, modLock);
-                    modLockCount++;
-                    continue;
-                }
-
-                // Check name pattern locks
-                String itemIdStr = itemId.toString().toLowerCase();
-                for (Map.Entry<String, StageId> entry : nameLocks.entrySet()) {
-                    if (itemIdStr.contains(entry.getKey())) {
-                        resolved.put(itemId, entry.getValue());
-                        nameLockCount++;
-                        break;
-                    }
-                }
             }
-
-            LOGGER.debug("[ProgressiveStages] Lock resolution: {} by item_mods, {} by mods, {} by tag, {} by name pattern",
-                itemModLockCount, modLockCount, tagLockCount, nameLockCount);
+            return out == null ? Set.of() : Set.copyOf(out);
         }
 
-        // Remove whitelisted items from the resolved set
-        // This ensures ClientLockCache (and thus EMI/tooltips) won't show whitelisted items as locked
-        if (!unlockedItems.isEmpty()) {
-            int beforeSize = resolved.size();
-            for (ResourceLocation unlocked : unlockedItems) {
-                resolved.remove(unlocked);
+        /** ID-only variant for contexts with no holder (e.g. dimensions, recipe IDs). */
+        Optional<StageId> findStageIdOnly(ResourceLocation id) {
+            if (id == null) return Optional.empty();
+            if (whitelist.contains(id)) return Optional.empty();
+            for (Entry<T> e : entries) {
+                if (e.prefix.matchesIdOnly(id)) return Optional.of(e.stage);
             }
-            int removedCount = beforeSize - resolved.size();
-            if (removedCount > 0) {
-                LOGGER.debug("[ProgressiveStages] Removed {} whitelisted items from resolved lock set", removedCount);
-            }
-        }
-
-        long elapsed = System.currentTimeMillis() - startTime;
-        if (elapsed > 100) {
-            LOGGER.info("[ProgressiveStages] Resolved {} item locks in {}ms (caching result)", resolved.size(), elapsed);
-        } else {
-            LOGGER.debug("[ProgressiveStages] Resolved {} item locks in {}ms", resolved.size(), elapsed);
-        }
-
-        // Cache the result
-        resolvedItemLocksCache = Collections.unmodifiableMap(resolved);
-        return resolvedItemLocksCache;
-    }
-
-    /**
-     * Invalidate the resolved item locks cache.
-     * Call this when lock definitions change.
-     */
-    public void invalidateResolvedCache() {
-        resolvedItemLocksCache = null;
-    }
-
-    /**
-     * Get all locked recipes (IDs only)
-     */
-    public Set<ResourceLocation> getAllLockedRecipes() {
-        return Collections.unmodifiableSet(recipeLocks.keySet());
-    }
-
-    /**
-     * Get all recipe locks with their required stages (for EMI integration)
-     */
-    public Map<ResourceLocation, StageId> getAllRecipeLocks() {
-        return Collections.unmodifiableMap(recipeLocks);
-    }
-
-    /**
-     * Get all locked mods
-     */
-    public Set<String> getAllLockedMods() {
-        return Collections.unmodifiableSet(modLocks.keySet());
-    }
-
-    /**
-     * Get the stage required for a mod lock.
-     * Checks general mod locks (mods = ["modid"]).
-     */
-    public Optional<StageId> getModLockStage(String modId) {
-        StageId stage = modLocks.get(modId.toLowerCase());
-        return Optional.ofNullable(stage);
-    }
-
-    /**
-     * Get all unlocked (whitelisted) fluids.
-     * These fluids should be visible in EMI/JEI even if their mod is locked.
-     */
-    public Set<ResourceLocation> getUnlockedFluids() {
-        return Collections.unmodifiableSet(unlockedFluids);
-    }
-
-    /**
-     * Check if a fluid is whitelisted (should bypass mod locks).
-     */
-    public boolean isFluidUnlocked(ResourceLocation fluidId) {
-        return fluidId != null && unlockedFluids.contains(fluidId);
-    }
-
-    /**
-     * Get all unlocked (whitelisted) blocks.
-     */
-    public Set<ResourceLocation> getUnlockedBlocks() {
-        return Collections.unmodifiableSet(unlockedBlocks);
-    }
-
-    /**
-     * Check if a block is whitelisted (should bypass mod/tag locks).
-     */
-    public boolean isBlockUnlocked(ResourceLocation blockId) {
-        return blockId != null && unlockedBlocks.contains(blockId);
-    }
-
-    /**
-     * Get all directly locked fluids (fluids = ["..."])
-     */
-    public Map<ResourceLocation, StageId> getAllFluidLocks() {
-        return Collections.unmodifiableMap(fluidLocks);
-    }
-
-    /**
-     * Get all fluid tag locks
-     */
-    public Map<ResourceLocation, StageId> getAllFluidTagLocks() {
-        return Collections.unmodifiableMap(fluidTagLocks);
-    }
-
-    /**
-     * Get all fluid mod locks (fluid_mods = ["..."])
-     */
-    public Set<String> getAllLockedFluidMods() {
-        return Collections.unmodifiableSet(fluidModLocks.keySet());
-    }
-
-    /**
-     * Get the stage required for a fluid mod lock.
-     */
-    public Optional<StageId> getFluidModLockStage(String modId) {
-        StageId stage = fluidModLocks.get(modId.toLowerCase());
-        return Optional.ofNullable(stage);
-    }
-
-    /**
-     * Check if a fluid is locked (direct lock, tag lock, fluid_mods lock, general mods lock, or name lock).
-     * Returns the required stage, or empty if not locked.
-     *
-     * Check order: whitelist → direct fluid lock → fluid mod lock → general mod lock → name patterns
-     */
-    public Optional<StageId> getRequiredStageForFluid(ResourceLocation fluidId) {
-        if (fluidId == null) {
             return Optional.empty();
         }
 
-        // Check whitelist first
-        if (unlockedFluids.contains(fluidId)) {
+        Set<StageId> findStagesIdOnly(ResourceLocation id) {
+            if (id == null) return Set.of();
+            if (whitelist.contains(id)) return Set.of();
+            Set<StageId> out = null;
+            for (Entry<T> e : entries) {
+                if (e.prefix.matchesIdOnly(id)) {
+                    if (out == null) out = new java.util.LinkedHashSet<>();
+                    out.add(e.stage);
+                }
+            }
+            return out == null ? Set.of() : Set.copyOf(out);
+        }
+
+        boolean isWhitelisted(ResourceLocation id) {
+            return id != null && whitelist.contains(id);
+        }
+
+        Set<ResourceLocation> whitelistView() {
+            return Collections.unmodifiableSet(whitelist);
+        }
+
+        /** Direct ID-kind locks in this category, as a map. */
+        Map<ResourceLocation, StageId> directIdMap() {
+            Map<ResourceLocation, StageId> out = new LinkedHashMap<>();
+            for (Entry<T> e : entries) {
+                if (e.prefix.kind() == PrefixEntry.Kind.ID && e.prefix.id() != null) {
+                    out.putIfAbsent(e.prefix.id(), e.stage);
+                }
+            }
+            return Collections.unmodifiableMap(out);
+        }
+
+        Set<ResourceLocation> directIds() {
+            return directIdMap().keySet();
+        }
+
+        /** Tag-kind locks (tag id → stage). */
+        Map<ResourceLocation, StageId> tagIdMap() {
+            Map<ResourceLocation, StageId> out = new LinkedHashMap<>();
+            for (Entry<T> e : entries) {
+                if (e.prefix.kind() == PrefixEntry.Kind.TAG && e.prefix.id() != null) {
+                    out.putIfAbsent(e.prefix.id(), e.stage);
+                }
+            }
+            return Collections.unmodifiableMap(out);
+        }
+
+        Set<String> modNames() {
+            Set<String> out = new HashSet<>();
+            for (Entry<T> e : entries) {
+                if (e.prefix.kind() == PrefixEntry.Kind.MOD) out.add(e.prefix.value());
+            }
+            return Collections.unmodifiableSet(out);
+        }
+
+        Optional<StageId> modStage(String modId) {
+            String needle = modId.toLowerCase();
+            for (Entry<T> e : entries) {
+                if (e.prefix.kind() == PrefixEntry.Kind.MOD && e.prefix.value().equals(needle)) {
+                    return Optional.of(e.stage);
+                }
+            }
             return Optional.empty();
         }
 
-        // Check direct fluid lock
-        StageId directLock = fluidLocks.get(fluidId);
-        if (directLock != null) {
-            return Optional.of(directLock);
-        }
-
-        // Check fluid mod lock
-        String modId = fluidId.getNamespace().toLowerCase();
-        StageId fluidModLock = fluidModLocks.get(modId);
-        if (fluidModLock != null) {
-            return Optional.of(fluidModLock);
-        }
-
-        // Check general mod lock (mods = ["modid"] also locks fluids)
-        StageId modLock = modLocks.get(modId);
-        if (modLock != null) {
-            return Optional.of(modLock);
-        }
-
-        // Check name locks (names = ["diamond"] also locks fluids containing "diamond")
-        String fluidIdStr = fluidId.toString().toLowerCase();
-        for (Map.Entry<String, StageId> entry : nameLocks.entrySet()) {
-            if (fluidIdStr.contains(entry.getKey())) {
-                return Optional.of(entry.getValue());
+        Set<StageId> modStages(String modId) {
+            String needle = modId.toLowerCase();
+            Set<StageId> out = null;
+            for (Entry<T> e : entries) {
+                if (e.prefix.kind() == PrefixEntry.Kind.MOD && e.prefix.value().equals(needle)) {
+                    if (out == null) out = new java.util.LinkedHashSet<>();
+                    out.add(e.stage);
+                }
             }
+            return out == null ? Set.of() : Set.copyOf(out);
         }
 
-        return Optional.empty();
-    }
-
-    /**
-     * Get all interaction locks of a given type (e.g., "item_on_block", "item_on_entity").
-     * Used by InteractionEnforcer for runtime tag-pattern matching.
-     */
-    public java.util.Collection<InteractionLockEntry> getAllInteractionLocksOfType(String type) {
-        List<InteractionLockEntry> result = new ArrayList<>();
-        for (InteractionLockEntry entry : interactionLocks.values()) {
-            if (type.equals(entry.type)) {
-                result.add(entry);
+        Set<String> nameValues() {
+            Set<String> out = new HashSet<>();
+            for (Entry<T> e : entries) {
+                if (e.prefix.kind() == PrefixEntry.Kind.NAME) out.add(e.prefix.value());
             }
+            return Collections.unmodifiableSet(out);
         }
-        return result;
+
+        Optional<StageId> nameStage(String pattern) {
+            String needle = pattern.toLowerCase();
+            for (Entry<T> e : entries) {
+                if (e.prefix.kind() == PrefixEntry.Kind.NAME && e.prefix.value().equals(needle)) {
+                    return Optional.of(e.stage);
+                }
+            }
+            return Optional.empty();
+        }
+
+        private record Entry<T>(PrefixEntry prefix, StageId stage) {}
     }
 
-    /**
-     * Get all name patterns
-     */
-    public Set<String> getAllNamePatterns() {
-        return Collections.unmodifiableSet(nameLocks.keySet());
-    }
-
-    /**
-     * Get the stage required for a name pattern lock.
-     */
-    public Optional<StageId> getNamePatternStage(String pattern) {
-        StageId stage = nameLocks.get(pattern.toLowerCase());
-        return Optional.ofNullable(stage);
-    }
-
-    /**
-     * Data class for interaction lock entries
-     */
-    public static class InteractionLockEntry {
+    /** An interaction lock entry. */
+    public static final class InteractionLockEntry {
         public final String type;
         public final String heldItem;
         public final String targetBlock;
         public final String description;
         public final StageId requiredStage;
 
-        public InteractionLockEntry(String type, String heldItem, String targetBlock, String description, StageId requiredStage) {
+        public InteractionLockEntry(String type, String heldItem, String targetBlock,
+                                    String description, StageId requiredStage) {
             this.type = type;
             this.heldItem = heldItem;
             this.targetBlock = targetBlock;
@@ -1208,37 +1243,99 @@ public class LockRegistry {
         }
 
         public boolean matches(String checkType, String checkHeldItem, String checkTargetBlock) {
-            if (!type.equals(checkType)) {
-                return false;
-            }
-
-            // Check held item (supports tags with #)
-            if (heldItem != null && !heldItem.equals("*")) {
+            if (!Objects.equals(type, checkType)) return false;
+            if (heldItem != null && !"*".equals(heldItem)) {
                 if (heldItem.startsWith("#")) {
-                    // Tag matching would require more complex logic
-                    // For now, just check if the item string contains the tag name
-                    String tagName = heldItem.substring(1);
-                    if (!checkHeldItem.contains(tagName)) {
-                        return false;
-                    }
-                } else if (!heldItem.equals(checkHeldItem)) {
-                    return false;
-                }
+                    if (checkHeldItem == null || !checkHeldItem.contains(heldItem.substring(1))) return false;
+                } else if (!heldItem.equals(checkHeldItem)) return false;
             }
-
-            // Check target block (supports tags with #)
-            if (targetBlock != null && !targetBlock.equals("*")) {
+            if (targetBlock != null && !"*".equals(targetBlock)) {
                 if (targetBlock.startsWith("#")) {
-                    String tagName = targetBlock.substring(1);
-                    if (!checkTargetBlock.contains(tagName)) {
-                        return false;
-                    }
-                } else if (!targetBlock.equals(checkTargetBlock)) {
-                    return false;
+                    if (checkTargetBlock == null || !checkTargetBlock.contains(targetBlock.substring(1))) return false;
+                } else if (!targetBlock.equals(checkTargetBlock)) return false;
+            }
+            return true;
+        }
+    }
+
+    /** A mob replacement entry as registered with its owning stage. */
+    public static final class MobReplacementEntry {
+        public final PrefixEntry target;
+        public final ResourceLocation replaceWith;
+        public final StageId requiredStage;
+
+        public MobReplacementEntry(PrefixEntry target, ResourceLocation replaceWith, StageId requiredStage) {
+            this.target = target;
+            this.replaceWith = replaceWith;
+            this.requiredStage = requiredStage;
+        }
+    }
+
+    /** A region lock entry as registered with its owning stage. */
+    public static final class RegionLockEntry {
+        public final LockDefinition.RegionLock def;
+        public final StageId requiredStage;
+
+        public RegionLockEntry(LockDefinition.RegionLock def, StageId requiredStage) {
+            this.def = def;
+            this.requiredStage = requiredStage;
+        }
+    }
+
+    public static final class OreOverrideEntry {
+        public final ResourceLocation target;
+        public final ResourceLocation displayAs;
+        public final ResourceLocation dropAs;
+        public final StageId requiredStage;
+
+        public OreOverrideEntry(ResourceLocation target, ResourceLocation displayAs,
+                                ResourceLocation dropAs, StageId requiredStage) {
+            this.target = target;
+            this.displayAs = displayAs;
+            this.dropAs = dropAs;
+            this.requiredStage = requiredStage;
+        }
+    }
+
+    /**
+     * Accumulated structure rules across all stages. Merging is union-style: if any
+     * stage sets a boolean, it applies. Entry-lock IDs carry their own stage.
+     */
+    public static final class StructureRulesAggregate {
+        public static final StructureRulesAggregate EMPTY =
+            new StructureRulesAggregate(Map.of(), false, false, false, false);
+
+        /** Structure ID → required stage. Only exact IDs are used for entry locks. */
+        public final Map<ResourceLocation, StageId> lockedEntry;
+        public final boolean preventBlockBreak;
+        public final boolean preventBlockPlace;
+        public final boolean preventExplosions;
+        public final boolean disableMobSpawning;
+
+        public StructureRulesAggregate(Map<ResourceLocation, StageId> lockedEntry,
+                                       boolean pbb, boolean pbp, boolean pex, boolean dms) {
+            this.lockedEntry = Collections.unmodifiableMap(lockedEntry);
+            this.preventBlockBreak = pbb;
+            this.preventBlockPlace = pbp;
+            this.preventExplosions = pex;
+            this.disableMobSpawning = dms;
+        }
+
+        StructureRulesAggregate merge(LockDefinition.StructureRules other, StageId stage) {
+            if (other == null || other.isEmpty()) return this;
+            Map<ResourceLocation, StageId> merged = new HashMap<>(this.lockedEntry);
+            for (PrefixEntry e : other.lockedEntry().locked()) {
+                if (e.kind() == PrefixEntry.Kind.ID && e.id() != null) {
+                    merged.putIfAbsent(e.id(), stage);
                 }
             }
-
-            return true;
+            return new StructureRulesAggregate(
+                merged,
+                this.preventBlockBreak || other.preventBlockBreak(),
+                this.preventBlockPlace || other.preventBlockPlace(),
+                this.preventExplosions || other.preventExplosions(),
+                this.disableMobSpawning || other.disableMobSpawning()
+            );
         }
     }
 }

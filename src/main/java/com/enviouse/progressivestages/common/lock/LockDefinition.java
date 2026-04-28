@@ -1,576 +1,435 @@
 package com.enviouse.progressivestages.common.lock;
 
+import net.minecraft.resources.ResourceLocation;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Contains all lock definitions parsed from a stage file.
+ * All locks parsed from one 2.0 stage file.
  *
- * <p>v1.3 changes: Added unlockedItems for whitelist exceptions.
- * <p>v1.4 changes: Added unlockedBlocks, unlockedFluids for whitelist exceptions.
- *                  Added fluids, fluidTags, fluidMods for fluid locking.
- * <p>v1.4 changes: Added recipeItems for recipe-only locks by output item ID.
- *                  Added per-stage enforcement exceptions (allowed_use, allowed_pickup, etc.)
+ * <p>Each category stores parsed {@link PrefixEntry}s via {@link CategoryLocks} — one
+ * unified list per category instead of v1's split {@code items / item_tags / item_mods}
+ * triplets. The new TOML schema is:
+ *
+ * <pre>
+ * [items]     locked = ["id:...", "mod:...", "tag:...", "name:..."]
+ *             always_unlocked = ["id:..."]
+ * [blocks]    locked = [...]      always_unlocked = [...]
+ * [fluids]    locked = [...]      always_unlocked = [...]
+ * [entities]  locked = [...]      always_unlocked = [...]   # attack/interaction gating
+ * [enchants]  locked = [...]
+ * [crops]     locked = [...]      always_unlocked = [...]
+ * [screens]   locked = [...]
+ * [loot]      locked = [...]
+ * [pets]      locked_taming = [...]      locked_breeding = [...]
+ * [mobs]      locked_spawns = [...]
+ * [recipes]   locked_ids = [...]         locked_items = [...]
+ * [dimensions] locked = [...]
+ * </pre>
+ *
+ * <p>Complex structures ({@code [[interactions]]}, {@code [[mobs.replacements]]},
+ * {@code [[regions]]}, {@code [[ores.overrides]]}, {@code [structures]}) live in their
+ * own typed lists/records.
  */
-public class LockDefinition {
+public final class LockDefinition {
 
-    private final List<String> items;
-    private final List<String> itemTags;
-    private final List<String> itemMods;
-    private final List<String> recipes;
-    private final List<String> recipeTags;
-    private final List<String> recipeItems;
-    private final List<String> blocks;
-    private final List<String> blockTags;
-    private final List<String> blockMods;
-    private final List<String> fluids;
-    private final List<String> fluidTags;
-    private final List<String> fluidMods;
-    private final List<String> dimensions;
-    private final List<String> mods;
-    private final List<String> names;
+    // ---- Unified categories (prefix-based) ----
+    private final CategoryLocks items;
+    private final CategoryLocks blocks;
+    private final CategoryLocks fluids;
+    private final CategoryLocks entities;      // attack/interaction (v1 feature, preserved)
+    private final CategoryLocks enchants;
+    private final CategoryLocks crops;
+    private final CategoryLocks screens;
+    private final CategoryLocks loot;
+    private final CategoryLocks petsTaming;
+    private final CategoryLocks petsBreeding;
+    private final CategoryLocks petsCommanding;
+    private final CategoryLocks mobSpawns;
+    /** [curios].locked_slots — slot identifiers (as Curios defines them: "ring", "necklace", etc.). */
+    private final java.util.List<String> curioLockedSlots;
+
+    // ---- Recipes ----
+    /** [recipes].locked_ids — matches against the recipe's own registry ID. */
+    private final CategoryLocks recipeIds;
+    /** [recipes].locked_items — matches against the recipe's output item ID. */
+    private final CategoryLocks recipeOutputs;
+
+    // ---- Dimensions (simple list, no always_unlocked) ----
+    private final List<ResourceLocation> lockedDimensions;
+
+    // ---- Complex typed lists ----
     private final List<InteractionLock> interactions;
-    private final List<String> unlockedItems;
-    private final List<String> unlockedBlocks;
-    private final List<String> unlockedEntities;
-    private final List<String> unlockedFluids;
-    private final List<String> entities;
-    private final List<String> entityTags;
-    private final List<String> entityMods;
+    private final List<MobReplacement> mobReplacements;
+    private final List<RegionLock> regions;
+    private final StructureRules structures;
+    /** Parsed but not yet enforced — ore masquerade is deferred post-2.0. */
+    private final List<OreOverride> oreOverrides;
 
-    // v1.5: Mob spawn gating — independent from attack/interaction entity locks
-    private final List<String> spawnEntities;
-    private final List<String> spawnEntityTags;
-    private final List<String> spawnEntityMods;
-
-    // Per-stage enforcement exceptions (items/tags/mods exempt from specific enforcement types)
+    // ---- Enforcement exceptions ----
     private final List<String> allowedUse;
     private final List<String> allowedPickup;
     private final List<String> allowedHotbar;
     private final List<String> allowedMousePickup;
     private final List<String> allowedInventory;
 
-    private LockDefinition(Builder builder) {
-        this.items = Collections.unmodifiableList(new ArrayList<>(builder.items));
-        this.itemTags = Collections.unmodifiableList(new ArrayList<>(builder.itemTags));
-        this.itemMods = Collections.unmodifiableList(new ArrayList<>(builder.itemMods));
-        this.recipes = Collections.unmodifiableList(new ArrayList<>(builder.recipes));
-        this.recipeTags = Collections.unmodifiableList(new ArrayList<>(builder.recipeTags));
-        this.recipeItems = Collections.unmodifiableList(new ArrayList<>(builder.recipeItems));
-        this.blocks = Collections.unmodifiableList(new ArrayList<>(builder.blocks));
-        this.blockTags = Collections.unmodifiableList(new ArrayList<>(builder.blockTags));
-        this.blockMods = Collections.unmodifiableList(new ArrayList<>(builder.blockMods));
-        this.fluids = Collections.unmodifiableList(new ArrayList<>(builder.fluids));
-        this.fluidTags = Collections.unmodifiableList(new ArrayList<>(builder.fluidTags));
-        this.fluidMods = Collections.unmodifiableList(new ArrayList<>(builder.fluidMods));
-        this.dimensions = Collections.unmodifiableList(new ArrayList<>(builder.dimensions));
-        this.mods = Collections.unmodifiableList(new ArrayList<>(builder.mods));
-        this.names = Collections.unmodifiableList(new ArrayList<>(builder.names));
-        this.interactions = Collections.unmodifiableList(new ArrayList<>(builder.interactions));
-        this.unlockedItems = Collections.unmodifiableList(new ArrayList<>(builder.unlockedItems));
-        this.unlockedBlocks = Collections.unmodifiableList(new ArrayList<>(builder.unlockedBlocks));
-        this.unlockedEntities = Collections.unmodifiableList(new ArrayList<>(builder.unlockedEntities));
-        this.unlockedFluids = Collections.unmodifiableList(new ArrayList<>(builder.unlockedFluids));
-        this.entities = Collections.unmodifiableList(new ArrayList<>(builder.entities));
-        this.entityTags = Collections.unmodifiableList(new ArrayList<>(builder.entityTags));
-        this.entityMods = Collections.unmodifiableList(new ArrayList<>(builder.entityMods));
-        this.spawnEntities = Collections.unmodifiableList(new ArrayList<>(builder.spawnEntities));
-        this.spawnEntityTags = Collections.unmodifiableList(new ArrayList<>(builder.spawnEntityTags));
-        this.spawnEntityMods = Collections.unmodifiableList(new ArrayList<>(builder.spawnEntityMods));
-        this.allowedUse = Collections.unmodifiableList(new ArrayList<>(builder.allowedUse));
-        this.allowedPickup = Collections.unmodifiableList(new ArrayList<>(builder.allowedPickup));
-        this.allowedHotbar = Collections.unmodifiableList(new ArrayList<>(builder.allowedHotbar));
-        this.allowedMousePickup = Collections.unmodifiableList(new ArrayList<>(builder.allowedMousePickup));
-        this.allowedInventory = Collections.unmodifiableList(new ArrayList<>(builder.allowedInventory));
+    // ---- v2.0: gates the minecraft: namespace for this stage.
+    private final boolean minecraftNamespace;
+
+    // ---- v2.0: per-stage [unlocks] carve-outs (Phase C). Empty by default. ----
+    private final UnlockGateLists unlocks;
+
+    private LockDefinition(Builder b) {
+        this.items         = b.items;
+        this.blocks        = b.blocks;
+        this.fluids        = b.fluids;
+        this.entities      = b.entities;
+        this.enchants      = b.enchants;
+        this.crops         = b.crops;
+        this.screens       = b.screens;
+        this.loot          = b.loot;
+        this.petsTaming    = b.petsTaming;
+        this.petsBreeding  = b.petsBreeding;
+        this.petsCommanding = b.petsCommanding;
+        this.mobSpawns     = b.mobSpawns;
+        this.curioLockedSlots = java.util.List.copyOf(b.curioLockedSlots);
+        this.recipeIds     = b.recipeIds;
+        this.recipeOutputs = b.recipeOutputs;
+        this.lockedDimensions = List.copyOf(b.lockedDimensions);
+        this.interactions     = List.copyOf(b.interactions);
+        this.mobReplacements  = List.copyOf(b.mobReplacements);
+        this.regions          = List.copyOf(b.regions);
+        this.structures       = b.structures;
+        this.oreOverrides     = List.copyOf(b.oreOverrides);
+        this.allowedUse          = List.copyOf(b.allowedUse);
+        this.allowedPickup       = List.copyOf(b.allowedPickup);
+        this.allowedHotbar       = List.copyOf(b.allowedHotbar);
+        this.allowedMousePickup  = List.copyOf(b.allowedMousePickup);
+        this.allowedInventory    = List.copyOf(b.allowedInventory);
+        this.minecraftNamespace  = b.minecraftNamespace;
+        this.unlocks             = b.unlocks != null ? b.unlocks : UnlockGateLists.EMPTY;
     }
 
     public static LockDefinition empty() {
         return new Builder().build();
     }
 
-    public List<String> getItems() {
-        return items;
-    }
+    // ---- Accessors ----
+    public CategoryLocks items()        { return items; }
+    public CategoryLocks blocks()       { return blocks; }
+    public CategoryLocks fluids()       { return fluids; }
+    public CategoryLocks entities()     { return entities; }
+    public CategoryLocks enchants()     { return enchants; }
+    public CategoryLocks crops()        { return crops; }
+    public CategoryLocks screens()      { return screens; }
+    public CategoryLocks loot()         { return loot; }
+    public CategoryLocks petsTaming()     { return petsTaming; }
+    public CategoryLocks petsBreeding()   { return petsBreeding; }
+    public CategoryLocks petsCommanding() { return petsCommanding; }
+    public CategoryLocks mobSpawns()    { return mobSpawns; }
+    public java.util.List<String> curioLockedSlots() { return curioLockedSlots; }
+    public CategoryLocks recipeIds()    { return recipeIds; }
+    public CategoryLocks recipeOutputs(){ return recipeOutputs; }
 
-    public List<String> getItemTags() {
-        return itemTags;
-    }
+    public List<ResourceLocation> lockedDimensions() { return lockedDimensions; }
+    public List<InteractionLock> interactions()      { return interactions; }
+    public List<MobReplacement> mobReplacements()    { return mobReplacements; }
+    public List<RegionLock> regions()                { return regions; }
+    public StructureRules structures()               { return structures; }
+    public List<OreOverride> oreOverrides()          { return oreOverrides; }
 
-    /**
-     * Get mod IDs whose items are locked.
-     * Unlike mods, this only affects items, not blocks or entities.
-     */
-    public List<String> getItemMods() {
-        return itemMods;
-    }
+    public List<String> allowedUse()         { return allowedUse; }
+    public List<String> allowedPickup()      { return allowedPickup; }
+    public List<String> allowedHotbar()      { return allowedHotbar; }
+    public List<String> allowedMousePickup() { return allowedMousePickup; }
+    public List<String> allowedInventory()   { return allowedInventory; }
 
-    public List<String> getRecipes() {
-        return recipes;
-    }
+    /** v2.0: true if this stage gates the {@code minecraft:} namespace (shorthand for adding "minecraft" to mods). */
+    public boolean minecraftNamespace() { return minecraftNamespace; }
 
-    public List<String> getRecipeTags() {
-        return recipeTags;
-    }
-
-    /**
-     * Get item IDs whose recipes are locked (recipe-only lock).
-     * The item itself is NOT locked — only its crafting recipe.
-     * Players can still hold, use, and receive these items from loot.
-     */
-    public List<String> getRecipeItems() {
-        return recipeItems;
-    }
-
-    public List<String> getBlocks() {
-        return blocks;
-    }
-
-    public List<String> getBlockTags() {
-        return blockTags;
-    }
-
-    /**
-     * Get mod IDs whose blocks are locked.
-     * Unlike mods, this only affects blocks, not items or entities.
-     */
-    public List<String> getBlockMods() {
-        return blockMods;
-    }
-
-    /**
-     * Get specific fluid IDs that are locked (hidden from EMI/JEI).
-     */
-    public List<String> getFluids() {
-        return fluids;
-    }
-
-    /**
-     * Get fluid tags that are locked (hidden from EMI/JEI).
-     */
-    public List<String> getFluidTags() {
-        return fluidTags;
-    }
-
-    /**
-     * Get mod IDs whose fluids are locked (hidden from EMI/JEI).
-     */
-    public List<String> getFluidMods() {
-        return fluidMods;
-    }
-
-    public List<String> getDimensions() {
-        return dimensions;
-    }
-
-    public List<String> getMods() {
-        return mods;
-    }
-
-    public List<String> getNames() {
-        return names;
-    }
-
-    public List<InteractionLock> getInteractions() {
-        return interactions;
-    }
-
-    /**
-     * Get items that are always unlocked (whitelist exceptions).
-     * These items bypass mod locks, name patterns, and tag locks from this stage.
-     */
-    public List<String> getUnlockedItems() {
-        return unlockedItems;
-    }
-
-    /**
-     * Get blocks that are always unlocked (whitelist exceptions).
-     * These blocks bypass mod locks, name patterns, and tag locks from this stage.
-     */
-    public List<String> getUnlockedBlocks() {
-        return unlockedBlocks;
-    }
-
-    /**
-     * Get entities that are always unlocked (whitelist exceptions).
-     * These entities bypass entity mod locks, entity tags, and name locks.
-     * Use case: Lock entire mod but allow attacking specific entities.
-     */
-    public List<String> getUnlockedEntities() {
-        return unlockedEntities;
-    }
-
-    /**
-     * Get fluids that are always unlocked (whitelist exceptions).
-     * These fluids bypass mod locks for EMI/JEI visibility.
-     * Use case: Lock mods = ["mekanism"] but allow a specific fluid to show in EMI/JEI.
-     */
-    public List<String> getUnlockedFluids() {
-        return unlockedFluids;
-    }
-
-    /**
-     * Get entity types that are locked (attack/interaction blocked).
-     */
-    public List<String> getEntities() {
-        return entities;
-    }
-
-    /**
-     * Get entity tags that are locked.
-     */
-    public List<String> getEntityTags() {
-        return entityTags;
-    }
-
-    /**
-     * Get mod IDs whose entities are locked (attack/interaction blocked).
-     */
-    public List<String> getEntityMods() {
-        return entityMods;
-    }
-
-    // ============ v1.5: Mob spawn gating ============
-
-    /**
-     * Get specific entity IDs whose spawns are gated (independent of attack/interaction locks).
-     */
-    public List<String> getSpawnEntities() { return spawnEntities; }
-
-    /**
-     * Get entity tags whose spawns are gated.
-     */
-    public List<String> getSpawnEntityTags() { return spawnEntityTags; }
-
-    /**
-     * Get mod IDs whose entity spawns are gated.
-     */
-    public List<String> getSpawnEntityMods() { return spawnEntityMods; }
-
-    // ============ Per-stage enforcement exceptions ============
-
-    /**
-     * Get items/tags/mods exempt from item use blocking for this stage.
-     * Accepts item IDs, tags (#namespace:tag), or mod IDs.
-     */
-    public List<String> getAllowedUse() { return allowedUse; }
-
-    /**
-     * Get items/tags/mods exempt from item pickup blocking for this stage.
-     */
-    public List<String> getAllowedPickup() { return allowedPickup; }
-
-    /**
-     * Get items/tags/mods exempt from hotbar blocking for this stage.
-     */
-    public List<String> getAllowedHotbar() { return allowedHotbar; }
-
-    /**
-     * Get items/tags/mods exempt from mouse pickup blocking in GUIs for this stage.
-     */
-    public List<String> getAllowedMousePickup() { return allowedMousePickup; }
-
-    /**
-     * Get items/tags/mods exempt from inventory holding blocking for this stage.
-     */
-    public List<String> getAllowedInventory() { return allowedInventory; }
+    /** v2.0: per-stage carve-outs from this stage's own gating set. Empty by default. */
+    public UnlockGateLists unlocks() { return unlocks; }
 
     public boolean isEmpty() {
-        return items.isEmpty() && itemTags.isEmpty() && itemMods.isEmpty() &&
-            recipes.isEmpty() && recipeTags.isEmpty() && recipeItems.isEmpty() &&
-            blocks.isEmpty() && blockTags.isEmpty() && blockMods.isEmpty() &&
-            fluids.isEmpty() && fluidTags.isEmpty() && fluidMods.isEmpty() &&
-            dimensions.isEmpty() && mods.isEmpty() && names.isEmpty() &&
-            interactions.isEmpty() && entities.isEmpty() && entityTags.isEmpty() &&
-            entityMods.isEmpty();
+        return items.isEmpty() && blocks.isEmpty() && fluids.isEmpty() && entities.isEmpty()
+            && enchants.isEmpty() && crops.isEmpty() && screens.isEmpty() && loot.isEmpty()
+            && petsTaming.isEmpty() && petsBreeding.isEmpty() && petsCommanding.isEmpty() && mobSpawns.isEmpty()
+            && recipeIds.isEmpty() && recipeOutputs.isEmpty()
+            && lockedDimensions.isEmpty() && interactions.isEmpty()
+            && mobReplacements.isEmpty() && regions.isEmpty() && oreOverrides.isEmpty()
+            && structures.isEmpty();
     }
 
-    public static Builder builder() {
-        return new Builder();
+    public static Builder builder() { return new Builder(); }
+
+    // ---------------------------------------------------------------
+    // Nested types
+    // ---------------------------------------------------------------
+
+    /**
+     * A [[interactions]] entry: one specific player action that's gated behind a stage.
+     * {@code heldItem} and {@code target} may be null (wildcard) or carry a single raw
+     * prefix string that will be matched at enforcement time.
+     */
+    public static final class InteractionLock {
+        private final String type;
+        private final String heldItem;
+        private final String target;
+        private final String description;
+
+        public InteractionLock(String type, String heldItem, String target, String description) {
+            this.type = type;
+            this.heldItem = heldItem;
+            this.target = target;
+            this.description = description;
+        }
+
+        public String type()        { return type; }
+        public String heldItem()    { return heldItem; }
+        public String target()      { return target; }
+        // Legacy alias — InteractionEnforcer historically called this field "targetBlock".
+        public String targetBlock() { return target; }
+        public String description() { return description; }
     }
 
-    public static class Builder {
-        private List<String> items = new ArrayList<>();
-        private List<String> itemTags = new ArrayList<>();
-        private List<String> itemMods = new ArrayList<>();
-        private List<String> recipes = new ArrayList<>();
-        private List<String> recipeTags = new ArrayList<>();
-        private List<String> recipeItems = new ArrayList<>();
-        private List<String> blocks = new ArrayList<>();
-        private List<String> blockTags = new ArrayList<>();
-        private List<String> blockMods = new ArrayList<>();
-        private List<String> fluids = new ArrayList<>();
-        private List<String> fluidTags = new ArrayList<>();
-        private List<String> fluidMods = new ArrayList<>();
-        private List<String> dimensions = new ArrayList<>();
-        private List<String> mods = new ArrayList<>();
-        private List<String> names = new ArrayList<>();
+    /**
+     * A [[mobs.replacements]] entry: when a locked mob would spawn, swap in another one.
+     * The target uses the full prefix system so a user can swap out an entire mod's mobs;
+     * the replacement is always a single exact entity ID.
+     */
+    public static final class MobReplacement {
+        private final PrefixEntry target;
+        private final ResourceLocation replaceWith;
+
+        public MobReplacement(PrefixEntry target, ResourceLocation replaceWith) {
+            this.target = target;
+            this.replaceWith = replaceWith;
+        }
+
+        public PrefixEntry target()            { return target; }
+        public ResourceLocation replaceWith()  { return replaceWith; }
+    }
+
+    /**
+     * A [[regions]] entry: a fixed 3D box in a specific dimension with a set of gating flags.
+     */
+    public static final class RegionLock {
+        private final ResourceLocation dimension;
+        private final int[] pos1;   // length 3
+        private final int[] pos2;   // length 3
+        private final boolean preventEntry;
+        private final boolean preventBlockBreak;
+        private final boolean preventBlockPlace;
+        private final boolean preventExplosions;
+        private final boolean disableMobSpawning;
+
+        public RegionLock(ResourceLocation dimension, int[] pos1, int[] pos2,
+                          boolean preventEntry, boolean preventBlockBreak,
+                          boolean preventBlockPlace, boolean preventExplosions,
+                          boolean disableMobSpawning) {
+            this.dimension = dimension;
+            this.pos1 = pos1;
+            this.pos2 = pos2;
+            this.preventEntry = preventEntry;
+            this.preventBlockBreak = preventBlockBreak;
+            this.preventBlockPlace = preventBlockPlace;
+            this.preventExplosions = preventExplosions;
+            this.disableMobSpawning = disableMobSpawning;
+        }
+
+        public ResourceLocation dimension() { return dimension; }
+        public int[] pos1()                 { return pos1; }
+        public int[] pos2()                 { return pos2; }
+        public boolean preventEntry()       { return preventEntry; }
+        public boolean preventBlockBreak()  { return preventBlockBreak; }
+        public boolean preventBlockPlace()  { return preventBlockPlace; }
+        public boolean preventExplosions()  { return preventExplosions; }
+        public boolean disableMobSpawning() { return disableMobSpawning; }
+    }
+
+    /**
+     * The [structures] section: which structures block entry, plus the shared rule flags.
+     * Rule flags apply to every structure listed in {@code lockedEntry}.
+     */
+    public static final class StructureRules {
+        public static final StructureRules EMPTY = new StructureRules(
+            CategoryLocks.EMPTY, false, false, false, false);
+
+        private final CategoryLocks lockedEntry;
+        private final boolean preventBlockBreak;
+        private final boolean preventBlockPlace;
+        private final boolean preventExplosions;
+        private final boolean disableMobSpawning;
+
+        public StructureRules(CategoryLocks lockedEntry, boolean preventBlockBreak,
+                              boolean preventBlockPlace, boolean preventExplosions,
+                              boolean disableMobSpawning) {
+            this.lockedEntry = lockedEntry;
+            this.preventBlockBreak = preventBlockBreak;
+            this.preventBlockPlace = preventBlockPlace;
+            this.preventExplosions = preventExplosions;
+            this.disableMobSpawning = disableMobSpawning;
+        }
+
+        public CategoryLocks lockedEntry()  { return lockedEntry; }
+        public boolean preventBlockBreak()  { return preventBlockBreak; }
+        public boolean preventBlockPlace()  { return preventBlockPlace; }
+        public boolean preventExplosions()  { return preventExplosions; }
+        public boolean disableMobSpawning() { return disableMobSpawning; }
+
+        public boolean isEmpty() {
+            return lockedEntry.isEmpty() && !preventBlockBreak && !preventBlockPlace
+                && !preventExplosions && !disableMobSpawning;
+        }
+    }
+
+    /**
+     * Per-stage [unlocks] carve-out lists.
+     * <p>When this stage gates an item via mod or namespace, an item present in
+     * {@code items} (or whose mod is in {@code mods}) is removed from the gating set
+     * for THIS stage only. Other stages' gating still applies.
+     */
+    public static final class UnlockGateLists {
+        public static final UnlockGateLists EMPTY = new UnlockGateLists(
+            java.util.Set.of(), java.util.Set.of(), java.util.Set.of(),
+            java.util.Set.of(), java.util.Set.of());
+
+        private final java.util.Set<ResourceLocation> items;
+        private final java.util.Set<String> mods;
+        private final java.util.Set<ResourceLocation> fluids;
+        private final java.util.Set<ResourceLocation> dimensions;
+        private final java.util.Set<ResourceLocation> entities;
+
+        public UnlockGateLists(java.util.Set<ResourceLocation> items, java.util.Set<String> mods,
+                                java.util.Set<ResourceLocation> fluids,
+                                java.util.Set<ResourceLocation> dimensions,
+                                java.util.Set<ResourceLocation> entities) {
+            this.items      = items != null ? java.util.Set.copyOf(items) : java.util.Set.of();
+            this.mods       = mods != null ? java.util.Set.copyOf(mods) : java.util.Set.of();
+            this.fluids     = fluids != null ? java.util.Set.copyOf(fluids) : java.util.Set.of();
+            this.dimensions = dimensions != null ? java.util.Set.copyOf(dimensions) : java.util.Set.of();
+            this.entities   = entities != null ? java.util.Set.copyOf(entities) : java.util.Set.of();
+        }
+
+        public java.util.Set<ResourceLocation> items()      { return items; }
+        public java.util.Set<String>           mods()       { return mods; }
+        public java.util.Set<ResourceLocation> fluids()     { return fluids; }
+        public java.util.Set<ResourceLocation> dimensions() { return dimensions; }
+        public java.util.Set<ResourceLocation> entities()   { return entities; }
+
+        public boolean isEmpty() {
+            return items.isEmpty() && mods.isEmpty() && fluids.isEmpty()
+                && dimensions.isEmpty() && entities.isEmpty();
+        }
+    }
+
+    /**
+     * A [[ores.overrides]] entry. Parsed for forward-compat; enforcement is deferred
+     * (see v2_update_plan.md §2.8 — on hold post-2.0).
+     */
+    public static final class OreOverride {
+        private final ResourceLocation target;
+        private final ResourceLocation displayAs;
+        private final ResourceLocation dropAs;
+
+        public OreOverride(ResourceLocation target, ResourceLocation displayAs, ResourceLocation dropAs) {
+            this.target = target;
+            this.displayAs = displayAs;
+            this.dropAs = dropAs;
+        }
+
+        public ResourceLocation target()    { return target; }
+        public ResourceLocation displayAs() { return displayAs; }
+        public ResourceLocation dropAs()    { return dropAs; }
+    }
+
+    // ---------------------------------------------------------------
+    // Builder
+    // ---------------------------------------------------------------
+
+    public static final class Builder {
+        private CategoryLocks items = CategoryLocks.EMPTY;
+        private CategoryLocks blocks = CategoryLocks.EMPTY;
+        private CategoryLocks fluids = CategoryLocks.EMPTY;
+        private CategoryLocks entities = CategoryLocks.EMPTY;
+        private CategoryLocks enchants = CategoryLocks.EMPTY;
+        private CategoryLocks crops = CategoryLocks.EMPTY;
+        private CategoryLocks screens = CategoryLocks.EMPTY;
+        private CategoryLocks loot = CategoryLocks.EMPTY;
+        private CategoryLocks petsTaming = CategoryLocks.EMPTY;
+        private CategoryLocks petsBreeding = CategoryLocks.EMPTY;
+        private CategoryLocks petsCommanding = CategoryLocks.EMPTY;
+        private CategoryLocks mobSpawns = CategoryLocks.EMPTY;
+        private java.util.List<String> curioLockedSlots = new java.util.ArrayList<>();
+        private CategoryLocks recipeIds = CategoryLocks.EMPTY;
+        private CategoryLocks recipeOutputs = CategoryLocks.EMPTY;
+
+        private List<ResourceLocation> lockedDimensions = new ArrayList<>();
         private List<InteractionLock> interactions = new ArrayList<>();
-        private List<String> unlockedItems = new ArrayList<>();
-        private List<String> unlockedBlocks = new ArrayList<>();
-        private List<String> unlockedEntities = new ArrayList<>();
-        private List<String> unlockedFluids = new ArrayList<>();
-        private List<String> entities = new ArrayList<>();
-        private List<String> entityTags = new ArrayList<>();
-        private List<String> entityMods = new ArrayList<>();
-        private List<String> spawnEntities = new ArrayList<>();
-        private List<String> spawnEntityTags = new ArrayList<>();
-        private List<String> spawnEntityMods = new ArrayList<>();
+        private List<MobReplacement> mobReplacements = new ArrayList<>();
+        private List<RegionLock> regions = new ArrayList<>();
+        private StructureRules structures = StructureRules.EMPTY;
+        private List<OreOverride> oreOverrides = new ArrayList<>();
+
         private List<String> allowedUse = new ArrayList<>();
         private List<String> allowedPickup = new ArrayList<>();
         private List<String> allowedHotbar = new ArrayList<>();
         private List<String> allowedMousePickup = new ArrayList<>();
         private List<String> allowedInventory = new ArrayList<>();
 
-        public Builder items(List<String> items) {
-            this.items = items != null ? items : new ArrayList<>();
-            return this;
+        private boolean minecraftNamespace = false;
+        private UnlockGateLists unlocks = UnlockGateLists.EMPTY;
+
+        public Builder items(CategoryLocks v)        { this.items = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder blocks(CategoryLocks v)       { this.blocks = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder fluids(CategoryLocks v)       { this.fluids = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder entities(CategoryLocks v)     { this.entities = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder enchants(CategoryLocks v)     { this.enchants = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder crops(CategoryLocks v)        { this.crops = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder screens(CategoryLocks v)      { this.screens = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder loot(CategoryLocks v)         { this.loot = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder petsTaming(CategoryLocks v)     { this.petsTaming = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder petsBreeding(CategoryLocks v)   { this.petsBreeding = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder petsCommanding(CategoryLocks v) { this.petsCommanding = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder mobSpawns(CategoryLocks v)    { this.mobSpawns = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder curioLockedSlots(java.util.List<String> v) {
+            this.curioLockedSlots = v != null ? v : new java.util.ArrayList<>(); return this;
+        }
+        public Builder recipeIds(CategoryLocks v)    { this.recipeIds = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder recipeOutputs(CategoryLocks v){ this.recipeOutputs = v != null ? v : CategoryLocks.EMPTY; return this; }
+
+        public Builder lockedDimensions(List<ResourceLocation> v) {
+            this.lockedDimensions = v != null ? v : new ArrayList<>(); return this;
+        }
+        public Builder interactions(List<InteractionLock> v) {
+            this.interactions = v != null ? v : new ArrayList<>(); return this;
+        }
+        public Builder mobReplacements(List<MobReplacement> v) {
+            this.mobReplacements = v != null ? v : new ArrayList<>(); return this;
+        }
+        public Builder regions(List<RegionLock> v) {
+            this.regions = v != null ? v : new ArrayList<>(); return this;
+        }
+        public Builder structures(StructureRules v) {
+            this.structures = v != null ? v : StructureRules.EMPTY; return this;
+        }
+        public Builder oreOverrides(List<OreOverride> v) {
+            this.oreOverrides = v != null ? v : new ArrayList<>(); return this;
         }
 
-        public Builder itemTags(List<String> itemTags) {
-            this.itemTags = itemTags != null ? itemTags : new ArrayList<>();
-            return this;
-        }
+        public Builder allowedUse(List<String> v)         { this.allowedUse         = v != null ? v : new ArrayList<>(); return this; }
+        public Builder allowedPickup(List<String> v)      { this.allowedPickup      = v != null ? v : new ArrayList<>(); return this; }
+        public Builder allowedHotbar(List<String> v)      { this.allowedHotbar      = v != null ? v : new ArrayList<>(); return this; }
+        public Builder allowedMousePickup(List<String> v) { this.allowedMousePickup = v != null ? v : new ArrayList<>(); return this; }
+        public Builder allowedInventory(List<String> v)   { this.allowedInventory   = v != null ? v : new ArrayList<>(); return this; }
 
-        public Builder itemMods(List<String> itemMods) {
-            this.itemMods = itemMods != null ? itemMods : new ArrayList<>();
-            return this;
-        }
-
-        public Builder recipes(List<String> recipes) {
-            this.recipes = recipes != null ? recipes : new ArrayList<>();
-            return this;
-        }
-
-        public Builder recipeTags(List<String> recipeTags) {
-            this.recipeTags = recipeTags != null ? recipeTags : new ArrayList<>();
-            return this;
-        }
-
-        public Builder recipeItems(List<String> recipeItems) {
-            this.recipeItems = recipeItems != null ? recipeItems : new ArrayList<>();
-            return this;
-        }
-
-        public Builder blocks(List<String> blocks) {
-            this.blocks = blocks != null ? blocks : new ArrayList<>();
-            return this;
-        }
-
-        public Builder blockTags(List<String> blockTags) {
-            this.blockTags = blockTags != null ? blockTags : new ArrayList<>();
-            return this;
-        }
-
-        public Builder blockMods(List<String> blockMods) {
-            this.blockMods = blockMods != null ? blockMods : new ArrayList<>();
-            return this;
-        }
-
-        public Builder fluids(List<String> fluids) {
-            this.fluids = fluids != null ? fluids : new ArrayList<>();
-            return this;
-        }
-
-        public Builder fluidTags(List<String> fluidTags) {
-            this.fluidTags = fluidTags != null ? fluidTags : new ArrayList<>();
-            return this;
-        }
-
-        public Builder fluidMods(List<String> fluidMods) {
-            this.fluidMods = fluidMods != null ? fluidMods : new ArrayList<>();
-            return this;
-        }
-
-        public Builder dimensions(List<String> dimensions) {
-            this.dimensions = dimensions != null ? dimensions : new ArrayList<>();
-            return this;
-        }
-
-        public Builder mods(List<String> mods) {
-            this.mods = mods != null ? mods : new ArrayList<>();
-            return this;
-        }
-
-        public Builder names(List<String> names) {
-            this.names = names != null ? names : new ArrayList<>();
-            return this;
-        }
-
-        public Builder interactions(List<InteractionLock> interactions) {
-            this.interactions = interactions != null ? interactions : new ArrayList<>();
-            return this;
-        }
-
-        public Builder unlockedItems(List<String> unlockedItems) {
-            this.unlockedItems = unlockedItems != null ? unlockedItems : new ArrayList<>();
-            return this;
-        }
-
-        public Builder unlockedBlocks(List<String> unlockedBlocks) {
-            this.unlockedBlocks = unlockedBlocks != null ? unlockedBlocks : new ArrayList<>();
-            return this;
-        }
-
-        public Builder unlockedEntities(List<String> unlockedEntities) {
-            this.unlockedEntities = unlockedEntities != null ? unlockedEntities : new ArrayList<>();
-            return this;
-        }
-
-        public Builder unlockedFluids(List<String> unlockedFluids) {
-            this.unlockedFluids = unlockedFluids != null ? unlockedFluids : new ArrayList<>();
-            return this;
-        }
-
-        public Builder addItem(String item) {
-            this.items.add(item);
-            return this;
-        }
-
-        public Builder addItemTag(String tag) {
-            this.itemTags.add(tag);
-            return this;
-        }
-
-        public Builder addRecipe(String recipe) {
-            this.recipes.add(recipe);
-            return this;
-        }
-
-        public Builder addBlock(String block) {
-            this.blocks.add(block);
-            return this;
-        }
-
-        public Builder addDimension(String dimension) {
-            this.dimensions.add(dimension);
-            return this;
-        }
-
-        public Builder addMod(String mod) {
-            this.mods.add(mod);
-            return this;
-        }
-
-        public Builder addName(String name) {
-            this.names.add(name);
-            return this;
-        }
-
-        public Builder addInteraction(InteractionLock interaction) {
-            this.interactions.add(interaction);
-            return this;
-        }
-
-        public Builder entities(List<String> entities) {
-            this.entities = entities != null ? entities : new ArrayList<>();
-            return this;
-        }
-
-        public Builder entityTags(List<String> entityTags) {
-            this.entityTags = entityTags != null ? entityTags : new ArrayList<>();
-            return this;
-        }
-
-        public Builder addEntity(String entity) {
-            this.entities.add(entity);
-            return this;
-        }
-
-        public Builder addEntityTag(String tag) {
-            this.entityTags.add(tag);
-            return this;
-        }
-
-        public Builder entityMods(List<String> entityMods) {
-            this.entityMods = entityMods != null ? entityMods : new ArrayList<>();
-            return this;
-        }
-
-        public Builder addEntityMod(String mod) {
-            this.entityMods.add(mod);
-            return this;
-        }
-
-        // ============ v1.5: Mob spawn gating ============
-
-        public Builder spawnEntities(List<String> spawnEntities) {
-            this.spawnEntities = spawnEntities != null ? spawnEntities : new ArrayList<>();
-            return this;
-        }
-
-        public Builder spawnEntityTags(List<String> spawnEntityTags) {
-            this.spawnEntityTags = spawnEntityTags != null ? spawnEntityTags : new ArrayList<>();
-            return this;
-        }
-
-        public Builder spawnEntityMods(List<String> spawnEntityMods) {
-            this.spawnEntityMods = spawnEntityMods != null ? spawnEntityMods : new ArrayList<>();
-            return this;
-        }
-
-        // ============ Per-stage enforcement exceptions ============
-
-        public Builder allowedUse(List<String> allowedUse) {
-            this.allowedUse = allowedUse != null ? allowedUse : new ArrayList<>();
-            return this;
-        }
-
-        public Builder allowedPickup(List<String> allowedPickup) {
-            this.allowedPickup = allowedPickup != null ? allowedPickup : new ArrayList<>();
-            return this;
-        }
-
-        public Builder allowedHotbar(List<String> allowedHotbar) {
-            this.allowedHotbar = allowedHotbar != null ? allowedHotbar : new ArrayList<>();
-            return this;
-        }
-
-        public Builder allowedMousePickup(List<String> allowedMousePickup) {
-            this.allowedMousePickup = allowedMousePickup != null ? allowedMousePickup : new ArrayList<>();
-            return this;
-        }
-
-        public Builder allowedInventory(List<String> allowedInventory) {
-            this.allowedInventory = allowedInventory != null ? allowedInventory : new ArrayList<>();
-            return this;
-        }
+        public Builder minecraftNamespace(boolean v) { this.minecraftNamespace = v; return this; }
+        public Builder unlocks(UnlockGateLists v)    { this.unlocks = v != null ? v : UnlockGateLists.EMPTY; return this; }
 
         public LockDefinition build() {
             return new LockDefinition(this);
-        }
-    }
-
-    /**
-     * Represents an interaction lock (e.g., item on block)
-     */
-    public static class InteractionLock {
-        private final String type;
-        private final String heldItem;
-        private final String targetBlock;
-        private final String description;
-
-        public InteractionLock(String type, String heldItem, String targetBlock, String description) {
-            this.type = type;
-            this.heldItem = heldItem;
-            this.targetBlock = targetBlock;
-            this.description = description;
-        }
-
-        public String getType() {
-            return type;
-        }
-
-        public String getHeldItem() {
-            return heldItem;
-        }
-
-        public String getTargetBlock() {
-            return targetBlock;
-        }
-
-        public String getDescription() {
-            return description;
         }
     }
 }
