@@ -1,5 +1,9 @@
 # ProgressiveStages
 
+> **EnVy here — trying to use Claude to make a more detailed README. If it works I'll keep it, if not I won't.**
+
+---
+
 A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression locks. Define stages in simple TOML files — ProgressiveStages handles locking items, blocks, entities, fluids, dimensions, and recipes until players earn the right to use them.
 
 ---
