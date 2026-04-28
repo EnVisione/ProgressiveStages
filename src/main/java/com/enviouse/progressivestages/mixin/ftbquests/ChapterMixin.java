@@ -1,5 +1,6 @@
 package com.enviouse.progressivestages.mixin.ftbquests;
 
+import com.enviouse.progressivestages.compat.ftbquests.RequiredStageHolder;
 import com.enviouse.progressivestages.compat.ftbquests.StageRequirementHelper;
 import dev.ftb.mods.ftblibrary.config.ConfigGroup;
 import dev.ftb.mods.ftbquests.quest.Chapter;
@@ -21,13 +22,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * directly in the FTB Quests UI.
  */
 @Mixin(value = Chapter.class, remap = false)
-public abstract class ChapterMixin {
+public abstract class ChapterMixin implements RequiredStageHolder {
 
     /**
      * The required stage ID for this chapter. If empty, no stage requirement.
      */
     @Unique
     private String progressivestages$requiredStage = "";
+
+    @Override
+    @Unique
+    public String progressivestages$getRequiredStage() {
+        return progressivestages$requiredStage;
+    }
 
     /**
      * Inject into fillConfigGroup to add our "Stage Required" field to the Chapter properties UI.

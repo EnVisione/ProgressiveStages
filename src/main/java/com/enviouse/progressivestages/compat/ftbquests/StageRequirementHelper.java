@@ -62,5 +62,36 @@ public final class StageRequirementHelper {
             return true;
         }
     }
+
+    /**
+     * Server-side stage requirement check used by mixins that have no direct
+     * player handle (e.g. TeamData.canStartTasks). Resolves the active server
+     * player via {@code ServerQuestFile.getInstance().getCurrentPlayer()} reflectively
+     * (FTB Quests sets this on each task evaluation).
+     *
+     * Returns true if the stage requirement is met OR if no player context can be
+     * resolved (fail-open: don't block legit task starts due to reflection issues).
+     */
+    public static boolean hasStageForServerLogic(String stageIdStr) {
+        if (stageIdStr == null || stageIdStr.isBlank()) {
+            return true;
+        }
+        try {
+            Class<?> sqfClass = Class.forName("dev.ftb.mods.ftbquests.quest.ServerQuestFile");
+            Object instance = sqfClass.getMethod("getInstance").invoke(null);
+            if (instance == null) return true;
+            Object cp = sqfClass.getMethod("getCurrentPlayer").invoke(instance);
+            if (cp instanceof ServerPlayer sp) {
+                return hasStage(sp, stageIdStr);
+            }
+            return true;
+        } catch (ClassNotFoundException e) {
+            // FTB Quests not loaded
+            return true;
+        } catch (Exception e) {
+            LOGGER.debug("[ProgressiveStages] hasStageForServerLogic error: {}", e.getMessage());
+            return true;
+        }
+    }
 }
 

@@ -56,6 +56,14 @@ public final class FtbQuestsHooks {
     // Stage rechecks can trigger quest rewards → more stages → more rechecks
     private static final Set<UUID> recheckInProgress = new HashSet<>();
 
+    // FTB Teams TeamStagesHelper reflective handles (lazy + cached).
+    private static volatile boolean teamStagesHelperUnavailable = false;
+    private static Method tshHasTeamStagePlayer = null;
+    private static Method tshAddTeamStage = null;
+    private static Method tshRemoveTeamStage = null;
+    private static Method tshGetTeamForPlayer = null; // FTBTeamsAPI manager.getTeamForPlayer(player)
+    private static Object cachedFtbTeamsApi = null;
+
     private FtbQuestsHooks() {}
 
     /**
@@ -200,19 +208,115 @@ public final class FtbQuestsHooks {
 
     private static boolean hasStage(net.minecraft.world.entity.player.Player player, String stage) {
         if (stage == null || stage.isEmpty()) return false;
-        StageId stageId = StageId.parse(stage);
 
+        // Optional FTB Teams TeamStagesHelper delegation (server-side only).
+        if (player instanceof ServerPlayer serverPlayer
+                && com.enviouse.progressivestages.common.config.StageConfig.isFtbquestsTeamMode()) {
+            Boolean delegated = teamStagesHelperHas(serverPlayer, stage);
+            if (delegated != null) {
+                LOGGER.debug("[ProgressiveStages] FTB Provider has('{}', '{}') -> TeamStagesHelper={}", player.getName().getString(), stage, delegated);
+                return delegated;
+            }
+            // fall through to mine's backend on failure
+        }
+
+        StageId stageId = StageId.parse(stage);
         boolean has;
         if (player instanceof ServerPlayer serverPlayer) {
-            // Server-side: use the authoritative API
             has = ProgressiveStagesAPI.hasStage(serverPlayer, stageId);
         } else {
-            // Client-side: use the client cache
             has = com.enviouse.progressivestages.client.ClientStageCache.hasStage(stageId);
         }
 
         LOGGER.debug("[ProgressiveStages] FTB Provider has('{}', '{}') = {}", player.getName().getString(), stage, has);
         return has;
+    }
+
+    /**
+     * Reflectively call FTB Teams' {@code TeamStagesHelper.hasTeamStage(Player, String)}.
+     * Returns {@code null} on any failure (so callers can fall back to mine's backend).
+     */
+    private static Boolean teamStagesHelperHas(ServerPlayer player, String stage) {
+        if (teamStagesHelperUnavailable) return null;
+        try {
+            if (tshHasTeamStagePlayer == null) {
+                Class<?> cls = Class.forName("dev.ftb.mods.ftbteams.api.TeamStagesHelper");
+                tshHasTeamStagePlayer = cls.getMethod("hasTeamStage",
+                    net.minecraft.world.entity.player.Player.class, String.class);
+            }
+            return (Boolean) tshHasTeamStagePlayer.invoke(null, player, stage);
+        } catch (ClassNotFoundException | NoSuchMethodException e) {
+            teamStagesHelperUnavailable = true;
+            LOGGER.debug("[ProgressiveStages] TeamStagesHelper not available, disabling delegation: {}", e.getMessage());
+            return null;
+        } catch (Throwable t) {
+            LOGGER.debug("[ProgressiveStages] TeamStagesHelper.hasTeamStage failed: {}", t.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Look up a {@code Team} for the given player via FTB Teams API.
+     * Returns {@code null} on any failure.
+     */
+    private static Object resolveFtbTeamForPlayer(ServerPlayer player) {
+        if (teamStagesHelperUnavailable) return null;
+        try {
+            if (cachedFtbTeamsApi == null) {
+                Class<?> apiClass = Class.forName("dev.ftb.mods.ftbteams.api.FTBTeamsAPI");
+                cachedFtbTeamsApi = apiClass.getMethod("api").invoke(null);
+            }
+            Object manager = cachedFtbTeamsApi.getClass().getMethod("getManager").invoke(cachedFtbTeamsApi);
+            if (tshGetTeamForPlayer == null) {
+                tshGetTeamForPlayer = manager.getClass().getMethod("getTeamForPlayer", ServerPlayer.class);
+            }
+            Object opt = tshGetTeamForPlayer.invoke(manager, player);
+            if (opt instanceof java.util.Optional<?> o) {
+                return o.orElse(null);
+            }
+            return null;
+        } catch (ClassNotFoundException | NoSuchMethodException e) {
+            teamStagesHelperUnavailable = true;
+            LOGGER.debug("[ProgressiveStages] FTBTeamsAPI manager.getTeamForPlayer not available: {}", e.getMessage());
+            return null;
+        } catch (Throwable t) {
+            LOGGER.debug("[ProgressiveStages] FTBTeamsAPI lookup failed: {}", t.getMessage());
+            return null;
+        }
+    }
+
+    /** Reflective add via TeamStagesHelper.addTeamStage(Team, String). Returns null on failure. */
+    private static Boolean teamStagesHelperAdd(ServerPlayer player, String stage) {
+        Object team = resolveFtbTeamForPlayer(player);
+        if (team == null) return null;
+        try {
+            if (tshAddTeamStage == null) {
+                Class<?> cls = Class.forName("dev.ftb.mods.ftbteams.api.TeamStagesHelper");
+                Class<?> teamClass = Class.forName("dev.ftb.mods.ftbteams.api.Team");
+                tshAddTeamStage = cls.getMethod("addTeamStage", teamClass, String.class);
+            }
+            return (Boolean) tshAddTeamStage.invoke(null, team, stage);
+        } catch (Throwable t) {
+            LOGGER.debug("[ProgressiveStages] TeamStagesHelper.addTeamStage failed: {}", t.getMessage());
+            return null;
+        }
+    }
+
+    /** Reflective remove via TeamStagesHelper.removeTeamStage(Team, String). Returns null on failure. */
+    private static Boolean teamStagesHelperRemove(ServerPlayer player, String stage) {
+        Object team = resolveFtbTeamForPlayer(player);
+        if (team == null) return null;
+        try {
+            if (tshRemoveTeamStage == null) {
+                Class<?> cls = Class.forName("dev.ftb.mods.ftbteams.api.TeamStagesHelper");
+                Class<?> teamClass = Class.forName("dev.ftb.mods.ftbteams.api.Team");
+                tshRemoveTeamStage = cls.getMethod("removeTeamStage", teamClass, String.class);
+            }
+            return (Boolean) tshRemoveTeamStage.invoke(null, team, stage);
+        } catch (Throwable t) {
+            LOGGER.debug("[ProgressiveStages] TeamStagesHelper.removeTeamStage failed: {}", t.getMessage());
+            return null;
+        }
     }
 
     private static void syncStages(ServerPlayer player) {
@@ -229,6 +333,16 @@ public final class FtbQuestsHooks {
         }
 
         LOGGER.info("[ProgressiveStages] FTB Provider add() called - raw stage ID: '{}', player: {}", stage, player.getName().getString());
+
+        // Optional FTB Teams TeamStagesHelper delegation.
+        if (com.enviouse.progressivestages.common.config.StageConfig.isFtbquestsTeamMode()) {
+            Boolean delegated = teamStagesHelperAdd(player, stage.trim());
+            if (delegated != null) {
+                LOGGER.info("[ProgressiveStages] FTB Provider add() delegated to TeamStagesHelper -> {}", delegated);
+                return;
+            }
+            // fall through to mine's backend on failure
+        }
 
         // Normalize the stage ID (handles case differences, whitespace, etc.)
         StageId stageId;
@@ -269,6 +383,16 @@ public final class FtbQuestsHooks {
         }
 
         LOGGER.info("[ProgressiveStages] FTB Provider remove() called - raw stage ID: '{}', player: {}", stage, player.getName().getString());
+
+        // Optional FTB Teams TeamStagesHelper delegation.
+        if (com.enviouse.progressivestages.common.config.StageConfig.isFtbquestsTeamMode()) {
+            Boolean delegated = teamStagesHelperRemove(player, stage.trim());
+            if (delegated != null) {
+                LOGGER.info("[ProgressiveStages] FTB Provider remove() delegated to TeamStagesHelper -> {}", delegated);
+                return;
+            }
+            // fall through to mine's backend on failure
+        }
 
         // Normalize the stage ID
         StageId stageId;
