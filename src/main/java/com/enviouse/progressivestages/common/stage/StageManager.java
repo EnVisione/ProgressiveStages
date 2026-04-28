@@ -321,14 +321,30 @@ public class StageManager {
         UUID teamId = TeamProvider.getInstance().getTeamId(player);
         Set<StageId> currentStages = getTeamStageData().getStages(teamId);
 
-        // Only grant starting stages if player has no stages yet
-        if (!currentStages.isEmpty()) {
+        // Only grant starting stages if player has no stages yet, unless reapply is enabled.
+        // (data.grantStage already short-circuits when the team already has the stage.)
+        if (!currentStages.isEmpty() && !StageConfig.isReapplyStartingStagesOnLogin()) {
             return;
         }
 
         // Grant all starting stages (bypass dependency checks for starting stages)
         for (String stageIdStr : startingStageIds) {
-            StageId stageId = StageId.of(stageIdStr);
+            if (stageIdStr == null || stageIdStr.isBlank()) {
+                continue;
+            }
+            // Pre-validate format to skip malformed config entries gracefully
+            // (mirrors fork's StageTomlIo.isValidStageName regex; allows ':' for namespaced ids and '/' for hierarchical paths)
+            if (!stageIdStr.trim().toLowerCase().matches("^[a-z0-9._/:-]+$")) {
+                LOGGER.warn("Skipping malformed starting stage entry: '{}'", stageIdStr);
+                continue;
+            }
+            StageId stageId;
+            try {
+                stageId = StageId.of(stageIdStr);
+            } catch (IllegalArgumentException e) {
+                LOGGER.warn("Skipping invalid starting stage entry '{}': {}", stageIdStr, e.getMessage());
+                continue;
+            }
             if (StageOrder.getInstance().stageExists(stageId)) {
                 grantStageBypassDependencies(player, stageId, StageCause.STARTING_STAGE);
                 LOGGER.debug("Granted starting stage {} to player {}", stageId, player.getName().getString());

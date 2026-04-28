@@ -13,6 +13,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -83,6 +84,16 @@ public class NetworkHandler {
                 (payload, context) -> {}
             )
         );
+
+        // Reveal-policy packet (mirrors reveal_stage_names_only_to_operators flag)
+        registrar.playToClient(
+            RevealPolicyPayload.TYPE,
+            RevealPolicyPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleRevealPolicyClient,
+                (payload, context) -> {}
+            )
+        );
     }
 
     /**
@@ -94,6 +105,8 @@ public class NetworkHandler {
             .toList();
 
         PacketDistributor.sendToPlayer(player, new StageSyncPayload(stageList));
+        // Also push reveal-policy so client knows whether to hide stage names
+        sendRevealPolicy(player);
     }
 
     /**
@@ -111,22 +124,44 @@ public class NetworkHandler {
     public static void sendLockSync(ServerPlayer player) {
         LockRegistry registry = LockRegistry.getInstance();
 
-        // Get all resolved item locks (includes name patterns, tags, mod locks)
+        // v2.0: ship every (itemId, stageId) gating pair so the client can dedupe into a multi-stage map.
+        // For items, walk every Item in the registry and emit ALL gating stages.
         List<LockEntry> itemLocks = new ArrayList<>();
-        for (var entry : registry.getAllResolvedItemLocks().entrySet()) {
-            itemLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
+        for (Item item : net.minecraft.core.registries.BuiltInRegistries.ITEM) {
+            ResourceLocation iid = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+            if (iid == null) continue;
+            java.util.Set<com.enviouse.progressivestages.common.api.StageId> gating = registry.getRequiredStages(item);
+            if (gating.isEmpty()) continue;
+            for (com.enviouse.progressivestages.common.api.StageId s : gating) {
+                itemLocks.add(new LockEntry(iid, s.getResourceLocation()));
+            }
         }
 
-        // Get all recipe locks (recipes = [...] — by recipe ID)
+        // Recipes: only single-stage entries are tracked (recipeIdCat doesn't have a multi-stage public method by id),
+        // but ship via the same emission. Multi-stage recipes will work because LockRegistry.recipeIdCat already
+        // stores a list, so each entry is emitted as its own LockEntry row.
         List<LockEntry> recipeLocks = new ArrayList<>();
         for (var entry : registry.getAllRecipeLocks().entrySet()) {
-            recipeLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
+            // Single-stage map view; for true multi-stage recipe locks, use getRequiredStagesForRecipe per id.
+            java.util.Set<com.enviouse.progressivestages.common.api.StageId> stages = registry.getRequiredStagesForRecipe(entry.getKey());
+            if (stages.isEmpty()) {
+                recipeLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
+            } else {
+                for (com.enviouse.progressivestages.common.api.StageId s : stages) {
+                    recipeLocks.add(new LockEntry(entry.getKey(), s.getResourceLocation()));
+                }
+            }
         }
 
-        // Get all recipe-item locks (recipe_items = [...] — by output item ID)
         List<LockEntry> recipeItemLocks = new ArrayList<>();
-        for (var entry : registry.getAllRecipeItemLocks().entrySet()) {
-            recipeItemLocks.add(new LockEntry(entry.getKey(), entry.getValue().getResourceLocation()));
+        for (Item item : net.minecraft.core.registries.BuiltInRegistries.ITEM) {
+            ResourceLocation iid = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+            if (iid == null) continue;
+            java.util.Set<com.enviouse.progressivestages.common.api.StageId> gating = registry.getRequiredStagesForRecipeByOutput(item);
+            if (gating.isEmpty()) continue;
+            for (com.enviouse.progressivestages.common.api.StageId s : gating) {
+                recipeItemLocks.add(new LockEntry(iid, s.getResourceLocation()));
+            }
         }
 
         PacketDistributor.sendToPlayer(player, new LockSyncPayload(itemLocks, recipeLocks, recipeItemLocks));
@@ -163,6 +198,16 @@ public class NetworkHandler {
         PacketDistributor.sendToPlayer(player, new CreativeBypassPayload(bypassing));
     }
 
+    /**
+     * Send the reveal-policy flag (server's reveal_stage_names_only_to_operators config) to a player.
+     * Client uses this with its own permission level to decide whether to show stage names.
+     */
+    public static void sendRevealPolicy(ServerPlayer player) {
+        PacketDistributor.sendToPlayer(player, new RevealPolicyPayload(
+            com.enviouse.progressivestages.common.config.StageConfig.isRevealStageNamesOnlyToOperators()
+        ));
+    }
+
     // ============ Client Handlers ============
 
     private static void handleStageSyncClient(StageSyncPayload payload, IPayloadContext context) {
@@ -188,25 +233,37 @@ public class NetworkHandler {
 
     private static void handleLockSyncClient(LockSyncPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
+            // v2.0: dedupe LockEntry rows into both a single-stage map (first-seen wins, for back-compat)
+            // and a multi-stage map for true multi-stage gating.
             Map<ResourceLocation, StageId> itemLocks = new HashMap<>();
+            Map<ResourceLocation, java.util.Set<StageId>> itemMulti = new HashMap<>();
             for (LockEntry entry : payload.itemLocks()) {
-                itemLocks.put(entry.itemId(), StageId.fromResourceLocation(entry.stageId()));
+                StageId sid = StageId.fromResourceLocation(entry.stageId());
+                itemLocks.putIfAbsent(entry.itemId(), sid);
+                itemMulti.computeIfAbsent(entry.itemId(), k -> new java.util.LinkedHashSet<>()).add(sid);
             }
             ClientLockCache.setItemLocks(itemLocks);
+            ClientLockCache.setItemMultiLocks(itemMulti);
 
-            // Sync recipe locks (recipes = [...] — by recipe ID)
             Map<ResourceLocation, StageId> recipeLocks = new HashMap<>();
+            Map<ResourceLocation, java.util.Set<StageId>> recipeMulti = new HashMap<>();
             for (LockEntry entry : payload.recipeLocks()) {
-                recipeLocks.put(entry.itemId(), StageId.fromResourceLocation(entry.stageId()));
+                StageId sid = StageId.fromResourceLocation(entry.stageId());
+                recipeLocks.putIfAbsent(entry.itemId(), sid);
+                recipeMulti.computeIfAbsent(entry.itemId(), k -> new java.util.LinkedHashSet<>()).add(sid);
             }
             ClientLockCache.setRecipeLocks(recipeLocks);
+            ClientLockCache.setRecipeMultiLocks(recipeMulti);
 
-            // Sync recipe-item locks (recipe_items = [...] — by output item ID)
             Map<ResourceLocation, StageId> recipeItemLocks = new HashMap<>();
+            Map<ResourceLocation, java.util.Set<StageId>> recipeItemMulti = new HashMap<>();
             for (LockEntry entry : payload.recipeItemLocks()) {
-                recipeItemLocks.put(entry.itemId(), StageId.fromResourceLocation(entry.stageId()));
+                StageId sid = StageId.fromResourceLocation(entry.stageId());
+                recipeItemLocks.putIfAbsent(entry.itemId(), sid);
+                recipeItemMulti.computeIfAbsent(entry.itemId(), k -> new java.util.LinkedHashSet<>()).add(sid);
             }
             ClientLockCache.setRecipeItemLocks(recipeItemLocks);
+            ClientLockCache.setRecipeItemMultiLocks(recipeItemMulti);
         });
     }
 
@@ -231,6 +288,12 @@ public class NetworkHandler {
     private static void handleCreativeBypassClient(CreativeBypassPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             ClientLockCache.setCreativeBypass(payload.bypassing());
+        });
+    }
+
+    private static void handleRevealPolicyClient(RevealPolicyPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            ClientStageCache.setHideStageNamesFromNonOps(payload.hide());
         });
     }
 
@@ -355,6 +418,24 @@ public class NetworkHandler {
             ByteBufCodecs.BOOL,
             CreativeBypassPayload::bypassing,
             CreativeBypassPayload::new
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /**
+     * Reveal-policy payload. Mirrors reveal_stage_names_only_to_operators to the client.
+     */
+    public record RevealPolicyPayload(boolean hide) implements CustomPacketPayload {
+        public static final Type<RevealPolicyPayload> TYPE = new Type<>(Constants.REVEAL_POLICY_PACKET);
+
+        public static final StreamCodec<FriendlyByteBuf, RevealPolicyPayload> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.BOOL,
+            RevealPolicyPayload::hide,
+            RevealPolicyPayload::new
         );
 
         @Override

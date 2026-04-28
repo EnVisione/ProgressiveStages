@@ -19,7 +19,7 @@ public class ClientLockCache {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    // Item ID -> Required Stage
+    // Item ID -> Required Stage (single-stage view, kept for back-compat)
     private static final Map<ResourceLocation, StageId> itemLocks = new ConcurrentHashMap<>();
 
     // Block ID -> Required Stage
@@ -30,6 +30,12 @@ public class ClientLockCache {
 
     // Recipe-Item Locks: Output Item ID -> Required Stage (recipe_items = [...])
     private static final Map<ResourceLocation, StageId> recipeItemLocks = new ConcurrentHashMap<>();
+
+    // v2.0 multi-stage variants — populated alongside the single-stage maps; an item with N gating stages
+    // has N entries in the per-item Set. Same shape mirrors the recipe families.
+    private static final Map<ResourceLocation, java.util.Set<StageId>> itemMultiLocks = new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, java.util.Set<StageId>> recipeMultiLocks = new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, java.util.Set<StageId>> recipeItemMultiLocks = new ConcurrentHashMap<>();
 
     // Creative bypass flag - when true, all lock checks return false (not locked)
     private static volatile boolean creativeBypass = false;
@@ -79,6 +85,47 @@ public class ClientLockCache {
         if (changed && !locks.isEmpty()) {
             triggerEmiReload();
         }
+    }
+
+    /** v2.0: replace the multi-stage view of item locks. */
+    public static void setItemMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        itemMultiLocks.clear();
+        if (locks != null) itemMultiLocks.putAll(locks);
+    }
+
+    public static void setRecipeMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        recipeMultiLocks.clear();
+        if (locks != null) recipeMultiLocks.putAll(locks);
+    }
+
+    public static void setRecipeItemMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        recipeItemMultiLocks.clear();
+        if (locks != null) recipeItemMultiLocks.putAll(locks);
+    }
+
+    /** v2.0: every gating stage for the item, or empty set if not gated. */
+    public static java.util.Set<StageId> getRequiredStagesForItem(ResourceLocation itemId) {
+        if (creativeBypass || itemId == null) return java.util.Set.of();
+        java.util.Set<StageId> set = itemMultiLocks.get(itemId);
+        if (set != null) return set;
+        StageId single = itemLocks.get(itemId);
+        return single != null ? java.util.Set.of(single) : java.util.Set.of();
+    }
+
+    public static java.util.Set<StageId> getRequiredStagesForRecipeByOutput(ResourceLocation itemId) {
+        if (creativeBypass || itemId == null) return java.util.Set.of();
+        java.util.Set<StageId> set = recipeItemMultiLocks.get(itemId);
+        if (set != null) return set;
+        StageId single = recipeItemLocks.get(itemId);
+        return single != null ? java.util.Set.of(single) : java.util.Set.of();
+    }
+
+    /** v2.0: true iff the player owns ALL gating stages for the item. */
+    public static boolean playerOwnsAllStagesFor(ResourceLocation itemId) {
+        java.util.Set<StageId> gating = getRequiredStagesForItem(itemId);
+        if (gating.isEmpty()) return true;
+        for (StageId s : gating) if (!ClientStageCache.hasStage(s)) return false;
+        return true;
     }
 
     /**
@@ -242,6 +289,9 @@ public class ClientLockCache {
         blockLocks.clear();
         recipeLocks.clear();
         recipeItemLocks.clear();
+        itemMultiLocks.clear();
+        recipeMultiLocks.clear();
+        recipeItemMultiLocks.clear();
         creativeBypass = false;
 
         if (StageConfig.isDebugLogging()) {
