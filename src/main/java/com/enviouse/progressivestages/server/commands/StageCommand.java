@@ -288,14 +288,22 @@ public class StageCommand {
                 String displayName = defOpt.map(StageDefinition::getDisplayName).orElse(stageId.getPath());
                 List<StageId> deps = defOpt.map(StageDefinition::getDependencies).orElse(java.util.Collections.emptyList());
 
-                String depStr = deps.isEmpty() ? "" : " (requires: " +
-                    deps.stream().map(StageId::getPath).reduce((a, b) -> a + ", " + b).orElse("") + ")";
+                String depStr;
+                if (deps.isEmpty()) {
+                    depStr = "";
+                } else {
+                    String depsJoined = deps.stream().map(StageId::getPath).reduce((a, b) -> a + ", " + b).orElse("");
+                    depStr = StageConfig.getMsgCmdListRequiresFormat().replace("{deps}", depsJoined);
+                }
 
-                // Use color codes for stage list items
                 String color = has ? "&a" : "&8";
                 String check = has ? " &a\u2713" : "";
-                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
-                    "  &7\u2022 " + color + displayName + check + "&7" + depStr), false);
+                String entryName = color + displayName;
+                String entryLine = StageConfig.getMsgCmdListEntry()
+                    .replace("{name}", entryName)
+                    .replace("{check}", check)
+                    .replace("{deps}", depStr);
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(entryLine), false);
             }
         }
 
@@ -331,39 +339,53 @@ public class StageCommand {
         Optional<StageDefinition> defOpt = StageOrder.getInstance().getStageDefinition(stageId);
 
         if (defOpt.isEmpty()) {
-            context.getSource().sendFailure(Component.literal("Stage not found: " + stageName)
-                .withStyle(ChatFormatting.RED));
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdStageNotFound().replace("{stage}", stageName)));
             return 0;
         }
 
         StageDefinition def = defOpt.get();
 
-        context.getSource().sendSuccess(() -> Component.literal("=== " + def.getDisplayName() + " ===")
-            .withStyle(ChatFormatting.GOLD), false);
-        context.getSource().sendSuccess(() -> Component.literal("  ID: " + def.getId().toString())
-            .withStyle(ChatFormatting.GRAY), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdInfoHeader().replace("{stage}", def.getDisplayName())), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdInfoId().replace("{id}", def.getId().toString())), false);
 
         // v1.3: Show dependencies instead of order
         List<StageId> deps = def.getDependencies();
         if (deps.isEmpty()) {
-            context.getSource().sendSuccess(() -> Component.literal("  Dependencies: (none)")
-                .withStyle(ChatFormatting.GRAY), false);
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdInfoDepsNone()), false);
         } else {
             String depStr = deps.stream().map(StageId::getPath).reduce((a, b) -> a + ", " + b).orElse("");
-            context.getSource().sendSuccess(() -> Component.literal("  Dependencies: " + depStr)
-                .withStyle(ChatFormatting.YELLOW), false);
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdInfoDeps().replace("{deps}", depStr)), false);
         }
 
-        context.getSource().sendSuccess(() -> Component.literal("  Description: " + def.getDescription())
-            .withStyle(ChatFormatting.GRAY), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdInfoDescription().replace("{description}", def.getDescription())), false);
 
         var locks = def.getLocks();
-        int lockCount = locks.getItems().size() + locks.getRecipes().size() +
-            locks.getBlocks().size() + locks.getDimensions().size() +
-            locks.getMods().size() + locks.getNames().size();
+        int lockCount = locks.items().locked().size()
+            + locks.blocks().locked().size()
+            + locks.fluids().locked().size()
+            + locks.entities().locked().size()
+            + locks.enchants().locked().size()
+            + locks.crops().locked().size()
+            + locks.screens().locked().size()
+            + locks.loot().locked().size()
+            + locks.petsTaming().locked().size()
+            + locks.petsBreeding().locked().size()
+            + locks.mobSpawns().locked().size()
+            + locks.recipeIds().locked().size()
+            + locks.recipeOutputs().locked().size()
+            + locks.lockedDimensions().size()
+            + locks.interactions().size()
+            + locks.mobReplacements().size()
+            + locks.regions().size();
 
-        context.getSource().sendSuccess(() -> Component.literal("  Total locks: " + lockCount)
-            .withStyle(ChatFormatting.GRAY), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdInfoTotalLocks().replace("{count}", String.valueOf(lockCount))), false);
 
         return 1;
     }
@@ -373,8 +395,8 @@ public class StageCommand {
      * Displays all stages with their dependencies in a tree format.
      */
     private static int showDependencyTree(CommandContext<CommandSourceStack> context) {
-        context.getSource().sendSuccess(() -> Component.literal("=== Stage Dependency Tree ===")
-            .withStyle(ChatFormatting.GOLD), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdTreeHeader()), false);
 
         // Find root stages (no dependencies)
         List<StageId> rootStages = new java.util.ArrayList<>();
@@ -386,8 +408,8 @@ public class StageCommand {
         }
 
         if (rootStages.isEmpty()) {
-            context.getSource().sendSuccess(() -> Component.literal("  (No stages defined)")
-                .withStyle(ChatFormatting.GRAY), false);
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdTreeEmpty()), false);
             return 1;
         }
 
@@ -400,8 +422,8 @@ public class StageCommand {
         // Print any orphaned stages (have dependencies that don't exist)
         for (StageId stageId : StageOrder.getInstance().getOrderedStages()) {
             if (!printed.contains(stageId)) {
-                context.getSource().sendSuccess(() -> Component.literal("  ⚠ " + stageId.getPath() + " (orphaned - dependency not found)")
-                    .withStyle(ChatFormatting.RED), false);
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdTreeOrphaned().replace("{path}", stageId.getPath())), false);
             }
         }
 
@@ -419,9 +441,11 @@ public class StageCommand {
             .map(StageDefinition::getDisplayName)
             .orElse(stageId.getPath());
 
-        context.getSource().sendSuccess(() -> Component.literal(indent + displayName)
-            .withStyle(ChatFormatting.WHITE)
-            .append(Component.literal(" [" + stageId.getPath() + "]").withStyle(ChatFormatting.DARK_GRAY)), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdTreeNode()
+                .replace("{indent}", indent)
+                .replace("{name}", displayName)
+                .replace("{path}", stageId.getPath())), false);
 
         // Print stages that depend on this one
         Set<StageId> dependents = StageOrder.getInstance().getDependents(stageId);
@@ -465,12 +489,12 @@ public class StageCommand {
         int validationErrors = 0;
         int warnings = 0;
 
-        context.getSource().sendSuccess(() -> Component.literal("=== Stage Validation ===")
-            .withStyle(ChatFormatting.GOLD), false);
-        context.getSource().sendSuccess(() -> Component.literal("[ProgressiveStages] Validating stage files...")
-            .withStyle(ChatFormatting.GRAY), false);
-        context.getSource().sendSuccess(() -> Component.literal("  Found " + totalFiles + " stage files")
-            .withStyle(ChatFormatting.GRAY), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdValidateHeader()), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdValidateStarting().replace("{prefix}", StageConfig.getMsgPrefix())), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdValidateFound().replace("{count}", String.valueOf(totalFiles))), false);
 
         // Validate all files with detailed error reporting
         var validationResults = loader.validateAllStages();
@@ -478,25 +502,29 @@ public class StageCommand {
         for (var result : validationResults) {
             if (result.success) {
                 final String fname = result.fileName;
-                context.getSource().sendSuccess(() -> Component.literal("  SUCCESS: " + fname + " validated")
-                    .withStyle(ChatFormatting.GREEN), false);
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdValidateSuccess().replace("{file}", fname)), false);
             } else if (result.syntaxError) {
                 syntaxErrors++;
                 final String fname = result.fileName;
                 final String errorMsg = result.errorMessage;
-                context.getSource().sendSuccess(() -> Component.literal("  ERROR: " + fname + " has " + errorMsg)
-                    .withStyle(ChatFormatting.RED), false);
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdValidateSyntaxError()
+                        .replace("{file}", fname)
+                        .replace("{error}", errorMsg)), false);
             } else {
                 validationErrors++;
                 final String fname = result.fileName;
                 final String errorMsg = result.errorMessage;
-                context.getSource().sendSuccess(() -> Component.literal("  ERROR: " + fname + " - " + errorMsg)
-                    .withStyle(ChatFormatting.RED), false);
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdValidateValidationError()
+                        .replace("{file}", fname)
+                        .replace("{error}", errorMsg)), false);
 
                 // List invalid items
                 for (String invalidItem : result.invalidItems) {
-                    context.getSource().sendSuccess(() -> Component.literal("      - " + invalidItem)
-                        .withStyle(ChatFormatting.YELLOW), false);
+                    context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                        StageConfig.getMsgCmdValidateInvalidItem().replace("{item}", invalidItem)), false);
                 }
             }
         }
@@ -506,8 +534,8 @@ public class StageCommand {
         List<String> depErrors = StageOrder.getInstance().validateDependencies();
         for (String depError : depErrors) {
             warnings++;
-            context.getSource().sendSuccess(() -> Component.literal("  ⚠ " + depError)
-                .withStyle(ChatFormatting.YELLOW), false);
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdValidateDepWarning().replace("{message}", depError)), false);
         }
 
         // Check for empty starting stages
@@ -519,8 +547,8 @@ public class StageCommand {
             if (!found) {
                 validationErrors++;
                 final String stageName = startingStage;
-                context.getSource().sendSuccess(() -> Component.literal("  ✗ Starting stage not found: " + stageName)
-                    .withStyle(ChatFormatting.RED), false);
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdValidateStartingNotFound().replace("{stage}", stageName)), false);
             }
         }
 
@@ -531,15 +559,22 @@ public class StageCommand {
         final int totalErrors = syntaxErrors + validationErrors;
         final int validCount = validationResults.size() - totalErrors;
 
+        final int total = validationResults.size();
         if (totalErrors == 0 && warnings == 0) {
-            context.getSource().sendSuccess(() -> Component.literal("  SUMMARY: " + validCount + "/" + validationResults.size() + " stage files valid, all passed!")
-                .withStyle(ChatFormatting.GREEN), false);
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdValidateSummaryOk()
+                    .replace("{valid}", String.valueOf(validCount))
+                    .replace("{total}", String.valueOf(total))), false);
         } else {
-            context.getSource().sendSuccess(() -> Component.literal("  SUMMARY: " + validCount + "/" + validationResults.size() + " stage files valid, " +
-                    (finalSyntaxErrors > 0 ? finalSyntaxErrors + " syntax error(s), " : "") +
-                    (finalValidationErrors > 0 ? finalValidationErrors + " validation error(s), " : "") +
-                    (finalWarnings > 0 ? finalWarnings + " warning(s)" : ""))
-                .withStyle(totalErrors > 0 ? ChatFormatting.RED : ChatFormatting.YELLOW), false);
+            String errorsPart = (finalSyntaxErrors > 0 ? finalSyntaxErrors + " syntax error(s), " : "")
+                + (finalValidationErrors > 0 ? finalValidationErrors + " validation error(s), " : "");
+            String warningsPart = finalWarnings > 0 ? finalWarnings + " warning(s)" : "";
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdValidateSummaryErrors()
+                    .replace("{valid}", String.valueOf(validCount))
+                    .replace("{total}", String.valueOf(total))
+                    .replace("{errors_part}", errorsPart)
+                    .replace("{warnings_part}", warningsPart)), false);
         }
 
         return totalErrors == 0 ? 1 : 0;
@@ -552,50 +587,41 @@ public class StageCommand {
     private static int ftbStatus(CommandContext<CommandSourceStack> context, ServerPlayer player) {
         CommandSourceStack source = context.getSource();
 
-        source.sendSuccess(() -> Component.literal("=== FTB Quests Integration Status ===")
-            .withStyle(ChatFormatting.GOLD), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(StageConfig.getMsgCmdFtbStatusHeader()), false);
 
-        // Integration enabled
         boolean enabled = StageConfig.isFtbQuestsIntegrationEnabled();
-        source.sendSuccess(() -> Component.literal("  Config Enabled: " + (enabled ? "YES" : "NO"))
-            .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.RED), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdFtbStatusConfigEnabled().replace("{value}", enabled ? "YES" : "NO")), false);
 
-        // Provider registered
         boolean providerRegistered = FtbQuestsHooks.isProviderRegistered();
-        source.sendSuccess(() -> Component.literal("  Provider Registered: " + (providerRegistered ? "YES" : "NO"))
-            .withStyle(providerRegistered ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdFtbStatusProviderRegistered().replace("{value}", providerRegistered ? "YES" : "NO")), false);
 
-        // Compat active
         boolean compatActive = FTBQuestsCompat.isEnabled();
-        source.sendSuccess(() -> Component.literal("  Compat Active: " + (compatActive ? "YES" : "NO"))
-            .withStyle(compatActive ? ChatFormatting.GREEN : ChatFormatting.YELLOW), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdFtbStatusCompatActive().replace("{value}", compatActive ? "YES" : "NO")), false);
 
-        // Pending rechecks
         int pendingCount = FTBQuestsCompat.getPendingCount();
-        source.sendSuccess(() -> Component.literal("  Pending Rechecks: " + pendingCount)
-            .withStyle(pendingCount > 0 ? ChatFormatting.YELLOW : ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdFtbStatusPendingRechecks().replace("{value}", String.valueOf(pendingCount))), false);
 
-        // Recheck budget
         int budget = StageConfig.getFtbRecheckBudget();
-        source.sendSuccess(() -> Component.literal("  Recheck Budget: " + budget + "/tick")
-            .withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdFtbStatusRecheckBudget().replace("{value}", String.valueOf(budget))), false);
 
-        // Previous provider (for restore capability)
         boolean hasPrevious = FtbQuestsHooks.hasPreviousProvider();
-        source.sendSuccess(() -> Component.literal("  Previous Provider Stored: " + (hasPrevious ? "YES" : "NO"))
-            .withStyle(ChatFormatting.GRAY), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdFtbStatusPreviousProvider().replace("{value}", hasPrevious ? "YES" : "NO")), false);
 
-        // Player-specific info
         if (player != null) {
-            source.sendSuccess(() -> Component.literal("  --- Player: " + player.getName().getString() + " ---")
-                .withStyle(ChatFormatting.AQUA), false);
+            String pname = player.getName().getString();
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdFtbStatusPlayerHeader().replace("{player}", pname)), false);
 
-            // Stage count
             Set<StageId> stages = StageManager.getInstance().getStages(player);
-            source.sendSuccess(() -> Component.literal("  Player Stages: " + stages.size())
-                .withStyle(ChatFormatting.WHITE), false);
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdFtbStatusPlayerStages().replace("{value}", String.valueOf(stages.size()))), false);
 
-            // List stages
             if (!stages.isEmpty()) {
                 StringBuilder stageList = new StringBuilder();
                 for (StageId stage : stages) {
@@ -603,14 +629,13 @@ public class StageCommand {
                     stageList.append(stage.getPath());
                 }
                 final String list = stageList.toString();
-                source.sendSuccess(() -> Component.literal("    " + list)
-                    .withStyle(ChatFormatting.GRAY), false);
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdFtbStatusPlayerStageList().replace("{list}", list)), false);
             }
 
-            // Recheck in progress
             boolean recheckInProgress = FtbQuestsHooks.isRecheckInProgress(player.getUUID());
-            source.sendSuccess(() -> Component.literal("  Recheck In Progress: " + (recheckInProgress ? "YES" : "NO"))
-                .withStyle(recheckInProgress ? ChatFormatting.YELLOW : ChatFormatting.GRAY), false);
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdFtbStatusRecheckInProgress().replace("{value}", recheckInProgress ? "YES" : "NO")), false);
         }
 
         return 1;
