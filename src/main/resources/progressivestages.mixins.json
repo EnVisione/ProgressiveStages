@@ -6,7 +6,10 @@
   "mixins": [
     "CraftingMenuMixin",
     "AbstractContainerMenuMixin",
-    "ResultSlotMixin"
+    "ResultSlotMixin",
+    "EnchantmentMenuMixin",
+    "ServerPlayerMerchantMixin",
+    "AnvilMenuMixin"
   ],
   "client": [],
   "injectors": {

@@ -111,6 +111,16 @@ dependencies {
     // FTB Quests (optional) - from libs folder
     compileOnly files("libs/ftb-quests-neoforge-2101.1.21.jar")
 
+    // KubeJS (optional) - from libs folder — powers the [compat/kubejs] module so scripts
+    // can read/grant stages via `player.stages.add("stage_id")` etc.
+    compileOnly files("libs/kubejs-neoforge-2101.7.2-build.348.jar")
+
+    // Lootr (optional) - from libs folder — used only for type references in LootrCompat.
+    // Our loot gating is already covered by the Global Loot Modifier (runs on every LootTable
+    // roll including Lootr's per-player rolls). This dep is here so the docs can reference
+    // Lootr's tags (`tag:lootr:chests`) in the default template confidently.
+    compileOnly files("libs/lootr-neoforge-1.21.1-1.11.37.118.jar")
+
     // TOML parser for stage files
     implementation 'com.electronwill.night-config:toml:3.6.7'
 }

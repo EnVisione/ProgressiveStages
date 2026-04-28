@@ -62,30 +62,53 @@ public final class StageTagRegistry {
 
             Set<Item> items = stageItems.computeIfAbsent(stagePath, k -> ConcurrentHashMap.newKeySet());
 
-            // Add directly locked items
-            for (String itemIdStr : locks.getItems()) {
-                ResourceLocation itemId = ResourceLocation.tryParse(itemIdStr);
-                if (itemId != null) {
-                    Item item = BuiltInRegistries.ITEM.get(itemId);
-                    if (item != null && item != BuiltInRegistries.ITEM.get(BuiltInRegistries.ITEM.getDefaultKey())) {
-                        items.add(item);
-                        itemToStage.put(item, stageId);
-                    }
-                }
-            }
-
-            // Add items from item tags defined in the stage
-            for (String tagIdStr : locks.getItemTags()) {
-                String cleanTag = tagIdStr.startsWith("#") ? tagIdStr.substring(1) : tagIdStr;
-                ResourceLocation tagId = ResourceLocation.tryParse(cleanTag);
-                if (tagId != null) {
-                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagId);
-                    // Iterate all items and check if they're in this tag
-                    for (Item item : BuiltInRegistries.ITEM) {
-                        if (item.builtInRegistryHolder().is(tagKey)) {
+            // 2.0: walk the unified [items] locked list. Each PrefixEntry is one of
+            // ID, TAG, MOD, or NAME — we iterate every registered Item and ask the
+            // entry to match. This is the same resolution the LockRegistry does,
+            // kept local here so StageTagRegistry can map items → owning stage.
+            for (com.enviouse.progressivestages.common.lock.PrefixEntry entry : locks.items().locked()) {
+                switch (entry.kind()) {
+                    case ID: {
+                        if (entry.id() == null) break;
+                        Item item = BuiltInRegistries.ITEM.get(entry.id());
+                        if (item != null && BuiltInRegistries.ITEM.containsKey(entry.id())) {
                             items.add(item);
-                            itemToStage.putIfAbsent(item, stageId); // First stage wins
+                            itemToStage.putIfAbsent(item, stageId);
                         }
+                        break;
+                    }
+                    case TAG: {
+                        if (entry.id() == null) break;
+                        TagKey<Item> tagKey = TagKey.create(Registries.ITEM, entry.id());
+                        for (Item item : BuiltInRegistries.ITEM) {
+                            if (item.builtInRegistryHolder().is(tagKey)) {
+                                items.add(item);
+                                itemToStage.putIfAbsent(item, stageId);
+                            }
+                        }
+                        break;
+                    }
+                    case MOD: {
+                        String needle = entry.value();
+                        for (Item item : BuiltInRegistries.ITEM) {
+                            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+                            if (id != null && id.getNamespace().equalsIgnoreCase(needle)) {
+                                items.add(item);
+                                itemToStage.putIfAbsent(item, stageId);
+                            }
+                        }
+                        break;
+                    }
+                    case NAME: {
+                        String needle = entry.value();
+                        for (Item item : BuiltInRegistries.ITEM) {
+                            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+                            if (id != null && id.toString().toLowerCase().contains(needle)) {
+                                items.add(item);
+                                itemToStage.putIfAbsent(item, stageId);
+                            }
+                        }
+                        break;
                     }
                 }
             }

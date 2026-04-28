@@ -23,13 +23,20 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityMountEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
+import net.neoforged.neoforge.event.entity.player.BonemealEvent;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.level.ExplosionEvent;
+import net.neoforged.neoforge.event.level.block.CropGrowEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 
@@ -87,6 +94,9 @@ public class ServerEventHandler {
 
         // Initialize FTB Quests compatibility (soft dependency)
         FTBQuestsCompat.init();
+
+        // 2.0 soft-dep compat modules (Nature's Compass, Curios, Mekanism, automation report)
+        com.enviouse.progressivestages.compat.ModCompatRegistry.initializeAll();
     }
 
     @SubscribeEvent
@@ -198,6 +208,12 @@ public class ServerEventHandler {
             if (!ItemEnforcer.canUseItem(player, event.getItemStack())) {
                 event.setCanceled(true);
                 ItemEnforcer.notifyLockedWithCooldown(player, event.getItemStack().getItem());
+                return;
+            }
+            // Screen-lock for item-opened GUIs (backpacks, portable crafting, etc.).
+            if (!ScreenEnforcer.canOpenFromItem(player, event.getItemStack())) {
+                event.setCanceled(true);
+                ScreenEnforcer.notifyLockedItem(player, event.getItemStack());
             }
         }
     }
@@ -288,6 +304,18 @@ public class ServerEventHandler {
             }
         }
 
+        // ── Region / structure entry checks (runs at region_tick_frequency) ──
+        int regionFreq = StageConfig.getRegionTickFrequency();
+        Long lastRegion = lastRegionCheck.get(playerId);
+        if (lastRegion == null || currentTime - lastRegion >= regionFreq) {
+            lastRegionCheck.put(playerId, currentTime);
+            RegionEnforcer.checkPlayerEntry(player);
+            StructureEnforcer.checkPlayerEntry(player);
+        }
+
+        // ── Fluid submersion effects (every tick while in a locked fluid) ──
+        FluidEnforcer.applySubmersionEffects(player);
+
         // ── Inventory scanning ──
         int scanFrequency = StageConfig.getInventoryScanFrequency();
         if (scanFrequency <= 0) {
@@ -305,8 +333,20 @@ public class ServerEventHandler {
             } else if (StageConfig.isBlockItemHotbar()) {
                 InventoryScanner.scanAndMoveLockedItemsFromHotbar(player);
             }
+
+            // Strip locked enchantments from every item the player is carrying.
+            if (StageConfig.isBlockEnchants()) {
+                boolean anyStripped = false;
+                for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                    net.minecraft.world.item.ItemStack s = player.getInventory().getItem(i);
+                    if (EnchantEnforcer.stripLockedEnchants(player, s)) anyStripped = true;
+                }
+                if (anyStripped) player.containerMenu.broadcastChanges();
+            }
         }
     }
+
+    private static final Map<UUID, Long> lastRegionCheck = new ConcurrentHashMap<>();
 
     // ============ Block Placement Enforcement ============
 
@@ -318,6 +358,55 @@ public class ServerEventHandler {
             if (!BlockEnforcer.canPlaceBlock(player, block)) {
                 event.setCanceled(true);
                 BlockEnforcer.notifyPlacementLocked(player, block);
+                return;
+            }
+            // Crop planting
+            if (!CropEnforcer.canPlace(player, block)) {
+                event.setCanceled(true);
+                CropEnforcer.notifyLocked(player, block);
+                return;
+            }
+            // Region / structure block-place guard
+            net.minecraft.core.BlockPos pos = event.getPos();
+            if (!RegionEnforcer.canPlaceBlock(player, pos)) {
+                event.setCanceled(true);
+                return;
+            }
+            if (!StructureEnforcer.canPlaceBlock(player, pos)) {
+                event.setCanceled(true);
+            }
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getPlayer() instanceof ServerPlayer player) {
+            net.minecraft.core.BlockPos pos = event.getPos();
+
+            // Structure chest-locking: containers (chest / barrel / shulker / lootr / any
+            // block entity implementing Container) inside a locked structure can't be
+            // broken by players lacking the stage — same intent as the right-click gate,
+            // so loot can't be spilled by breaking the block.
+            if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+                if (StructureEnforcer.isContainerAt(sl, pos)) {
+                    var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, pos);
+                    if (entryStage.isPresent()
+                            && !(StageConfig.isAllowCreativeBypass() && player.isCreative())
+                            && !StageManager.getInstance().hasStage(player, entryStage.get())) {
+                        event.setCanceled(true);
+                        ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(),
+                            StageConfig.getMsgTypeLabelStructureContents());
+                        return;
+                    }
+                }
+            }
+
+            if (!RegionEnforcer.canBreakBlock(player, pos)) {
+                event.setCanceled(true);
+                return;
+            }
+            if (!StructureEnforcer.canBreakBlock(player, pos)) {
+                event.setCanceled(true);
             }
         }
     }
@@ -327,12 +416,45 @@ public class ServerEventHandler {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onBlockInteract(PlayerInteractEvent.RightClickBlock event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            Block block = event.getLevel().getBlockState(event.getPos()).getBlock();
+            net.minecraft.world.level.block.state.BlockState targetState = event.getLevel().getBlockState(event.getPos());
+            Block block = targetState.getBlock();
 
-            // Check if block interaction is locked
-            if (!BlockEnforcer.canInteractWithBlock(player, block)) {
+            // Screen lock — block opening locked GUIs (crafting tables, anvils, modded machines)
+            if (!ScreenEnforcer.canOpenScreen(player, block)) {
                 event.setCanceled(true);
-                BlockEnforcer.notifyInteractionLocked(player, block);
+                ScreenEnforcer.notifyLocked(player, block);
+                return;
+            }
+
+            // Bucket pickup of a locked fluid — empty bucket right-clicks a fluid source.
+            if (FluidEnforcer.isBucket(event.getItemStack())) {
+                if (!FluidEnforcer.canPickupFluid(player, event.getLevel(), event.getPos())) {
+                    event.setCanceled(true);
+                    FluidEnforcer.notifyPickupLocked(player, event.getLevel(), event.getPos());
+                    return;
+                }
+            }
+
+            // Structure chest-locking: if the target block sits inside a locked structure and
+            // the player lacks the gate stage, refuse the interaction entirely. This covers
+            // clicking a chest through a window / over a wall where the push-back tick hasn't
+            // fired. The guard runs for every block click inside a locked structure, not just
+            // containers — picking open a locked tomb's pressure plate is equally gated.
+            if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getPos());
+                if (entryStage.isPresent()
+                        && !(StageConfig.isAllowCreativeBypass() && player.isCreative())
+                        && !StageManager.getInstance().hasStage(player, entryStage.get())) {
+                    event.setCanceled(true);
+                    ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(), StageConfig.getMsgTypeLabelStructureContents());
+                    return;
+                }
+            }
+
+            // Check if block interaction is locked (state-aware: covers Visual Workbench replacements)
+            if (!BlockEnforcer.canInteractWithBlock(player, targetState)) {
+                event.setCanceled(true);
+                BlockEnforcer.notifyInteractionLocked(player, targetState);
                 return;
             }
 
@@ -406,6 +528,27 @@ public class ServerEventHandler {
      */
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onFinalizeSpawn(FinalizeSpawnEvent event) {
+        // 1. Try replacement first — a configured replacement takes precedence over a plain cancel.
+        if (MobReplacementEnforcer.tryReplace(event.getEntity(), event.getLevel(),
+                event.getX(), event.getY(), event.getZ(), event.getSpawnType())) {
+            event.setSpawnCancelled(true);
+            return;
+        }
+
+        // 2. Region-level spawn suppression
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+            if (RegionEnforcer.blocksMobSpawn(sl, event.getX(), event.getY(), event.getZ())) {
+                event.setSpawnCancelled(true);
+                return;
+            }
+            net.minecraft.core.BlockPos bp = net.minecraft.core.BlockPos.containing(event.getX(), event.getY(), event.getZ());
+            if (StructureEnforcer.blocksMobSpawn(sl, bp)) {
+                event.setSpawnCancelled(true);
+                return;
+            }
+        }
+
+        // 3. Plain stage-based cancel
         if (MobSpawnEnforcer.shouldCancelSpawn(event.getEntity(), event.getLevel(),
                 event.getX(), event.getY(), event.getZ())) {
             event.setSpawnCancelled(true);
@@ -418,9 +561,31 @@ public class ServerEventHandler {
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             var entityType = event.getTarget().getType();
+
+            // Structure chest-locking applied to entities too: lootr minecarts, item frames
+            // with loot, and other entity-based containers sitting inside a locked structure
+            // must refuse interaction for players lacking the stage.
+            if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getTarget().blockPosition());
+                if (entryStage.isPresent()
+                        && !(StageConfig.isAllowCreativeBypass() && player.isCreative())
+                        && !StageManager.getInstance().hasStage(player, entryStage.get())) {
+                    event.setCanceled(true);
+                    ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(),
+                        StageConfig.getMsgTypeLabelStructureContents());
+                    return;
+                }
+            }
+
             if (!InteractionEnforcer.canInteractWithEntity(player, event.getItemStack(), entityType)) {
                 event.setCanceled(true);
                 InteractionEnforcer.notifyEntityInteractionLocked(player, event.getItemStack(), entityType);
+                return;
+            }
+            // Pet taming/breeding gate
+            if (!PetEnforcer.canInteract(player, entityType, event.getTarget())) {
+                event.setCanceled(true);
+                PetEnforcer.notifyLocked(player, entityType, event.getTarget());
             }
         }
     }
@@ -446,6 +611,103 @@ public class ServerEventHandler {
         }
     }
 
+    // ============ 2.0: Enchantment Enforcement (anvil) ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onAnvilUpdate(AnvilUpdateEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer player)) return;
+        // If either input — the target item or the enchantment source — already carries
+        // a locked enchantment, refuse the result so the player can't slip the enchant
+        // onto a different item via the anvil.
+        if (EnchantEnforcer.anyEnchantLocked(player, event.getLeft())
+                || EnchantEnforcer.anyEnchantLocked(player, event.getRight())) {
+            event.setCanceled(true);
+        }
+    }
+
+    // ============ 2.0: Crop Enforcement ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onCropGrow(CropGrowEvent.Pre event) {
+        if (!(event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl)) return;
+        net.minecraft.world.level.block.Block block = event.getState().getBlock();
+        net.minecraft.core.BlockPos pos = event.getPos();
+        if (CropEnforcer.shouldCancelGrowth(sl, block, pos.getX(), pos.getY(), pos.getZ())) {
+            event.setResult(CropGrowEvent.Pre.Result.DO_NOT_GROW);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onBonemeal(BonemealEvent event) {
+        net.minecraft.world.entity.player.Player p = event.getPlayer();
+        if (!(p instanceof ServerPlayer player)) return;
+        net.minecraft.world.level.block.Block block = event.getState().getBlock();
+        if (!CropEnforcer.canBonemeal(player, block)) {
+            event.setCanceled(true);
+            CropEnforcer.notifyLocked(player, block);
+        }
+    }
+
+    // ============ 2.0: Loot Filtering ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onLivingDrops(LivingDropsEvent event) {
+        if (!(event.getEntity().level() instanceof net.minecraft.server.level.ServerLevel sl)) return;
+        net.minecraft.world.entity.player.Player killer = null;
+        if (event.getSource().getEntity() instanceof net.minecraft.world.entity.player.Player p) killer = p;
+        LootEnforcer.filterLivingDrops(event.getDrops(), sl,
+            event.getEntity().getX(), event.getEntity().getY(), event.getEntity().getZ(), killer);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onBlockDrops(BlockDropsEvent event) {
+        net.minecraft.server.level.ServerLevel sl = event.getLevel();
+        net.minecraft.world.entity.player.Player breaker = null;
+        if (event.getBreaker() instanceof net.minecraft.world.entity.player.Player p) breaker = p;
+        net.minecraft.core.BlockPos pos = event.getPos();
+        // Loot-category filter (applies to any registered block that drops a locked item).
+        LootEnforcer.filterBlockDrops(event.getDrops(), sl,
+            pos.getX(), pos.getY(), pos.getZ(), breaker);
+        // Crop-harvest filter — keep only seeds when the broken block is a locked crop.
+        LootEnforcer.filterCropHarvest(event.getDrops(), sl, event.getState().getBlock(),
+            pos.getX(), pos.getY(), pos.getZ(), breaker);
+    }
+
+    // ============ 2.0: Fluid Enforcement ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onFluidPlace(BlockEvent.FluidPlaceBlockEvent event) {
+        if (FluidEnforcer.shouldCancelFluidPlace(event.getLevel(), event.getPos(), event.getNewState())) {
+            // Cancelling preserves the original block (prevents the locked fluid from replacing it).
+            event.setCanceled(true);
+        }
+    }
+
+    // ============ 2.0: Explosion Region/Structure Guards ============
+
+    @SubscribeEvent
+    public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
+        if (!(event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl)) return;
+        RegionEnforcer.filterExplosionBlocks(sl, event.getAffectedBlocks());
+        StructureEnforcer.filterExplosionBlocks(sl, event.getAffectedBlocks());
+    }
+
+    // ============ 2.0: Pet Riding ============
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onMount(EntityMountEvent event) {
+        // Only gate mounts (not dismounts) by players onto locked pet types.
+        if (!event.isMounting()) return;
+        if (!(event.getEntityMounting() instanceof ServerPlayer player)) return;
+        if (event.getEntityBeingMounted() == null) return;
+        if (!PetEnforcer.canInteract(player, event.getEntityBeingMounted().getType(),
+                event.getEntityBeingMounted())) {
+            event.setCanceled(true);
+            PetEnforcer.notifyLocked(player, event.getEntityBeingMounted().getType(),
+                event.getEntityBeingMounted());
+        }
+    }
+
     // ============ Cleanup ============
 
     @SubscribeEvent
@@ -453,6 +715,7 @@ public class ServerEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             lastScanTime.remove(player.getUUID());
             lastDimensionCheck.remove(player.getUUID());
+            lastRegionCheck.remove(player.getUUID());
             ItemEnforcer.clearCooldowns(player.getUUID());
             DimensionEnforcer.cleanupPlayer(player.getUUID());
         }

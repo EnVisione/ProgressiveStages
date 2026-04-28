@@ -3,7 +3,6 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
-import com.enviouse.progressivestages.common.lock.NameMatcher;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -20,7 +19,16 @@ import java.util.Optional;
 
 /**
  * Handles interaction locking (item-on-block, block right-click, item-on-entity, etc.)
- * Useful for Create mod style interactions
+ * Useful for Create mod style interactions.
+ *
+ * <p>v2.0 note on multi-stage: interactions are stored in {@code LockRegistry.interactionLocks}
+ * as a {@code Map<String, InteractionLockEntry>} keyed by {@code (type, heldItem, target)}.
+ * The map's {@code put} call overwrites prior entries with the same key, so each interaction
+ * key has exactly ONE owning stage by data-structure design. Multi-stage gating per
+ * interaction would require switching to a list-valued map. Single-stage behavior is
+ * intentional here and documented in StageFileParser. If a pack needs multi-stage gating
+ * on the same interaction, they should split the held-item or target into a tag and
+ * gate on the surrounding [items] / [blocks] / [entities] categories instead.
  */
 public class InteractionEnforcer {
 
@@ -130,13 +138,13 @@ public class InteractionEnforcer {
     public static void notifyLocked(ServerPlayer player, ItemStack heldItem, Block targetBlock) {
         Optional<StageId> required = getRequiredStage(heldItem, targetBlock);
         if (required.isPresent()) {
-            ItemEnforcer.notifyLocked(player, required.get(), "This interaction");
+            ItemEnforcer.notifyLocked(player, required.get(), com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
             return;
         }
         // Fall back to tag-pattern search for notification
         for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(TYPE_ITEM_ON_BLOCK)) {
             if (itemMatches(heldItem, entry.heldItem) && blockMatches(targetBlock, entry.targetBlock)) {
-                ItemEnforcer.notifyLocked(player, entry.requiredStage, "This interaction");
+                ItemEnforcer.notifyLocked(player, entry.requiredStage, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
                 return;
             }
         }
@@ -241,13 +249,13 @@ public class InteractionEnforcer {
             TYPE_ITEM_ON_ENTITY, heldItemId, entityTypeId
         );
         if (required.isPresent()) {
-            ItemEnforcer.notifyLocked(player, required.get(), "This interaction");
+            ItemEnforcer.notifyLocked(player, required.get(), com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
             return;
         }
         // Tag-pattern fallback
         for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(TYPE_ITEM_ON_ENTITY)) {
             if (itemMatches(heldItem, entry.heldItem) && entityTypeMatches(entityType, entry.targetBlock)) {
-                ItemEnforcer.notifyLocked(player, entry.requiredStage, "This interaction");
+                ItemEnforcer.notifyLocked(player, entry.requiredStage, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
                 return;
             }
         }
