@@ -124,6 +124,7 @@ public class ServerEventHandler {
             // Send initial creative bypass state
             if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
                 NetworkHandler.sendCreativeBypass(player, true);
+                CreativeBypassNotifier.sendPopupIfEligible(player);
             }
         }
     }
@@ -141,8 +142,9 @@ public class ServerEventHandler {
             GameType oldMode = event.getCurrentGameMode();
 
             if (newMode == GameType.CREATIVE && oldMode != GameType.CREATIVE) {
-                // Entering creative mode - enable bypass on client
+                // Entering creative mode - enable bypass on client + warn the player
                 NetworkHandler.sendCreativeBypass(player, true);
+                CreativeBypassNotifier.sendPopupIfEligible(player);
             } else if (newMode != GameType.CREATIVE && oldMode == GameType.CREATIVE) {
                 // Leaving creative mode - disable bypass on client
                 NetworkHandler.sendCreativeBypass(player, false);

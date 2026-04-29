@@ -82,17 +82,21 @@ public class StageCommand {
         );
 
         // /progressivestages subcommands
+        // Most subcommands require permission level 3 (admin); no-creative-popup is open
+        // to every player since it's a per-player preference toggle.
         dispatcher.register(Commands.literal("progressivestages")
-            .requires(source -> source.hasPermission(3))
 
             .then(Commands.literal("reload")
+                .requires(source -> source.hasPermission(3))
                 .executes(StageCommand::reloadStages))
 
             .then(Commands.literal("validate")
+                .requires(source -> source.hasPermission(3))
                 .executes(StageCommand::validateStages))
 
             // /progressivestages ftb status [player]
             .then(Commands.literal("ftb")
+                .requires(source -> source.hasPermission(3))
                 .then(Commands.literal("status")
                     .executes(ctx -> ftbStatus(ctx, null))
                     .then(Commands.argument("player", EntityArgument.player())
@@ -100,6 +104,7 @@ public class StageCommand {
 
             // /progressivestages trigger reset <player> <type> <key>
             .then(Commands.literal("trigger")
+                .requires(source -> source.hasPermission(3))
                 .then(Commands.literal("reset")
                     .then(Commands.argument("player", EntityArgument.player())
                         .then(Commands.argument("type", StringArgumentType.word())
@@ -110,7 +115,22 @@ public class StageCommand {
                             })
                             .then(Commands.argument("key", StringArgumentType.greedyString())
                                 .executes(StageCommand::resetTrigger))))))
+
+            // /progressivestages no-creative-popup — toggle the creative-mode bypass
+            // warning for the calling player. Open to everyone (per-player preference).
+            .then(Commands.literal("no-creative-popup")
+                .executes(StageCommand::toggleCreativePopup))
         );
+    }
+
+    private static int toggleCreativePopup(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        boolean nowHidden = com.enviouse.progressivestages.server.CreativeBypassNotifier.toggleHidden(player);
+        String template = nowHidden
+            ? StageConfig.getMsgCmdCreativePopupDisabled()
+            : StageConfig.getMsgCmdCreativePopupEnabled();
+        context.getSource().sendSystemMessage(TextUtil.parseColorCodes(template));
+        return 1;
     }
 
     /**
