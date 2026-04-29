@@ -622,6 +622,39 @@ public class StageConfig {
         .comment("Type label used for blocked pet commanding (sit/stand/follow) in chat messages.")
         .define("messages.type_label_pet_commanding", "Commanding this pet");
 
+    // ============ Creative-bypass popup ============
+
+    private static final ModConfigSpec.BooleanValue SHOW_CREATIVE_BYPASS_POPUP = BUILDER
+        .comment("Send a chat warning to a player when they enter creative mode that creative",
+                 "bypasses most ProgressiveStages locks. Only the affected player sees it.",
+                 "Skipped automatically if allow_creative_bypass = false (no point warning",
+                 "about a feature that's off). Players can opt out per-player via the command",
+                 "/progressivestages no-creative-popup.")
+        .define("enforcement.show_creative_bypass_popup", true);
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CREATIVE_BYPASS_POPUP_LINE1 = BUILDER
+        .comment("Line 1 of the creative-mode bypass warning. Supports & color codes.")
+        .define("messages.creative_bypass_popup_line1",
+            "&c⚠ You are in creative mode, which bypasses most ProgressiveStages locks.");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CREATIVE_BYPASS_POPUP_LINE2 = BUILDER
+        .comment("Line 2 — how to hide the popup per-player. Supports & color codes.")
+        .define("messages.creative_bypass_popup_line2",
+            "&7To hide this notice, run &f/progressivestages no-creative-popup&7 (toggles on/off).");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CREATIVE_BYPASS_POPUP_LINE3 = BUILDER
+        .comment("Line 3 — how to disable creative bypass entirely. Supports & color codes.")
+        .define("messages.creative_bypass_popup_line3",
+            "&7To disable creative bypass entirely, set &fenforcement.allow_creative_bypass = false&7 in the config.");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_CREATIVE_POPUP_ENABLED = BUILDER
+        .comment("Shown when a player toggles the creative-bypass popup BACK ON. Supports & color codes.")
+        .define("messages.cmd_creative_popup_enabled", "&aCreative-bypass popup re-enabled.");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_CMD_CREATIVE_POPUP_DISABLED = BUILDER
+        .comment("Shown when a player toggles the creative-bypass popup OFF. Supports & color codes.")
+        .define("messages.cmd_creative_popup_disabled", "&7Creative-bypass popup hidden.");
+
     // ============ Integration Settings ============
 
     private static final ModConfigSpec.BooleanValue FTB_TEAMS_INTEGRATION = BUILDER
@@ -793,6 +826,13 @@ public class StageConfig {
     private static String msgTypeLabelPetTaming;
     private static String msgTypeLabelPetBreeding;
     private static String msgTypeLabelPetCommanding;
+    // Creative-bypass popup
+    private static boolean showCreativeBypassPopup;
+    private static String msgCreativeBypassPopupLine1;
+    private static String msgCreativeBypassPopupLine2;
+    private static String msgCreativeBypassPopupLine3;
+    private static String msgCmdCreativePopupEnabled;
+    private static String msgCmdCreativePopupDisabled;
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
@@ -938,6 +978,14 @@ public class StageConfig {
         msgTypeLabelPetTaming = MSG_TYPE_LABEL_PET_TAMING.get();
         msgTypeLabelPetBreeding = MSG_TYPE_LABEL_PET_BREEDING.get();
         msgTypeLabelPetCommanding = MSG_TYPE_LABEL_PET_COMMANDING.get();
+
+        // Creative-bypass popup
+        showCreativeBypassPopup = SHOW_CREATIVE_BYPASS_POPUP.get();
+        msgCreativeBypassPopupLine1 = MSG_CREATIVE_BYPASS_POPUP_LINE1.get();
+        msgCreativeBypassPopupLine2 = MSG_CREATIVE_BYPASS_POPUP_LINE2.get();
+        msgCreativeBypassPopupLine3 = MSG_CREATIVE_BYPASS_POPUP_LINE3.get();
+        msgCmdCreativePopupEnabled = MSG_CMD_CREATIVE_POPUP_ENABLED.get();
+        msgCmdCreativePopupDisabled = MSG_CMD_CREATIVE_POPUP_DISABLED.get();
 
         // Parse highlight color
         try {
@@ -1114,4 +1162,12 @@ public class StageConfig {
     public static String getMsgTypeLabelPetTaming()       { return msgTypeLabelPetTaming != null ? msgTypeLabelPetTaming : "Taming this pet"; }
     public static String getMsgTypeLabelPetBreeding()     { return msgTypeLabelPetBreeding != null ? msgTypeLabelPetBreeding : "Breeding this pet"; }
     public static String getMsgTypeLabelPetCommanding()   { return msgTypeLabelPetCommanding != null ? msgTypeLabelPetCommanding : "Commanding this pet"; }
+
+    // Creative-bypass popup
+    public static boolean isShowCreativeBypassPopup()      { return showCreativeBypassPopup; }
+    public static String getMsgCreativeBypassPopupLine1()  { return msgCreativeBypassPopupLine1 != null ? msgCreativeBypassPopupLine1 : "&c⚠ You are in creative mode, which bypasses most ProgressiveStages locks."; }
+    public static String getMsgCreativeBypassPopupLine2()  { return msgCreativeBypassPopupLine2 != null ? msgCreativeBypassPopupLine2 : "&7To hide this notice, run &f/progressivestages no-creative-popup&7 (toggles on/off)."; }
+    public static String getMsgCreativeBypassPopupLine3()  { return msgCreativeBypassPopupLine3 != null ? msgCreativeBypassPopupLine3 : "&7To disable creative bypass entirely, set &fenforcement.allow_creative_bypass = false&7 in the config."; }
+    public static String getMsgCmdCreativePopupEnabled()   { return msgCmdCreativePopupEnabled != null ? msgCmdCreativePopupEnabled : "&aCreative-bypass popup re-enabled."; }
+    public static String getMsgCmdCreativePopupDisabled()  { return msgCmdCreativePopupDisabled != null ? msgCmdCreativePopupDisabled : "&7Creative-bypass popup hidden."; }
 }
