@@ -119,9 +119,10 @@ runs/
 !gradle-wrapper.jar
 /implementation/
 
-# Claude Code session-local artifacts (analysis reports, settings, transcripts).
-# Never push: see CLAUDE.md for the contributor-attribution rule.
+# Claude Code session-local artifacts (analysis reports, settings, transcripts)
+# and project-level Claude instructions. Never push.
 .claude/
+CLAUDE.md
 
 # NeoForge build noise that sometimes lands at repo root
 /net/
