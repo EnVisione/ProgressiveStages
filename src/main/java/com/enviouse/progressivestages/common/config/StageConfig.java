@@ -83,9 +83,14 @@ public class StageConfig {
         .define("enforcement.block_item_inventory", true);
 
     private static final ModConfigSpec.IntValue INVENTORY_SCAN_FREQUENCY = BUILDER
-        .comment("Frequency to scan inventory for locked items (in ticks, 20 ticks = 1 second)",
-                 "Set to 0 to disable periodic scanning")
-        .defineInRange("enforcement.inventory_scan_frequency", 20, 0, 200);
+        .comment("Frequency (in ticks; 20 = 1 second) to scan inventories and drop locked items.",
+                 "Default 0 = disabled. Pickup blocking still prevents NEW locked items from",
+                 "entering inventories. Periodic scanning is only useful when stages get",
+                 "revoked mid-game and you want stale items auto-dropped — but it can also",
+                 "fight with quest/reward mods that re-grant the same item every tick, which",
+                 "produces a 'trail of dropped items' effect at the player's feet.",
+                 "If you want auto-drop, try a low frequency like 200 (10s) first.")
+        .defineInRange("enforcement.inventory_scan_frequency", 0, 0, 200);
 
     private static final ModConfigSpec.BooleanValue BLOCK_CRAFTING = BUILDER
         .comment("Block crafting locked recipes")
