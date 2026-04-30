@@ -1,10 +1,5 @@
 package com.enviouse.progressivestages.compat;
 
-import com.enviouse.progressivestages.compat.curios.CuriosCompat;
-import com.enviouse.progressivestages.compat.kubejs.KubeJSStagesCompat;
-import com.enviouse.progressivestages.compat.lootr.LootrCompat;
-import com.enviouse.progressivestages.compat.mekanism.MekanismCompat;
-import com.enviouse.progressivestages.compat.naturescompass.NaturesCompassCompat;
 import com.mojang.logging.LogUtils;
 import net.neoforged.fml.ModList;
 import org.slf4j.Logger;
@@ -14,10 +9,11 @@ import org.slf4j.Logger;
  * {@link com.enviouse.progressivestages.server.ServerEventHandler#onServerStarting}
  * after the stage file loader is up, so the compat modules can resolve stage IDs.
  *
- * <p>Each module is a no-op when its host mod isn't present — no hard dependency,
- * no class-loading traps. Modules use reflection-free {@code ModList.isLoaded}
- * gates; if they're active and the host mod's API shifts between versions, the
- * module catches {@link Throwable} and logs rather than crashing the server.
+ * <p>Compat classes are loaded reflectively by FQN <em>after</em> the {@code ModList.isLoaded}
+ * gate passes. Direct symbolic references (e.g. method references like {@code Foo::init})
+ * would force the JVM to verify the compat class's imports at the call site, which fails
+ * with {@code NoClassDefFoundError} when the host mod's classes aren't on the classpath.
+ * Reflection defers classloading until after we've confirmed the mod is present.
  */
 public final class ModCompatRegistry {
 
@@ -31,23 +27,23 @@ public final class ModCompatRegistry {
         if (initialized) return;
         initialized = true;
 
-        tryLoad("naturescompass", NaturesCompassCompat::init);
-        tryLoad("curios",         CuriosCompat::init);
-        tryLoad("mekanism",       MekanismCompat::init);
-        tryLoad("kubejs",         KubeJSStagesCompat::init);
-        tryLoad("lootr",          LootrCompat::init);
+        tryLoad("naturescompass", "com.enviouse.progressivestages.compat.naturescompass.NaturesCompassCompat");
+        tryLoad("curios",         "com.enviouse.progressivestages.compat.curios.CuriosCompat");
+        tryLoad("mekanism",       "com.enviouse.progressivestages.compat.mekanism.MekanismCompat");
+        tryLoad("kubejs",         "com.enviouse.progressivestages.compat.kubejs.KubeJSStagesCompat");
+        tryLoad("lootr",          "com.enviouse.progressivestages.compat.lootr.LootrCompat");
         // Create + Botany Pots need no additional hook — their harvest paths fire vanilla
         // BlockDropsEvent / LivingDropsEvent, which our LootEnforcer + GLM already gate.
         AutomationCompatNotes.logCoverageReport();
     }
 
-    private static void tryLoad(String modId, Runnable loader) {
+    private static void tryLoad(String modId, String compatFqn) {
         if (!ModList.get().isLoaded(modId)) {
             LOGGER.debug("[ProgressiveStages] mod '{}' not present, skipping compat module", modId);
             return;
         }
         try {
-            loader.run();
+            Class.forName(compatFqn).getMethod("init").invoke(null);
             LOGGER.info("[ProgressiveStages] Loaded compat module for '{}'", modId);
         } catch (Throwable t) {
             LOGGER.warn("[ProgressiveStages] Compat module for '{}' failed to initialize — continuing without it: {}",
