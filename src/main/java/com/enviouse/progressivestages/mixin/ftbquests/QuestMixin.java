@@ -54,11 +54,18 @@ public abstract class QuestMixin implements RequiredStageHolder {
      */
     @Inject(method = "isVisible", at = @At("HEAD"), cancellable = true)
     private void progressivestages$checkStageVisibility(TeamData data, CallbackInfoReturnable<Boolean> cir) {
-        if (progressivestages$requiredStage != null && !progressivestages$requiredStage.isEmpty() && !progressivestages$requiredStage.isBlank()) {
-            // Check if player has the required stage (uses client cache on client, server check on server)
-            if (!StageRequirementHelper.hasStageClient(progressivestages$requiredStage)) {
-                cir.setReturnValue(false);
-            }
+        if (progressivestages$requiredStage == null || progressivestages$requiredStage.isEmpty() || progressivestages$requiredStage.isBlank()) {
+            return;
+        }
+        // Dispatch on dist: hasStageClient touches ClientStageCache which transitively
+        // references net.minecraft.client.Minecraft / LocalPlayer — classloading those
+        // on a dedicated server crashes (RuntimeDistCleaner). On dedicated server use
+        // the server-side resolver instead.
+        boolean met = net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT
+            ? StageRequirementHelper.hasStageClient(progressivestages$requiredStage)
+            : StageRequirementHelper.hasStageForServerLogic(progressivestages$requiredStage);
+        if (!met) {
+            cir.setReturnValue(false);
         }
     }
 

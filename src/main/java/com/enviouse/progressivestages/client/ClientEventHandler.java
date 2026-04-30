@@ -105,7 +105,7 @@ public class ClientEventHandler {
 
         // Required stage (supports & color codes). Hide stage name from non-ops if configured.
         String stageRequiredText;
-        if (com.enviouse.progressivestages.common.util.StageDisclosure.mayShowRestrictingStageNameClient()) {
+        if (com.enviouse.progressivestages.client.util.ClientStageDisclosure.mayShowRestrictingStageName()) {
             stageRequiredText = StageConfig.getMsgTooltipStageRequired().replace("{stage}", stageDisplayName);
         } else {
             stageRequiredText = StageConfig.getMsgTooltipStageRequiredGeneric();
