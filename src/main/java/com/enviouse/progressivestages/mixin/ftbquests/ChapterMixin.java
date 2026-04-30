@@ -54,11 +54,16 @@ public abstract class ChapterMixin implements RequiredStageHolder {
      */
     @Inject(method = "isVisible", at = @At("HEAD"), cancellable = true)
     private void progressivestages$checkStageVisibility(TeamData data, CallbackInfoReturnable<Boolean> cir) {
-        if (progressivestages$requiredStage != null && !progressivestages$requiredStage.isEmpty() && !progressivestages$requiredStage.isBlank()) {
-            // Check if player has the required stage
-            if (!StageRequirementHelper.hasStageClient(progressivestages$requiredStage)) {
-                cir.setReturnValue(false);
-            }
+        if (progressivestages$requiredStage == null || progressivestages$requiredStage.isEmpty() || progressivestages$requiredStage.isBlank()) {
+            return;
+        }
+        // See QuestMixin for the dist-dispatch rationale (avoids classloading
+        // Minecraft / LocalPlayer on a dedicated server).
+        boolean met = net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT
+            ? StageRequirementHelper.hasStageClient(progressivestages$requiredStage)
+            : StageRequirementHelper.hasStageForServerLogic(progressivestages$requiredStage);
+        if (!met) {
+            cir.setReturnValue(false);
         }
     }
 
