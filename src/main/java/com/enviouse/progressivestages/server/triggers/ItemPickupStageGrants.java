@@ -87,6 +87,11 @@ public class ItemPickupStageGrants {
         return ITEM_STAGES.get(itemId);
     }
 
+    /** Read-only view of all item -> stage mappings. Used by /stage progress. */
+    public static Map<ResourceLocation, StageId> getAllMappings() {
+        return java.util.Collections.unmodifiableMap(ITEM_STAGES);
+    }
+
     /**
      * Load default mappings (can be overridden by config).
      */
