@@ -74,6 +74,7 @@ public class ServerEventHandler {
         NeoForge.EVENT_BUS.register(ItemPickupStageGrants.class);
         NeoForge.EVENT_BUS.register(DimensionStageGrants.class);
         NeoForge.EVENT_BUS.register(BossKillStageGrants.class);
+        NeoForge.EVENT_BUS.register(MultiTriggerManager.class);
 
         // Initialize FTB Teams integration (soft dependency)
         // Uses reflection to avoid loading FTBTeamsIntegration class (which imports FTB Teams API)
