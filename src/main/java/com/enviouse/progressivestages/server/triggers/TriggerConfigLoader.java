@@ -2,39 +2,47 @@ package com.enviouse.progressivestages.server.triggers;
 
 import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import com.enviouse.progressivestages.common.api.ProgressiveStagesAPI;
+import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Loads trigger mappings from TOML configuration files.
+ * Loads trigger mappings from {@code config/ProgressiveStages/triggers.toml}.
  *
- * <p>Trigger config file: config/ProgressiveStages/triggers.toml
+ * <p>The file contains five sections:
  *
- * <p>Format:
  * <pre>
- * [advancements]
- * "minecraft:story/mine_stone" = "stone_age"
- * "minecraft:story/smelt_iron" = "iron_age"
- *
- * [items]
- * "minecraft:diamond" = "diamond_age"
- * "minecraft:iron_ingot" = "iron_age"
- *
- * [dimensions]
- * "minecraft:the_nether" = "nether_explorer"
- * "minecraft:the_end" = "end_explorer"
- *
- * [bosses]
- * "minecraft:ender_dragon" = "dragon_slayer"
- * "minecraft:wither" = "wither_slayer"
+ * [advancements]               # one-to-one: advancement -> stage
+ * [items]                      # one-to-one: item pickup -> stage
+ * [dimensions]                 # one-to-one: first dimension entry -> stage
+ * [bosses]                     # one-to-one: boss kill -> stage
+ * [[multi]] / [[multi.all_of]] # many-to-one: all (or any) sub-triggers -> stage
  * </pre>
+ *
+ * <p>The first four are simple {@code "key" = "stage"} maps registered into the
+ * matching {@code *StageGrants} handler. The fifth — {@code [[multi]]} — is a
+ * table-array of MULTI-trigger requirements, each one specifying a stage plus a
+ * list of sub-triggers that must ALL fire (or ANY fire) before the stage is
+ * granted. Each sub-trigger uses a prefix to pick its surface:
+ *
+ * <ul>
+ *   <li>{@code item:minecraft:diamond}</li>
+ *   <li>{@code advancement:minecraft:story/mine_iron}</li>
+ *   <li>{@code dimension:minecraft:the_nether}</li>
+ *   <li>{@code boss:minecraft:wither}</li>
+ * </ul>
  */
 public class TriggerConfigLoader {
 
@@ -58,48 +66,45 @@ public class TriggerConfigLoader {
         ItemPickupStageGrants.clearMappings();
         DimensionStageGrants.clearMappings();
         BossKillStageGrants.clearMappings();
+        MultiTriggerManager.clear();
 
         // Load the file using NightConfig
         try (CommentedFileConfig config = CommentedFileConfig.builder(triggersFile).build()) {
             config.load();
 
-            // Load advancement triggers
             if (config.contains("advancements")) {
-                Object advObj = config.get("advancements");
-                Map<String, Object> advancements = convertToMap(advObj);
+                Map<String, Object> advancements = convertToMap(config.get("advancements"));
                 if (advancements != null) {
                     loadMappings(advancements, AdvancementStageGrants::registerMapping, "advancement");
                 }
             }
 
-            // Load item pickup triggers
             if (config.contains("items")) {
-                Object itemsObj = config.get("items");
-                Map<String, Object> items = convertToMap(itemsObj);
+                Map<String, Object> items = convertToMap(config.get("items"));
                 if (items != null) {
                     loadMappings(items, ItemPickupStageGrants::registerMapping, "item");
                 }
             }
 
-            // Load dimension triggers
             if (config.contains("dimensions")) {
-                Object dimObj = config.get("dimensions");
-                Map<String, Object> dimensions = convertToMap(dimObj);
+                Map<String, Object> dimensions = convertToMap(config.get("dimensions"));
                 if (dimensions != null) {
                     loadMappings(dimensions, DimensionStageGrants::registerMapping, "dimension");
                 }
             }
 
-            // Load boss kill triggers
             if (config.contains("bosses")) {
-                Object bossObj = config.get("bosses");
-                Map<String, Object> bosses = convertToMap(bossObj);
+                Map<String, Object> bosses = convertToMap(config.get("bosses"));
                 if (bosses != null) {
                     loadMappings(bosses, BossKillStageGrants::registerMapping, "boss");
                 }
             }
 
-            LOGGER.info("[ProgressiveStages] Loaded trigger config from {}", triggersFile);
+            // 2.0: multi-trigger requirements
+            loadMultiRequirements(config);
+
+            LOGGER.info("[ProgressiveStages] Loaded trigger config from {} ({} multi-requirement(s))",
+                triggersFile, MultiTriggerManager.getAll().size());
 
         } catch (Exception e) {
             LOGGER.error("[ProgressiveStages] Failed to load trigger config from {}", triggersFile, e);
@@ -131,7 +136,6 @@ public class TriggerConfigLoader {
     }
 
     private static void loadMappings(Map<String, Object> entries, MappingRegistrar registrar, String type) {
-        // Handle null or empty maps gracefully
         if (entries == null || entries.isEmpty()) {
             LOGGER.debug("[ProgressiveStages] No {} triggers defined (section empty or null)", type);
             return;
@@ -145,22 +149,16 @@ public class TriggerConfigLoader {
             Object value = entry.getValue();
 
             if (value instanceof String stageIdStr) {
-                // Normalize the stage ID (handles case differences, whitespace, etc.)
-                com.enviouse.progressivestages.common.api.StageId stageId =
-                    com.enviouse.progressivestages.common.api.StageId.parse(stageIdStr);
-
-                // Use the normalized string representation for registration
+                StageId stageId = StageId.parse(stageIdStr);
                 String normalizedStageId = stageId.toString();
 
-                if (!com.enviouse.progressivestages.common.api.ProgressiveStagesAPI.stageExists(stageId)) {
+                if (!ProgressiveStagesAPI.stageExists(stageId)) {
                     LOGGER.warn("[ProgressiveStages] {} trigger '{}' targets non-existent stage '{}' (normalized: '{}') - trigger will not work",
                         type, key, stageIdStr, normalizedStageId);
                     invalid++;
-                    // Still register it in case the stage is added later
                 }
 
                 try {
-                    // Register with normalized stage ID to ensure consistency
                     registrar.register(key, normalizedStageId);
                     count++;
                 } catch (Exception e) {
@@ -179,83 +177,147 @@ public class TriggerConfigLoader {
         LOGGER.debug("[ProgressiveStages] Loaded {} {} trigger mappings", count, type);
     }
 
+    // -------------------- [[multi]] requirements --------------------
+
+    /**
+     * Parse the {@code [[multi]]} table-array. Each entry needs a {@code stage} field
+     * plus at least one non-empty {@code all_of}/{@code any_of} list. The optional
+     * {@code id} field stabilizes the persistence key across edits — without it, the
+     * id is auto-derived from a hash of (stage + mode + sorted sub-keys).
+     */
+    @SuppressWarnings("unchecked")
+    private static void loadMultiRequirements(Config config) {
+        Object raw = config.get("multi");
+        if (raw == null) return;
+        if (!(raw instanceof List<?> list)) {
+            LOGGER.warn("[ProgressiveStages] [[multi]] section is not a table-array — expected [[multi]] entries.");
+            return;
+        }
+
+        int index = 0;
+        for (Object obj : list) {
+            if (!(obj instanceof Config entry)) {
+                LOGGER.warn("[ProgressiveStages] [[multi]] entry #{} is not a table — skipped.", index);
+                index++;
+                continue;
+            }
+
+            String stageRaw = entry.get("stage");
+            if (stageRaw == null || stageRaw.isEmpty()) {
+                LOGGER.warn("[ProgressiveStages] [[multi]] entry #{} is missing 'stage' — skipped.", index);
+                index++;
+                continue;
+            }
+            StageId stageId;
+            try {
+                stageId = StageId.parse(stageRaw);
+            } catch (Exception e) {
+                LOGGER.warn("[ProgressiveStages] [[multi]] entry #{} has invalid stage '{}' — skipped.", index, stageRaw);
+                index++;
+                continue;
+            }
+
+            // Mode + sub-triggers. all_of takes precedence; any_of fires on first match.
+            List<String> allOfRaw = stringList(entry, "all_of");
+            List<String> anyOfRaw = stringList(entry, "any_of");
+            MultiTrigger.Mode mode;
+            List<String> subRaw;
+            if (!allOfRaw.isEmpty()) {
+                mode = MultiTrigger.Mode.ALL_OF;
+                subRaw = allOfRaw;
+            } else if (!anyOfRaw.isEmpty()) {
+                mode = MultiTrigger.Mode.ANY_OF;
+                subRaw = anyOfRaw;
+            } else {
+                LOGGER.warn("[ProgressiveStages] [[multi]] entry #{} (stage='{}') has no all_of/any_of list — skipped.",
+                    index, stageRaw);
+                index++;
+                continue;
+            }
+
+            List<MultiTrigger.SubTrigger> subs = new ArrayList<>();
+            for (String s : subRaw) {
+                MultiTrigger.SubTrigger sub = parseSubTrigger(s);
+                if (sub != null) {
+                    subs.add(sub);
+                } else {
+                    LOGGER.warn("[ProgressiveStages] [[multi]] entry #{} (stage='{}') has invalid sub-trigger '{}' — skipped.",
+                        index, stageRaw, s);
+                }
+            }
+            if (subs.isEmpty()) {
+                LOGGER.warn("[ProgressiveStages] [[multi]] entry #{} (stage='{}') ended up with zero valid sub-triggers — skipped.",
+                    index, stageRaw);
+                index++;
+                continue;
+            }
+
+            String userId = entry.get("id");
+            String description = entry.get("description");
+            String requirementId = userId != null && !userId.isEmpty()
+                ? userId.trim()
+                : autoId(stageId, mode, subs);
+
+            if (!ProgressiveStagesAPI.stageExists(stageId)) {
+                LOGGER.warn("[ProgressiveStages] [[multi]] requirement '{}' targets non-existent stage '{}' — registered anyway in case the stage is added later.",
+                    requirementId, stageId);
+            }
+
+            MultiTrigger req = new MultiTrigger(requirementId, stageId, mode, subs, description);
+            MultiTriggerManager.register(req);
+            LOGGER.info("[ProgressiveStages] Loaded multi-requirement '{}' -> {} ({}, {} sub-trigger(s))",
+                requirementId, stageId, mode, subs.size());
+            index++;
+        }
+    }
+
+    /** Parse one sub-trigger string like {@code "item:minecraft:diamond"}. */
+    private static MultiTrigger.SubTrigger parseSubTrigger(String raw) {
+        if (raw == null) return null;
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) return null;
+        int colon = trimmed.indexOf(':');
+        if (colon <= 0) return null;
+        String prefix = trimmed.substring(0, colon);
+        String rest = trimmed.substring(colon + 1).trim();
+        MultiTrigger.SubType type = MultiTrigger.SubType.parse(prefix);
+        if (type == null || rest.isEmpty()) return null;
+        ResourceLocation key;
+        try {
+            key = ResourceLocation.parse(rest);
+        } catch (Exception e) {
+            return null;
+        }
+        return new MultiTrigger.SubTrigger(type, key, trimmed);
+    }
+
+    private static String autoId(StageId stageId, MultiTrigger.Mode mode, List<MultiTrigger.SubTrigger> subs) {
+        List<String> keys = new ArrayList<>();
+        for (MultiTrigger.SubTrigger s : subs) keys.add(s.canonicalKey());
+        Collections.sort(keys);
+        String canonical = stageId.toString() + "|" + mode.name() + "|" + String.join(",", keys);
+        return stageId.getPath() + "_" + Integer.toHexString(canonical.hashCode() & 0x7FFFFFFF);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> stringList(Config c, String key) {
+        Object v = c.get(key);
+        if (v == null) return Collections.emptyList();
+        if (v instanceof List<?> list) {
+            List<String> out = new ArrayList<>(list.size());
+            for (Object o : list) if (o instanceof String s) out.add(s);
+            return out;
+        }
+        return Collections.emptyList();
+    }
+
+    // -------------------- default file --------------------
+
     /**
      * Create the default triggers.toml file with examples.
      */
     private static void createDefaultTriggersFile(Path file) {
-        String content = """
-            # ============================================================================
-            # ProgressiveStages v1.1 - Trigger Configuration
-            # ============================================================================
-            # This file defines automatic stage grants based on player actions.
-            # All triggers are EVENT-DRIVEN (no polling/tick scanning).
-            #
-            # Format: "resource_id" = "stage_id"
-            # Stage IDs default to progressivestages namespace if not specified.
-            #
-            # IMPORTANT: 
-            # - Trigger persistence is stored per-world (dimension/boss triggers only fire once)
-            # - Item triggers also scan inventory on player login
-            # - Use /progressivestages trigger reset to clear trigger history
-            # ============================================================================
-            
-            # ============================================================================
-            # ADVANCEMENT TRIGGERS
-            # When a player earns an advancement, they automatically receive the stage.
-            # Format: "namespace:advancement_path" = "stage_id"
-            # ============================================================================
-            [advancements]
-            # Examples:
-            # "minecraft:story/mine_stone" = "stone_age"
-            # "minecraft:story/smelt_iron" = "iron_age"
-            # "minecraft:story/mine_diamond" = "diamond_age"
-            # "minecraft:adventure/kill_a_mob" = "hunter_gatherer"
-            # "minecraft:nether/return_to_sender" = "nether_warrior"
-            # "minecraft:end/kill_dragon" = "dragon_slayer"
-            
-            # ============================================================================
-            # ITEM PICKUP TRIGGERS
-            # When a player picks up an item (or has it in inventory on login), they get the stage.
-            # This includes items received from any source: chests, crafting, drops, etc.
-            # Format: "namespace:item_id" = "stage_id"
-            # ============================================================================
-            [items]
-            # Examples:
-            # "minecraft:iron_ingot" = "iron_age"
-            # "minecraft:diamond" = "diamond_age"
-            # "minecraft:netherite_ingot" = "netherite_age"
-            # "minecraft:ender_pearl" = "end_explorer"
-            # "minecraft:blaze_rod" = "nether_explorer"
-            
-            # ============================================================================
-            # DIMENSION ENTRY TRIGGERS
-            # When a player FIRST enters a dimension, they get the stage (one-time only).
-            # Persisted per-world - use /progressivestages trigger reset to clear.
-            # Format: "namespace:dimension_id" = "stage_id"
-            # ============================================================================
-            [dimensions]
-            # Examples:
-            # "minecraft:the_nether" = "nether_explorer"
-            # "minecraft:the_end" = "end_explorer"
-            # "aether:the_aether" = "aether_explorer"
-            # "twilightforest:twilight_forest" = "twilight_explorer"
-            
-            # ============================================================================
-            # BOSS/ENTITY KILL TRIGGERS
-            # When a player kills a specific entity, they get the stage (one-time only).
-            # Persisted per-world - use /progressivestages trigger reset to clear.
-            # Format: "namespace:entity_id" = "stage_id"
-            # ============================================================================
-            [bosses]
-            # Examples:
-            # "minecraft:ender_dragon" = "dragon_slayer"
-            # "minecraft:wither" = "wither_slayer"
-            # "minecraft:warden" = "warden_slayer"
-            # "minecraft:elder_guardian" = "ocean_conqueror"
-            # "alexscaves:tremorzilla" = "tremorzilla_slayer"
-            # "irons_spellbooks:dead_king" = "dead_king_slayer"
-            """;
-
+        String content = com.enviouse.progressivestages.server.loader.DefaultStageTemplates.triggers();
         try {
             Files.createDirectories(file.getParent());
             Files.writeString(file, content);
@@ -272,4 +334,3 @@ public class TriggerConfigLoader {
         loadTriggerConfig();
     }
 }
-

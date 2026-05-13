@@ -111,10 +111,21 @@ public class StageCommand {
                             .suggests((ctx, builder) -> {
                                 builder.suggest("dimension");
                                 builder.suggest("boss");
+                                builder.suggest("multi");
                                 return builder.buildFuture();
                             })
                             .then(Commands.argument("key", StringArgumentType.greedyString())
                                 .executes(StageCommand::resetTrigger))))))
+
+            // /progressivestages multi list [player]
+            // Inspect 2.0 multi-trigger requirements and (optionally) per-player progress.
+            .then(Commands.literal("multi")
+                .requires(source -> source.hasPermission(3))
+                .then(Commands.literal("list")
+                    .executes(ctx -> listMultiRequirements(ctx, null))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .executes(ctx -> listMultiRequirements(ctx,
+                            EntityArgument.getPlayer(ctx, "player"))))))
 
             // /progressivestages no-creative-popup — toggle the creative-mode bypass
             // warning for the calling player. Open to everyone (per-player preference).
@@ -663,7 +674,8 @@ public class StageCommand {
 
     /**
      * /progressivestages trigger reset <player> <type> <key>
-     * Resets a one-time trigger for a player.
+     * Resets a one-time trigger for a player. Supports {@code dimension}, {@code boss},
+     * and {@code multi} (where {@code key} is the multi-requirement id).
      */
     private static int resetTrigger(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, "player");
@@ -671,15 +683,20 @@ public class StageCommand {
         String key = StringArgumentType.getString(context, "key");
 
         // Validate type
-        if (!type.equals("dimension") && !type.equals("boss")) {
+        if (!type.equals("dimension") && !type.equals("boss") && !type.equals("multi")) {
             context.getSource().sendFailure(TextUtil.parseColorCodes(
                 StageConfig.getMsgCmdTriggerInvalidType().replace("{type}", type)));
             return 0;
         }
 
-        // Get persistence and clear trigger
-        TriggerPersistence persistence = TriggerPersistence.get(context.getSource().getServer());
-        persistence.clearTrigger(type, key, player.getUUID());
+        if (type.equals("multi")) {
+            // Clear every sub-key of the named requirement for this player.
+            com.enviouse.progressivestages.server.triggers.MultiTriggerManager
+                .resetForPlayer(player, key);
+        } else {
+            TriggerPersistence persistence = TriggerPersistence.get(context.getSource().getServer());
+            persistence.clearTrigger(type, key, player.getUUID());
+        }
 
         String playerName = player.getName().getString();
         context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
@@ -687,6 +704,57 @@ public class StageCommand {
                 .replace("{type}", type)
                 .replace("{key}", key)
                 .replace("{player}", playerName)), true);
+
+        return 1;
+    }
+
+    /**
+     * /progressivestages multi list [player]
+     *
+     * <p>Lists every loaded {@code [[multi]]} requirement with its stage, mode, and
+     * sub-trigger list. When a player is given, also reports the player's progress
+     * (e.g. "2/3 sub-triggers satisfied"). Useful for diagnosing why a player hasn't
+     * received a multi-stage yet.
+     */
+    private static int listMultiRequirements(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        var reqs = com.enviouse.progressivestages.server.triggers.MultiTriggerManager.getAll();
+        CommandSourceStack source = context.getSource();
+
+        if (reqs.isEmpty()) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                "&7No multi-trigger requirements loaded. Add &f[[multi]]&7 entries to &ftriggers.toml&7."), false);
+            return 0;
+        }
+
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            "&6=== Multi-Trigger Requirements (" + reqs.size() + ") ==="), false);
+
+        for (var req : reqs) {
+            String header = "&e" + req.requirementId() + " &7-> &f" + req.stageId().toString()
+                + " &8(" + req.mode().name().toLowerCase() + ")";
+            if (player != null) {
+                int total = req.subTriggers().size();
+                int done = com.enviouse.progressivestages.server.triggers.MultiTriggerManager
+                    .countSatisfied(req, player);
+                boolean has = StageManager.getInstance().hasStage(player, req.stageId());
+                String progress = has ? "&aGRANTED" : ("&7[" + done + "/" + total + "]");
+                header = header + " " + progress;
+            }
+            final String headerFinal = header;
+            source.sendSuccess(() -> TextUtil.parseColorCodes(headerFinal), false);
+
+            for (var sub : req.subTriggers()) {
+                String prefix = "    &8• &f" + sub.canonicalKey();
+                if (player != null) {
+                    TriggerPersistence persistence = TriggerPersistence.get(source.getServer());
+                    boolean ok = persistence.hasTriggered("multi",
+                        req.requirementId() + ":" + sub.canonicalKey(), player.getUUID());
+                    prefix = prefix + " " + (ok ? "&a✓" : "&c✗");
+                }
+                final String line = prefix;
+                source.sendSuccess(() -> TextUtil.parseColorCodes(line), false);
+            }
+        }
 
         return 1;
     }

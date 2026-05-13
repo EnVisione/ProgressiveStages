@@ -41,6 +41,13 @@ public enum StageCause {
     BOSS_KILL,
 
     /**
+     * Stage granted because every sub-trigger of a multi-requirement was satisfied.
+     * Multi-requirements live in triggers.toml under {@code [[multi]]} and are tracked
+     * by {@code MultiTriggerManager}.
+     */
+    MULTI_TRIGGER,
+
+    /**
      * Stage changed due to team propagation
      */
     TEAM_SYNC,
