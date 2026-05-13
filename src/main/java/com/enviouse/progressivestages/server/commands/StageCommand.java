@@ -79,6 +79,14 @@ public class StageCommand {
             // /stage tree - Shows dependency tree (v1.3)
             .then(Commands.literal("tree")
                 .executes(StageCommand::showDependencyTree))
+
+            // /stage progress <stage> [player] - 2.0: per-trigger satisfaction breakdown
+            .then(Commands.literal("progress")
+                .then(Commands.argument("stage", StringArgumentType.word())
+                    .suggests(StageCommand::suggestStages)
+                    .executes(ctx -> showProgress(ctx, null))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .executes(ctx -> showProgress(ctx, EntityArgument.getPlayer(ctx, "player"))))))
         );
 
         // /progressivestages subcommands
@@ -757,5 +765,164 @@ public class StageCommand {
         }
 
         return 1;
+    }
+
+    /**
+     * /stage progress &lt;stage&gt; [player]
+     *
+     * <p>Per-stage breakdown for one player: missing dependencies and the
+     * satisfaction state of every trigger (advancement / item / dimension / boss /
+     * multi-requirement) that grants the given stage. Designed for players and
+     * pack authors to see at a glance what's left to unlock the next stage —
+     * complement to {@code /stage check} (yes/no) and {@code /stage list}
+     * (one-line summary per stage).
+     */
+    private static int showProgress(CommandContext<CommandSourceStack> context, ServerPlayer target) throws CommandSyntaxException {
+        String stageName = StringArgumentType.getString(context, "stage");
+        StageId stageId = StageId.of(stageName);
+
+        if (!StageOrder.getInstance().stageExists(stageId)) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdStageNotFound().replace("{stage}", stageName)));
+            return 0;
+        }
+
+        final ServerPlayer player;
+        if (target != null) {
+            player = target;
+        } else if (context.getSource().getEntity() instanceof ServerPlayer sp) {
+            player = sp;
+        } else {
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                StageConfig.getMsgCmdSpecifyPlayer()));
+            return 0;
+        }
+
+        CommandSourceStack source = context.getSource();
+        String displayName = StageOrder.getInstance().getStageDefinition(stageId)
+            .map(StageDefinition::getDisplayName)
+            .orElse(stageId.getPath());
+        boolean hasStage = StageManager.getInstance().hasStage(player, stageId);
+
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            "&6=== Progress: &f" + displayName + " &6for &f" + player.getName().getString() + " &6==="), false);
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            "&7Stage: &f" + stageId.toString() + " &7| Status: " + (hasStage ? "&aGRANTED" : "&cNOT GRANTED")), false);
+
+        // ── Dependencies ──
+        List<StageId> deps = StageOrder.getInstance().getStageDefinition(stageId)
+            .map(StageDefinition::getDependencies).orElse(java.util.Collections.emptyList());
+        if (!deps.isEmpty()) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes("&7Dependencies:"), false);
+            Set<StageId> owned = StageManager.getInstance().getStages(player);
+            for (StageId dep : deps) {
+                boolean has = owned.contains(dep);
+                String mark = has ? "&a✓" : "&c✗";
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    "  " + mark + " &f" + dep.getPath()), false);
+            }
+        }
+
+        // ── Single-trigger surfaces (any one grants the stage) ──
+        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> advMatches =
+            collectMatching(com.enviouse.progressivestages.server.triggers.AdvancementStageGrants.getAllMappings(), stageId);
+        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> itemMatches =
+            collectMatching(com.enviouse.progressivestages.server.triggers.ItemPickupStageGrants.getAllMappings(), stageId);
+        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> dimMatches =
+            collectMatching(com.enviouse.progressivestages.server.triggers.DimensionStageGrants.getAllMappings(), stageId);
+        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> bossMatches =
+            collectMatching(com.enviouse.progressivestages.server.triggers.BossKillStageGrants.getAllMappings(), stageId);
+
+        boolean anySingle = !advMatches.isEmpty() || !itemMatches.isEmpty()
+            || !dimMatches.isEmpty() || !bossMatches.isEmpty();
+
+        if (anySingle) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes("&7Single triggers (any one grants):"), false);
+            TriggerPersistence persistence = TriggerPersistence.get(source.getServer());
+
+            for (var e : advMatches) {
+                net.minecraft.advancements.AdvancementHolder holder =
+                    source.getServer().getAdvancements().get(e.getKey());
+                boolean done = holder != null
+                    && player.getAdvancements().getOrStartProgress(holder).isDone();
+                String mark = done ? "&a✓" : "&c✗";
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    "  " + mark + " &8advancement: &f" + e.getKey()), false);
+            }
+            for (var e : itemMatches) {
+                // Item-pickup triggers are stateless (no persistence). Best-effort: report whether
+                // the item is currently in the player's inventory.
+                boolean inInv = playerHasItem(player, e.getKey());
+                String mark = inInv ? "&a✓ (in inventory)" : "&c✗";
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    "  " + mark + " &8item: &f" + e.getKey()), false);
+            }
+            for (var e : dimMatches) {
+                boolean fired = persistence.hasTriggered("dimension", e.getKey().toString(), player.getUUID());
+                String mark = fired ? "&a✓" : "&c✗";
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    "  " + mark + " &8dimension: &f" + e.getKey()), false);
+            }
+            for (var e : bossMatches) {
+                boolean fired = persistence.hasTriggered("boss", e.getKey().toString(), player.getUUID());
+                String mark = fired ? "&a✓" : "&c✗";
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    "  " + mark + " &8boss: &f" + e.getKey()), false);
+            }
+        }
+
+        // ── Multi-requirements targeting this stage ──
+        List<com.enviouse.progressivestages.server.triggers.MultiTrigger> multis =
+            com.enviouse.progressivestages.server.triggers.MultiTriggerManager.getAll()
+                .stream()
+                .filter(req -> req.stageId().equals(stageId))
+                .toList();
+
+        if (!multis.isEmpty()) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes("&7Multi requirements:"), false);
+            TriggerPersistence persistence = TriggerPersistence.get(source.getServer());
+            for (var req : multis) {
+                int total = req.subTriggers().size();
+                int done = com.enviouse.progressivestages.server.triggers.MultiTriggerManager
+                    .countSatisfied(req, player);
+                String header = "  &e" + req.requirementId()
+                    + " &8(" + req.mode().name().toLowerCase() + ") &7[" + done + "/" + total + "]";
+                source.sendSuccess(() -> TextUtil.parseColorCodes(header), false);
+                for (var sub : req.subTriggers()) {
+                    boolean ok = persistence.hasTriggered("multi",
+                        req.requirementId() + ":" + sub.canonicalKey(), player.getUUID());
+                    String mark = ok ? "&a✓" : "&c✗";
+                    source.sendSuccess(() -> TextUtil.parseColorCodes(
+                        "      " + mark + " &f" + sub.canonicalKey()), false);
+                }
+            }
+        }
+
+        if (!anySingle && multis.isEmpty() && !hasStage) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                "&8No triggers grant this stage — only &f/stage grant&8 will award it."), false);
+        }
+
+        return 1;
+    }
+
+    private static List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>>
+        collectMatching(Map<net.minecraft.resources.ResourceLocation, StageId> mappings, StageId target) {
+        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> out = new java.util.ArrayList<>();
+        for (var e : mappings.entrySet()) {
+            if (e.getValue().equals(target)) out.add(e);
+        }
+        return out;
+    }
+
+    private static boolean playerHasItem(ServerPlayer player, net.minecraft.resources.ResourceLocation itemId) {
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            var stack = inv.getItem(i);
+            if (stack.isEmpty()) continue;
+            var key = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
+            if (key != null && key.equals(itemId)) return true;
+        }
+        return false;
     }
 }

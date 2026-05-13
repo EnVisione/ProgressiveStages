@@ -1395,6 +1395,20 @@ unless otherwise noted.
 | `/stage check <player> <stage>` | Boolean check. |
 | `/stage info <stage>` | Print stage metadata: id, dependencies, description, lock count. |
 | `/stage tree` | ASCII dependency tree of every loaded stage. |
+| `/stage progress <stage> [player]` | Per-trigger breakdown for one stage: missing dependencies plus the ✓/✗ state of every advancement / item / dimension / boss / `[[multi]]` trigger that grants it. Player defaults to the caller. |
+
+> **Using `/stage progress`.** This is the "what's left" view — `/stage check`
+> tells you yes/no, `/stage progress` tells you *why*. It lists the stage's
+> dependency status, then walks every entry in `triggers.toml` whose target is
+> this stage and reports satisfaction. Per-surface state:
+>
+> - **Advancement** — checked against `PlayerAdvancements` (live advancement state).
+> - **Item** — stateless trigger; shown as ✓ only if the item is currently in the player's inventory.
+> - **Dimension / Boss** — checked against persisted one-shot trigger state (`world/data/progressivestages_triggers.dat`).
+> - **`[[multi]]`** — same `n/total` summary and per-sub-trigger ✓/✗ as `/progressivestages multi list`, filtered to multi-requirements that target this stage.
+>
+> Useful for players asking "what do I need to do next" and for pack authors
+> debugging why a trigger isn't firing.
 
 Tab-completion uses normalized stage IDs — short paths for the default
 namespace (`iron_age`), full IDs for other namespaces (`mymod:my_stage`).
@@ -1799,7 +1813,8 @@ Check, in order:
    `progressivestages.toml`.
 3. **`[enforcement]` in the stage file** — maybe you exempted the item.
 4. **Stage state** — is the player actually missing the stage?
-   `/stage check <player> <stage>`.
+   `/stage check <player> <stage>`. For a "what triggers are left" view,
+   run `/stage progress <stage> [player]`.
 5. **debug_logging** — set `general.debug_logging = true` and run
    `/progressivestages reload`. The server log will show which locks were
    registered for each stage.

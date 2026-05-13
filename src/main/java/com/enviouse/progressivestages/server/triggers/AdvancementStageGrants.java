@@ -79,6 +79,11 @@ public class AdvancementStageGrants {
         return ADVANCEMENT_STAGES.get(advancementId);
     }
 
+    /** Read-only view of all advancement -> stage mappings. Used by /stage progress. */
+    public static Map<ResourceLocation, StageId> getAllMappings() {
+        return java.util.Collections.unmodifiableMap(ADVANCEMENT_STAGES);
+    }
+
     /**
      * Load default mappings (can be overridden by config).
      */

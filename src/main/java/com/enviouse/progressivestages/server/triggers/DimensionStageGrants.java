@@ -73,6 +73,11 @@ public class DimensionStageGrants {
         return DIMENSION_STAGES.get(dimensionId);
     }
 
+    /** Read-only view of all dimension -> stage mappings. Used by /stage progress. */
+    public static Map<ResourceLocation, StageId> getAllMappings() {
+        return java.util.Collections.unmodifiableMap(DIMENSION_STAGES);
+    }
+
     /**
      * Load default mappings (can be overridden by config).
      */

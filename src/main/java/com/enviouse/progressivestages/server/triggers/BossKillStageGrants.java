@@ -74,6 +74,11 @@ public class BossKillStageGrants {
         return BOSS_STAGES.get(entityTypeId);
     }
 
+    /** Read-only view of all boss -> stage mappings. Used by /stage progress. */
+    public static Map<ResourceLocation, StageId> getAllMappings() {
+        return java.util.Collections.unmodifiableMap(BOSS_STAGES);
+    }
+
     /**
      * Load default mappings (can be overridden by config).
      */
