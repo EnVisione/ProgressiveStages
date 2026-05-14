@@ -80,10 +80,28 @@ public class StageCommand {
             .then(Commands.literal("tree")
                 .executes(StageCommand::showDependencyTree))
 
-            // /stage progress <stage> [player] - 2.0: per-trigger satisfaction breakdown
+            // /stage progress [stage|next|all] [player]
+            //
+            // Three modes:
+            //   • /stage progress                         — bare form, defaults to `next` for the caller.
+            //   • /stage progress next [player]           — every stage whose deps are met but isn't granted yet.
+            //   • /stage progress all  [player]           — every unowned stage in registration order.
+            //   • /stage progress <stage> [player]        — per-trigger satisfaction breakdown for one stage.
+            //
+            // Edge case: if a stage is literally named `next` or `all`, query it via
+            // `/stage info` instead — Brigadier will route the literal first here.
             .then(Commands.literal("progress")
+                .executes(ctx -> showProgressNext(ctx, null))
+                .then(Commands.literal("next")
+                    .executes(ctx -> showProgressNext(ctx, null))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .executes(ctx -> showProgressNext(ctx, EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("all")
+                    .executes(ctx -> showProgressAll(ctx, null))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .executes(ctx -> showProgressAll(ctx, EntityArgument.getPlayer(ctx, "player")))))
                 .then(Commands.argument("stage", StringArgumentType.word())
-                    .suggests(StageCommand::suggestStages)
+                    .suggests(StageCommand::suggestProgressStages)
                     .executes(ctx -> showProgress(ctx, null))
                     .then(Commands.argument("player", EntityArgument.player())
                         .executes(ctx -> showProgress(ctx, EntityArgument.getPlayer(ctx, "player"))))))
@@ -188,6 +206,45 @@ public class StageCommand {
             }
         }
         return builder.buildFuture();
+    }
+
+    /**
+     * Suggestions for the {@code /stage progress <stage>} argument.
+     *
+     * <p>When the command source is a player, the player's next-reachable stages
+     * (deps met, not yet owned) are surfaced first so {@code <tab>} on an empty
+     * input nominates concrete progression candidates — the auto-fill behavior
+     * the user asked for. Any other stage is still accepted: the full stage
+     * list is appended so historical or out-of-order queries continue to work.
+     */
+    private static CompletableFuture<Suggestions> suggestProgressStages(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase();
+        Set<String> seen = new HashSet<>();
+
+        // Prioritize next-reachable stages for the executing player.
+        if (context.getSource().getEntity() instanceof ServerPlayer sp) {
+            Set<StageId> owned = StageManager.getInstance().getStages(sp);
+            for (StageId stageId : findNextStages(sp, owned)) {
+                offerSuggestion(builder, stageId, remaining, seen);
+            }
+        }
+
+        // Then every other stage — keeps free-form lookups working (granted stages,
+        // stages still gated behind locked deps, admin debugging).
+        for (StageId stageId : StageOrder.getInstance().getAllStageIds()) {
+            offerSuggestion(builder, stageId, remaining, seen);
+        }
+        return builder.buildFuture();
+    }
+
+    private static void offerSuggestion(SuggestionsBuilder builder, StageId stageId, String remaining, Set<String> seen) {
+        String suggest = stageId.isDefaultNamespace() ? stageId.getPath() : stageId.toString();
+        if (!seen.add(suggest)) return;
+        String path = stageId.getPath();
+        String full = stageId.toString();
+        if (path.startsWith(remaining) || full.startsWith(remaining)) {
+            builder.suggest(suggest);
+        }
     }
 
     private static int grantStage(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -773,7 +830,7 @@ public class StageCommand {
      * <p>Per-stage breakdown for one player: missing dependencies and the
      * satisfaction state of every trigger (advancement / item / dimension / boss /
      * multi-requirement) that grants the given stage. Designed for players and
-     * pack authors to see at a glance what's left to unlock the next stage —
+     * pack authors to see at a glance what's left to unlock the stage —
      * complement to {@code /stage check} (yes/no) and {@code /stage list}
      * (one-line summary per stage).
      */
@@ -787,18 +844,149 @@ public class StageCommand {
             return 0;
         }
 
-        final ServerPlayer player;
-        if (target != null) {
-            player = target;
-        } else if (context.getSource().getEntity() instanceof ServerPlayer sp) {
-            player = sp;
-        } else {
-            context.getSource().sendFailure(TextUtil.parseColorCodes(
-                StageConfig.getMsgCmdSpecifyPlayer()));
-            return 0;
-        }
+        ServerPlayer player = resolvePlayer(context, target);
+        if (player == null) return 0;
+
+        renderStageProgress(context.getSource(), player, stageId, true);
+        return 1;
+    }
+
+    /**
+     * /stage progress next [player]
+     *
+     * <p>Lists every stage that is currently <em>reachable</em> for the player —
+     * i.e. the player doesn't have it yet, but every declared dependency is
+     * satisfied — and renders the full per-trigger breakdown for each one.
+     *
+     * <p>This is the "what should I do next?" view. Stages whose dependencies
+     * are themselves locked are intentionally hidden (use {@code /stage tree}
+     * or {@code /stage progress all} to see them).
+     *
+     * <p>If the player has no next stages but does not own every stage, the
+     * remaining stages are gated behind locked prerequisites — surfaced as a
+     * hint so players know to consult the tree.
+     */
+    private static int showProgressNext(CommandContext<CommandSourceStack> context, ServerPlayer target) throws CommandSyntaxException {
+        ServerPlayer player = resolvePlayer(context, target);
+        if (player == null) return 0;
 
         CommandSourceStack source = context.getSource();
+        Set<StageId> owned = StageManager.getInstance().getStages(player);
+        int total = StageOrder.getInstance().getStageCount();
+        List<StageId> nextStages = findNextStages(player, owned);
+
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            "&6=== Next Stages for &f" + player.getName().getString()
+                + " &7(" + owned.size() + "/" + total + " unlocked) &6==="), false);
+
+        if (nextStages.isEmpty()) {
+            if (owned.size() >= total && total > 0) {
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    "&aAll stages unlocked! &7Nothing left to progress."), false);
+            } else {
+                source.sendSuccess(() -> TextUtil.parseColorCodes(
+                    "&8No reachable next stages. &7Remaining stages are gated by locked"
+                        + " dependencies — see &f/stage tree&7."), false);
+            }
+            return 1;
+        }
+
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            "&7Showing &f" + nextStages.size() + "&7 reachable stage(s):"), false);
+
+        boolean first = true;
+        for (StageId id : nextStages) {
+            if (!first) {
+                source.sendSuccess(() -> TextUtil.parseColorCodes("&8──────────"), false);
+            }
+            first = false;
+            renderStageProgress(source, player, id, false);
+        }
+        return 1;
+    }
+
+    /**
+     * /stage progress all [player]
+     *
+     * <p>Renders progress for every stage the player doesn't yet have, in
+     * registration order — including stages still locked behind unmet
+     * dependencies. Useful for pack authors auditing a full progression
+     * tree, or for players who want the complete roadmap rather than just
+     * what's immediately reachable.
+     */
+    private static int showProgressAll(CommandContext<CommandSourceStack> context, ServerPlayer target) throws CommandSyntaxException {
+        ServerPlayer player = resolvePlayer(context, target);
+        if (player == null) return 0;
+
+        CommandSourceStack source = context.getSource();
+        Set<StageId> owned = StageManager.getInstance().getStages(player);
+        int total = StageOrder.getInstance().getStageCount();
+
+        List<StageId> remaining = new java.util.ArrayList<>();
+        for (StageId id : StageOrder.getInstance().getOrderedStages()) {
+            if (!owned.contains(id)) remaining.add(id);
+        }
+
+        source.sendSuccess(() -> TextUtil.parseColorCodes(
+            "&6=== All Remaining Stages for &f" + player.getName().getString()
+                + " &7(" + owned.size() + "/" + total + " unlocked) &6==="), false);
+
+        if (remaining.isEmpty()) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                "&aAll stages unlocked!"), false);
+            return 1;
+        }
+
+        boolean first = true;
+        for (StageId id : remaining) {
+            if (!first) {
+                source.sendSuccess(() -> TextUtil.parseColorCodes("&8──────────"), false);
+            }
+            first = false;
+            renderStageProgress(source, player, id, false);
+        }
+        return 1;
+    }
+
+    /**
+     * Resolve the target player: the explicit {@code target} arg if non-null,
+     * otherwise the command sender if they are a player. Reports the standard
+     * "specify player" failure and returns null when neither is available
+     * (e.g. console with no target).
+     */
+    private static ServerPlayer resolvePlayer(CommandContext<CommandSourceStack> context, ServerPlayer target) {
+        if (target != null) return target;
+        if (context.getSource().getEntity() instanceof ServerPlayer sp) return sp;
+        context.getSource().sendFailure(TextUtil.parseColorCodes(
+            StageConfig.getMsgCmdSpecifyPlayer()));
+        return null;
+    }
+
+    /**
+     * The set of stages a player can <em>currently</em> unlock: they don't have
+     * the stage yet, and every declared dependency is satisfied. Order matches
+     * {@link StageOrder#getOrderedStages()} so the output is deterministic.
+     */
+    private static List<StageId> findNextStages(ServerPlayer player, Set<StageId> owned) {
+        List<StageId> result = new java.util.ArrayList<>();
+        for (StageId id : StageOrder.getInstance().getOrderedStages()) {
+            if (owned.contains(id)) continue;
+            List<StageId> missing = StageManager.getInstance().getMissingDependencies(player, id);
+            if (missing.isEmpty()) result.add(id);
+        }
+        return result;
+    }
+
+    /**
+     * Render the full progress block for a single stage. Used by every
+     * {@code /stage progress *} variant so the formatting stays consistent.
+     *
+     * @param verbose when true, prints the "no triggers grant this stage" hint
+     *                if the stage has no automatic trigger; off in list views
+     *                where that line would be noisy on every stage.
+     */
+    private static void renderStageProgress(CommandSourceStack source, ServerPlayer player,
+                                            StageId stageId, boolean verbose) {
         String displayName = StageOrder.getInstance().getStageDefinition(stageId)
             .map(StageDefinition::getDisplayName)
             .orElse(stageId.getPath());
@@ -808,6 +996,14 @@ public class StageCommand {
             "&6=== Progress: &f" + displayName + " &6for &f" + player.getName().getString() + " &6==="), false);
         source.sendSuccess(() -> TextUtil.parseColorCodes(
             "&7Stage: &f" + stageId.toString() + " &7| Status: " + (hasStage ? "&aGRANTED" : "&cNOT GRANTED")), false);
+
+        // ── Description (only when present; helps players understand the stage) ──
+        String description = StageOrder.getInstance().getStageDefinition(stageId)
+            .map(StageDefinition::getDescription).orElse("");
+        if (description != null && !description.isEmpty()) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                "&8\"&7" + description + "&8\""), false);
+        }
 
         // ── Dependencies ──
         List<StageId> deps = StageOrder.getInstance().getStageDefinition(stageId)
@@ -898,12 +1094,10 @@ public class StageCommand {
             }
         }
 
-        if (!anySingle && multis.isEmpty() && !hasStage) {
+        if (!anySingle && multis.isEmpty() && !hasStage && verbose) {
             source.sendSuccess(() -> TextUtil.parseColorCodes(
                 "&8No triggers grant this stage — only &f/stage grant&8 will award it."), false);
         }
-
-        return 1;
     }
 
     private static List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>>

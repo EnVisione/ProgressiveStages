@@ -1395,23 +1395,45 @@ unless otherwise noted.
 | `/stage check <player> <stage>` | Boolean check. |
 | `/stage info <stage>` | Print stage metadata: id, dependencies, description, lock count. |
 | `/stage tree` | ASCII dependency tree of every loaded stage. |
-| `/stage progress <stage> [player]` | Per-trigger breakdown for one stage: missing dependencies plus the ✓/✗ state of every advancement / item / dimension / boss / `[[multi]]` trigger that grants it. Player defaults to the caller. |
+| `/stage progress` | Shortcut for `/stage progress next` — what the caller can unlock right now. |
+| `/stage progress next [player]` | Lists every stage the player can currently unlock (deps met, not yet granted) with the full per-trigger breakdown for each one. Player defaults to the caller. |
+| `/stage progress all [player]` | Lists **every** stage the player doesn't yet have — including those still locked behind unmet dependencies — in registration order. Useful for pack-author audits and "show me the whole roadmap" queries. |
+| `/stage progress <stage> [player]` | Per-trigger breakdown for one specific stage. Player defaults to the caller. |
 
-> **Using `/stage progress`.** This is the "what's left" view — `/stage check`
-> tells you yes/no, `/stage progress` tells you *why*. It lists the stage's
-> dependency status, then walks every entry in `triggers.toml` whose target is
-> this stage and reports satisfaction. Per-surface state:
+> **Using `/stage progress`.** Three views, one rendering:
 >
+> - **`/stage progress next`** — the "what can I do right now?" view. Walks
+>   every stage you don't own, keeps the ones whose declared dependencies are
+>   all satisfied, and renders the per-trigger breakdown for each. If nothing
+>   is reachable, it says so and points you at `/stage tree`.
+> - **`/stage progress all`** — same renderer, but applied to every stage you
+>   don't yet have (including ones still gated by locked prerequisites). The
+>   full roadmap; useful when authoring a pack.
+> - **`/stage progress <stage>`** — the targeted view. Same per-trigger
+>   breakdown as before, scoped to one stage.
+>
+> Every view reports each surface independently:
+>
+> - **Dependencies** — ✓/✗ against the player's current stage set.
 > - **Advancement** — checked against `PlayerAdvancements` (live advancement state).
 > - **Item** — stateless trigger; shown as ✓ only if the item is currently in the player's inventory.
 > - **Dimension / Boss** — checked against persisted one-shot trigger state (`world/data/progressivestages_triggers.dat`).
-> - **`[[multi]]`** — same `n/total` summary and per-sub-trigger ✓/✗ as `/progressivestages multi list`, filtered to multi-requirements that target this stage.
+> - **`[[multi]]`** — same `n/total` summary and per-sub-trigger ✓/✗ as `/progressivestages multi list`, filtered to multi-requirements that target this stage. Both `all_of` and `any_of` modes are labeled and counted.
 >
-> Useful for players asking "what do I need to do next" and for pack authors
-> debugging why a trigger isn't firing.
+> If a stage has no triggers and is granted only by `/stage grant`, the
+> single-stage view says so explicitly; the list views hide that line to keep
+> output compact.
 
 Tab-completion uses normalized stage IDs — short paths for the default
 namespace (`iron_age`), full IDs for other namespaces (`mymod:my_stage`).
+For the `<stage>` argument of `/stage progress`, suggestions are sorted so
+the caller's next-reachable stages appear first (with every stage still
+selectable for free-form lookups). Brigadier surfaces the `next` and `all`
+literals alongside the stage list.
+
+> **Edge case.** If you have a stage literally named `next` or `all`,
+> `/stage progress <that-name>` routes to the literal subcommand. Use
+> `/stage info <name>` to query that stage instead, or rename it.
 
 ### 7.2 `/progressivestages` — admin operations
 
