@@ -127,3 +127,7 @@ CLAUDE.md
 # NeoForge build noise that sometimes lands at repo root
 /net/
 
+# CurseForge release copy + changelog scratchpad (local-only, never published as a repo doc)
+curseforge.md
+changelog.md
+
