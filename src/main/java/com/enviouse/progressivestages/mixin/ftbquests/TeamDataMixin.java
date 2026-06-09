@@ -29,7 +29,10 @@ public abstract class TeamDataMixin {
         if (required == null || required.isEmpty()) {
             return;
         }
-        if (!StageRequirementHelper.hasStageForServerLogic(required)) {
+        boolean met = net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT
+            ? StageRequirementHelper.hasStageClient(required)
+            : StageRequirementHelper.hasStageForServerLogic(required);
+        if (!met) {
             cir.setReturnValue(false);
         }
     }
