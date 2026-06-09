@@ -118,4 +118,12 @@ public class ClientEventHandler {
             .replace("{progress}", progress);
         tooltip.add(TextUtil.parseColorCodes(currentStageText));
     }
+
+    /** v2.0.1: clear client-side ore-spoof cache when leaving a level. */
+    @SubscribeEvent
+    public static void onLevelUnload(net.neoforged.neoforge.event.level.LevelEvent.Unload event) {
+        if (event.getLevel() instanceof net.minecraft.client.multiplayer.ClientLevel) {
+            OreSpoofClientState.clear();
+        }
+    }
 }

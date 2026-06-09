@@ -94,6 +94,16 @@ public class NetworkHandler {
                 (payload, context) -> {}
             )
         );
+
+        // v2.0.1: Ore-spoof delta packet (server batches per-section spoofs)
+        registrar.playToClient(
+            OreSpoofPayload.TYPE,
+            OreSpoofPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleOreSpoofClient,
+                (payload, context) -> {}
+            )
+        );
     }
 
     /**
@@ -262,8 +272,10 @@ public class NetworkHandler {
                 recipeItemLocks.putIfAbsent(entry.itemId(), sid);
                 recipeItemMulti.computeIfAbsent(entry.itemId(), k -> new java.util.LinkedHashSet<>()).add(sid);
             }
-            ClientLockCache.setRecipeItemLocks(recipeItemLocks);
+            // Populate the multi-stage view first: setRecipeItemLocks triggers an EMI/JEI reload,
+            // which reads the multi-stage map for correctness.
             ClientLockCache.setRecipeItemMultiLocks(recipeItemMulti);
+            ClientLockCache.setRecipeItemLocks(recipeItemLocks);
         });
     }
 
@@ -294,6 +306,17 @@ public class NetworkHandler {
     private static void handleRevealPolicyClient(RevealPolicyPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             ClientStageCache.setHideStageNamesFromNonOps(payload.hide());
+        });
+    }
+
+    /**
+     * v2.0.1: Ore-spoof delta applier. Runs on the client. Updates the local block
+     * states, the client-side spoofed-positions cache (for light recompute), and
+     * triggers a per-section light update so glowstone/lava don't leak fake light.
+     */
+    private static void handleOreSpoofClient(OreSpoofPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            com.enviouse.progressivestages.client.OreSpoofClientState.applyDelta(payload);
         });
     }
 
@@ -436,6 +459,46 @@ public class NetworkHandler {
             ByteBufCodecs.BOOL,
             RevealPolicyPayload::hide,
             RevealPolicyPayload::new
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    // ============ v2.0.1 Ore spoof payload ============
+
+    /**
+     * One spoofed position + the displayed block state id (as
+     * {@link net.minecraft.world.level.block.Block#getId(net.minecraft.world.level.block.state.BlockState)}).
+     */
+    public record OreSpoofEntry(long packedPos, int blockStateId) {
+        public static final StreamCodec<FriendlyByteBuf, OreSpoofEntry> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_LONG, OreSpoofEntry::packedPos,
+            ByteBufCodecs.VAR_INT,  OreSpoofEntry::blockStateId,
+            OreSpoofEntry::new
+        );
+    }
+
+    /**
+     * Ore-spoof delta packet. Applies (additions) and clears (removals) atomically.
+     * When {@code dimensionReset} is true, the client wipes its entire spoof set
+     * for this dimension before applying — used on stage grant / login.
+     */
+    public record OreSpoofPayload(java.util.List<OreSpoofEntry> additions,
+                                  java.util.List<Long> removals,
+                                  boolean dimensionReset) implements CustomPacketPayload {
+        public static final Type<OreSpoofPayload> TYPE = new Type<>(Constants.ORE_SPOOF_PACKET);
+
+        public static final StreamCodec<FriendlyByteBuf, OreSpoofPayload> STREAM_CODEC = StreamCodec.composite(
+            OreSpoofEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            OreSpoofPayload::additions,
+            ByteBufCodecs.VAR_LONG.apply(ByteBufCodecs.list()),
+            OreSpoofPayload::removals,
+            ByteBufCodecs.BOOL,
+            OreSpoofPayload::dimensionReset,
+            OreSpoofPayload::new
         );
 
         @Override

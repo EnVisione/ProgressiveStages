@@ -448,8 +448,19 @@ Both lists use the prefix system. Hidden side effect: locking an item in
 output stack itself is locked).
 
 EMI / JEI show the locked recipe with the configurable overlay (see §8); when
-`emi.show_locked_recipes = false`, the recipe disappears from the browser
-entirely.
+`emi.show_locked_recipes = false`, locked recipes are hidden from the browser
+entirely. For `locked_items`, the gated OUTPUT ITEM is also removed from the
+EMI/JEI item panel (which takes all of its recipes with it), so a recipe-locked
+item can be neither browsed nor have its recipe viewed — while remaining usable
+if obtained another way. (`locked_ids` only hides the one recipe; the output item
+stays visible because it may have other, unlocked recipes.)
+
+> **JEI caveat:** for `locked_ids`, JEI can only hide recipes of *vanilla* recipe
+> types (crafting, smelting, blasting, smoking, campfire, stonecutting, smithing).
+> A `locked_ids` entry pointing at a *modded* recipe type is still blocked from
+> crafting server-side and is hidden in EMI, but is not removed from the JEI
+> recipe browser — use `locked_items` (or an `[items]` lock) to fully hide a
+> modded output in JEI.
 
 The enforcer is
 [`RecipeEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/RecipeEnforcer.java).
@@ -800,6 +811,49 @@ extend the same base classes.
 
 The implementation is
 [`ScreenEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/ScreenEnforcer.java).
+
+### 4.15a `[trades]` — villager / wandering-trader trade gating
+
+```toml
+[trades]
+locked = [
+    "id:minecraft:diamond_pickaxe",
+    "tag:c:tools",
+]
+always_unlocked = [
+    "id:minecraft:diamond_hoe",
+]
+```
+
+Hides **and** blocks any villager or wandering-trader offer whose **result** item
+matches the list, using the prefix system. Unlike `[items]`, this gates the
+*trade* only — the player can still hold, use, and obtain the result another way;
+they just can't buy it from a merchant until the stage is earned. This is the
+"diamonds are post-Nether: lock the diamond-tool trades, not the diamonds"
+pattern.
+
+Enforcement has two halves, sharing one predicate
+([`TradeEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/TradeEnforcer.java)):
+
+- **Hidden** — locked offers are filtered out of the merchant GUI before it
+  reaches the client
+  ([`ServerPlayerMerchantMixin`](src/main/java/com/enviouse/progressivestages/mixin/ServerPlayerMerchantMixin.java)),
+  so a vanilla client never sees them. The client/server trade index is
+  reconciled by
+  [`ServerGamePacketListenerMerchantMixin`](src/main/java/com/enviouse/progressivestages/mixin/ServerGamePacketListenerMerchantMixin.java)
+  so the offers that remain visible still select correctly.
+- **Blocked** — the result slot is cleared server-side
+  ([`MerchantContainerMixin`](src/main/java/com/enviouse/progressivestages/mixin/MerchantContainerMixin.java)),
+  so even a tampered / desynced client cannot complete a locked trade.
+
+A trade is also gated (preserving prior behavior) when its result is locked via
+`[items]`, or when the result carries an `[enchants]`-locked enchantment — so
+enchanted-book / enchanted-gear trades from librarians are NBT-aware without
+listing `enchanted_book` here.
+
+Creative and spectator players bypass. Toggle globally with
+`enforcement.block_trades`. Covers both villagers and the wandering trader (both
+route through the same merchant code path).
 
 ### 4.16 `[structures]` — entry, rules, chest locking
 
@@ -1312,6 +1366,7 @@ that enforcement path for every stage, regardless of stage file content.
 | `mob_spawn_check_radius` | `128` | Radius for the nearest-player check used by mob spawn + crop growth + loot drop |
 | `block_enchants` | `true` | Enchantment-table + anvil + villager + inventory-strip |
 | `block_screen_open` | `true` | `[screens]` GUI gating |
+| `block_trades` | `true` | `[trades]` villager / wandering-trader trade gating (hide + server-side block) |
 | `block_crop_growth` | `true` | `[crops]` planting / growth / bonemeal / harvest |
 | `block_pet_interact` | `true` | `[pets]` taming / breeding / commanding / riding |
 | `block_loot_drops` | `true` | `[loot]` GLM + mob + block drops |

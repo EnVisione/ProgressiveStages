@@ -130,7 +130,18 @@ public abstract class CraftingMenuMixin {
         if (StageConfig.isHideLockRecipeOutput()) {
             if (registry.isItemBlockedFor(serverPlayer, result.getItem())) {
                 clearResultAndSync(menu, resultSlots, serverPlayer);
+                return;
             }
+        }
+
+        // ── v2.0.1: transitive ingredient gating ──
+        // Fast path: skipped entirely if no stage has opted into
+        // block_crafting_with_locked_ingredients.
+        java.util.Optional<com.enviouse.progressivestages.common.lock.LockRegistry.IngredientBlockResult>
+            ingBlock = com.enviouse.progressivestages.server.enforcement.IngredientGateHelper
+                .checkContainer(serverPlayer, craftSlots);
+        if (ingBlock.isPresent()) {
+            clearResultAndSync(menu, resultSlots, serverPlayer);
         }
     }
 

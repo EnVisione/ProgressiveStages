@@ -110,7 +110,18 @@ public abstract class ResultSlotMixin extends Slot {
                         break;
                     }
                 }
+                return;
             }
+        }
+
+        // 4. v2.0.1: transitive ingredient gating (per-stage opt-in)
+        java.util.Optional<com.enviouse.progressivestages.common.lock.LockRegistry.IngredientBlockResult>
+            ingBlock = com.enviouse.progressivestages.server.enforcement.IngredientGateHelper
+                .checkContainer(serverPlayer, this.craftSlots);
+        if (ingBlock.isPresent()) {
+            cir.setReturnValue(false);
+            com.enviouse.progressivestages.server.enforcement.IngredientGateHelper
+                .notifyIngredientBlocked(serverPlayer, ingBlock.get());
         }
     }
 }

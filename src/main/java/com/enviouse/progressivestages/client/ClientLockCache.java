@@ -128,6 +128,47 @@ public class ClientLockCache {
         return true;
     }
 
+    /** v2.0: true iff the player owns ALL gating stages for this item's recipe-output lock ([recipes].locked_items). */
+    public static boolean playerOwnsAllStagesForRecipeOutput(ResourceLocation itemId) {
+        java.util.Set<StageId> gating = getRequiredStagesForRecipeByOutput(itemId);
+        if (gating.isEmpty()) return true;
+        for (StageId s : gating) if (!ClientStageCache.hasStage(s)) return false;
+        return true;
+    }
+
+    /**
+     * Item IDs whose crafting recipes are locked for the player ([recipes].locked_items) and
+     * which should therefore be hidden from EMI/JEI (the item AND its recipes) until unlocked.
+     * Multi-stage aware; honors creative bypass. Falls back to LockRegistry on the integrated
+     * server before the lock-sync packet has populated the client cache.
+     */
+    public static java.util.Set<ResourceLocation> getRecipeOutputLockedItemIds() {
+        java.util.Set<ResourceLocation> out = new java.util.HashSet<>();
+        if (creativeBypass) return out;
+        if (!recipeItemLocks.isEmpty()) {
+            for (ResourceLocation id : recipeItemLocks.keySet()) {
+                if (!playerOwnsAllStagesForRecipeOutput(id)) out.add(id);
+            }
+            return out;
+        }
+        // Integrated-server fallback (client cache not yet synced from the server) — multi-stage
+        // aware so the pre-sync decision matches the post-sync one (item gated by N stages is
+        // hidden unless the player owns ALL N).
+        try {
+            var reg = com.enviouse.progressivestages.common.lock.LockRegistry.getInstance();
+            for (net.minecraft.world.item.Item item : net.minecraft.core.registries.BuiltInRegistries.ITEM) {
+                ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+                if (id == null) continue;
+                java.util.Set<StageId> gating = reg.getRequiredStagesForRecipeByOutput(item);
+                if (gating.isEmpty()) continue;
+                boolean ownsAll = true;
+                for (StageId s : gating) if (!ClientStageCache.hasStage(s)) { ownsAll = false; break; }
+                if (!ownsAll) out.add(id);
+            }
+        } catch (Throwable ignored) {}
+        return out;
+    }
+
     /**
      * Trigger EMI and JEI to reload
      */
@@ -255,11 +296,19 @@ public class ClientLockCache {
      * recipe_items = [...] locks ALL recipes whose output matches the item ID.
      */
     public static void setRecipeItemLocks(Map<ResourceLocation, StageId> locks) {
+        boolean changed = !recipeItemLocks.equals(locks);
         recipeItemLocks.clear();
         recipeItemLocks.putAll(locks);
 
         if (StageConfig.isDebugLogging()) {
             LOGGER.info("[ProgressiveStages] Client received {} recipe-item locks", locks.size());
+        }
+
+        // Trigger an EMI/JEI reload on ANY change (including clear-to-empty, so formerly-hidden
+        // recipe-output items reappear) — there may be no plain [items] locks to trigger
+        // setItemLocks' reload. triggerEmiReload is cheap and guarded by EMI/JEI presence.
+        if (changed) {
+            triggerEmiReload();
         }
     }
 
