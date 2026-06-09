@@ -44,6 +44,8 @@ public final class LockDefinition {
     private final CategoryLocks crops;
     private final CategoryLocks screens;
     private final CategoryLocks loot;
+    /** [trades].locked — villager / wandering-trader offers whose RESULT item matches are hidden + blocked. */
+    private final CategoryLocks trades;
     private final CategoryLocks petsTaming;
     private final CategoryLocks petsBreeding;
     private final CategoryLocks petsCommanding;
@@ -75,6 +77,27 @@ public final class LockDefinition {
     private final List<String> allowedMousePickup;
     private final List<String> allowedInventory;
 
+    // ---- v2.0.1: transitive crafting / automation toggles (per stage) ----
+    /**
+     * When true, this stage's gating extends to any crafting recipe whose ingredients
+     * include an item this stage gates. Defaults to false to preserve prior behavior.
+     */
+    private final boolean blockCraftingWithLockedIngredients;
+    /**
+     * When true, this stage gates automated (non-player) crafting using the
+     * nearest-player check (vanilla Crafter + ProgressiveStagesAPI hook). Defaults false.
+     */
+    private final boolean blockAutomatedCrafting;
+    /** Search radius (blocks) for the nearest-player check on automated crafters. */
+    private final int crafterCheckRadius;
+
+    /**
+     * v2.0.1: cube radius (chebyshev distance, blocks) around the player to spoof
+     * ore-override target blocks. Default 8 — keeps the per-rescan cost bounded
+     * (17^3 = 4913 positions to scan at radius 8, vs 32768 at radius 16).
+     */
+    private final int oreSpoofRadius;
+
     // ---- v2.0: gates the minecraft: namespace for this stage.
     private final boolean minecraftNamespace;
 
@@ -90,6 +113,7 @@ public final class LockDefinition {
         this.crops         = b.crops;
         this.screens       = b.screens;
         this.loot          = b.loot;
+        this.trades        = b.trades;
         this.petsTaming    = b.petsTaming;
         this.petsBreeding  = b.petsBreeding;
         this.petsCommanding = b.petsCommanding;
@@ -108,6 +132,10 @@ public final class LockDefinition {
         this.allowedHotbar       = List.copyOf(b.allowedHotbar);
         this.allowedMousePickup  = List.copyOf(b.allowedMousePickup);
         this.allowedInventory    = List.copyOf(b.allowedInventory);
+        this.blockCraftingWithLockedIngredients = b.blockCraftingWithLockedIngredients;
+        this.blockAutomatedCrafting             = b.blockAutomatedCrafting;
+        this.crafterCheckRadius                 = b.crafterCheckRadius;
+        this.oreSpoofRadius                     = b.oreSpoofRadius;
         this.minecraftNamespace  = b.minecraftNamespace;
         this.unlocks             = b.unlocks != null ? b.unlocks : UnlockGateLists.EMPTY;
     }
@@ -125,6 +153,7 @@ public final class LockDefinition {
     public CategoryLocks crops()        { return crops; }
     public CategoryLocks screens()      { return screens; }
     public CategoryLocks loot()         { return loot; }
+    public CategoryLocks trades()       { return trades; }
     public CategoryLocks petsTaming()     { return petsTaming; }
     public CategoryLocks petsBreeding()   { return petsBreeding; }
     public CategoryLocks petsCommanding() { return petsCommanding; }
@@ -146,6 +175,16 @@ public final class LockDefinition {
     public List<String> allowedMousePickup() { return allowedMousePickup; }
     public List<String> allowedInventory()   { return allowedInventory; }
 
+    /** v2.0.1: per-stage transitive crafting toggle. */
+    public boolean blockCraftingWithLockedIngredients() { return blockCraftingWithLockedIngredients; }
+    /** v2.0.1: per-stage automated-crafting toggle. */
+    public boolean blockAutomatedCrafting() { return blockAutomatedCrafting; }
+    /** v2.0.1: per-stage automated-crafting nearest-player search radius (blocks). */
+    public int crafterCheckRadius() { return crafterCheckRadius; }
+
+    /** v2.0.1: per-stage ore-spoof cube radius (chebyshev, blocks). */
+    public int oreSpoofRadius() { return oreSpoofRadius; }
+
     /** v2.0: true if this stage gates the {@code minecraft:} namespace (shorthand for adding "minecraft" to mods). */
     public boolean minecraftNamespace() { return minecraftNamespace; }
 
@@ -154,7 +193,7 @@ public final class LockDefinition {
 
     public boolean isEmpty() {
         return items.isEmpty() && blocks.isEmpty() && fluids.isEmpty() && entities.isEmpty()
-            && enchants.isEmpty() && crops.isEmpty() && screens.isEmpty() && loot.isEmpty()
+            && enchants.isEmpty() && crops.isEmpty() && screens.isEmpty() && loot.isEmpty() && trades.isEmpty()
             && petsTaming.isEmpty() && petsBreeding.isEmpty() && petsCommanding.isEmpty() && mobSpawns.isEmpty()
             && recipeIds.isEmpty() && recipeOutputs.isEmpty()
             && lockedDimensions.isEmpty() && interactions.isEmpty()
@@ -358,6 +397,7 @@ public final class LockDefinition {
         private CategoryLocks crops = CategoryLocks.EMPTY;
         private CategoryLocks screens = CategoryLocks.EMPTY;
         private CategoryLocks loot = CategoryLocks.EMPTY;
+        private CategoryLocks trades = CategoryLocks.EMPTY;
         private CategoryLocks petsTaming = CategoryLocks.EMPTY;
         private CategoryLocks petsBreeding = CategoryLocks.EMPTY;
         private CategoryLocks petsCommanding = CategoryLocks.EMPTY;
@@ -379,6 +419,11 @@ public final class LockDefinition {
         private List<String> allowedMousePickup = new ArrayList<>();
         private List<String> allowedInventory = new ArrayList<>();
 
+        private boolean blockCraftingWithLockedIngredients = false;
+        private boolean blockAutomatedCrafting = false;
+        private int crafterCheckRadius = 32;
+        private int oreSpoofRadius = 8;
+
         private boolean minecraftNamespace = false;
         private UnlockGateLists unlocks = UnlockGateLists.EMPTY;
 
@@ -390,6 +435,7 @@ public final class LockDefinition {
         public Builder crops(CategoryLocks v)        { this.crops = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder screens(CategoryLocks v)      { this.screens = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder loot(CategoryLocks v)         { this.loot = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder trades(CategoryLocks v)       { this.trades = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder petsTaming(CategoryLocks v)     { this.petsTaming = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder petsBreeding(CategoryLocks v)   { this.petsBreeding = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder petsCommanding(CategoryLocks v) { this.petsCommanding = v != null ? v : CategoryLocks.EMPTY; return this; }
@@ -424,6 +470,21 @@ public final class LockDefinition {
         public Builder allowedHotbar(List<String> v)      { this.allowedHotbar      = v != null ? v : new ArrayList<>(); return this; }
         public Builder allowedMousePickup(List<String> v) { this.allowedMousePickup = v != null ? v : new ArrayList<>(); return this; }
         public Builder allowedInventory(List<String> v)   { this.allowedInventory   = v != null ? v : new ArrayList<>(); return this; }
+
+        public Builder blockCraftingWithLockedIngredients(boolean v) { this.blockCraftingWithLockedIngredients = v; return this; }
+        public Builder blockAutomatedCrafting(boolean v) { this.blockAutomatedCrafting = v; return this; }
+        public Builder crafterCheckRadius(int v) {
+            if (v < 8) v = 8;
+            if (v > 256) v = 256;
+            this.crafterCheckRadius = v;
+            return this;
+        }
+        public Builder oreSpoofRadius(int v) {
+            if (v < 2) v = 2;
+            if (v > 32) v = 32;
+            this.oreSpoofRadius = v;
+            return this;
+        }
 
         public Builder minecraftNamespace(boolean v) { this.minecraftNamespace = v; return this; }
         public Builder unlocks(UnlockGateLists v)    { this.unlocks = v != null ? v : UnlockGateLists.EMPTY; return this; }

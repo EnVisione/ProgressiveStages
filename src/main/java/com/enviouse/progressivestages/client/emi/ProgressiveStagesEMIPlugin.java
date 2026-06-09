@@ -84,11 +84,6 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             }
         }
 
-        if (lockedItems.isEmpty()) {
-            LOGGER.info("[ProgressiveStages] No lock data available yet, EMI will reload when lock data arrives");
-            return;
-        }
-
         Set<StageId> playerStages = ClientStageCache.getStages();
 
         // Build a set of locked item IDs for fast lookup.
@@ -102,8 +97,15 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             }
         }
 
+        // Bug fix: also hide items whose crafting recipe is gated via [recipes].locked_items.
+        // Removing the output item from EMI's index drops the item AND all its recipes, so a
+        // recipe-locked item can't be browsed or its recipe seen (it's still server-blocked from
+        // crafting). recipe-id locks (locked_ids) are handled separately in hideLockedRecipes().
+        lockedItemIds.addAll(ClientLockCache.getRecipeOutputLockedItemIds());
+
         if (lockedItemIds.isEmpty()) {
-            LOGGER.info("[ProgressiveStages] EMI: No locked items to hide (player has all required stages)");
+            // No items to hide, but fluids may still be locked — fall through to the fluid pass.
+            hideLockedFluids(registry, playerStages);
             return;
         }
 
@@ -261,12 +263,12 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
     }
 
     /**
-     * Hide recipes that are locked for the current player.
-     * This covers recipe-only locks where the output item itself is NOT locked —
-     * the item remains visible in EMI's index but its crafting recipe is removed.
+     * Hide recipes locked by RECIPE ID ([recipes].locked_ids) for the current player.
      *
-     * For items that ARE also locked, hideLockedStacks() already hides them from the
-     * index entirely (including all associated recipes), so no double-work needed.
+     * <p>Recipe-OUTPUT locks ([recipes].locked_items) and plain [items] locks are handled in
+     * hideLockedStacks(), which removes the output item from EMI's index entirely (taking all
+     * its recipes with it). This method covers the remaining case: a specific recipe gated by
+     * its ID, where the output item itself stays visible (it may have other, unlocked recipes).
      */
     private void hideLockedRecipes(EmiRegistry registry) {
         LockRegistry lockReg = LockRegistry.getInstance();
@@ -298,13 +300,9 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             }
         }
 
-        // Build set of locked output item IDs (recipe_items = [...] locks)
-        Set<ResourceLocation> lockedRecipeItemIds = new java.util.HashSet<>();
-        for (var entry : allRecipeItemLocks.entrySet()) {
-            if (!playerStages.contains(entry.getValue())) {
-                lockedRecipeItemIds.add(entry.getKey());
-            }
-        }
+        // Build set of locked output item IDs ([recipes].locked_items) — multi-stage aware via the
+        // shared helper (same source hideLockedStacks uses to hide the output items themselves).
+        Set<ResourceLocation> lockedRecipeItemIds = ClientLockCache.getRecipeOutputLockedItemIds();
 
         if (lockedRecipeIds.isEmpty() && lockedRecipeItemIds.isEmpty()) {
             return;

@@ -1,10 +1,8 @@
 package com.enviouse.progressivestages.mixin;
 
 import com.enviouse.progressivestages.common.config.StageConfig;
-import com.enviouse.progressivestages.common.lock.LockRegistry;
-import com.enviouse.progressivestages.server.enforcement.EnchantEnforcer;
+import com.enviouse.progressivestages.server.enforcement.TradeEnforcer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.trading.MerchantOffer;
 import net.minecraft.world.item.trading.MerchantOffers;
 import org.spongepowered.asm.mixin.Mixin;
@@ -42,12 +40,15 @@ public abstract class ServerPlayerMerchantMixin {
         if (original == null || original.isEmpty()) return original;
 
         ServerPlayer self = (ServerPlayer) (Object) this;
+        // Fast bypass paths (TradeEnforcer re-checks per offer, but skip the copy work entirely).
+        if (!StageConfig.isBlockTrades()) return original;
         if (StageConfig.isAllowCreativeBypass() && self.isCreative()) return original;
+        if (self.isSpectator()) return original;
 
         MerchantOffers filtered = null;
         for (int i = 0; i < original.size(); i++) {
             MerchantOffer offer = original.get(i);
-            if (isOfferLocked(self, offer)) {
+            if (TradeEnforcer.isOfferLocked(self, offer)) {
                 if (filtered == null) {
                     filtered = new MerchantOffers();
                     for (int j = 0; j < i; j++) filtered.add(original.get(j));
@@ -57,17 +58,5 @@ public abstract class ServerPlayerMerchantMixin {
             }
         }
         return filtered == null ? original : filtered;
-    }
-
-    private static boolean isOfferLocked(ServerPlayer player, MerchantOffer offer) {
-        if (offer == null) return false;
-        ItemStack result = offer.getResult();
-        if (result.isEmpty()) return false;
-
-        // v2.0: multi-stage — blocked when ANY gating stage is missing for the result item.
-        if (LockRegistry.getInstance().isItemBlockedFor(player, result.getItem())) {
-            return true;
-        }
-        return EnchantEnforcer.anyEnchantLocked(player, result);
     }
 }

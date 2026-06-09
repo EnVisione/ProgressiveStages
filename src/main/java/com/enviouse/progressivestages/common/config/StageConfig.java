@@ -151,6 +151,13 @@ public class StageConfig {
         .comment("Block opening locked containers/GUIs (screens category)")
         .define("enforcement.block_screen_open", true);
 
+    private static final ModConfigSpec.BooleanValue BLOCK_TRADES = BUILDER
+        .comment("Hide AND block villager / wandering-trader offers whose result item is locked",
+                 "(trades category, plus item/enchant-locked results). Server-authoritative: a",
+                 "modified client still can't complete a hidden trade. Set false to disable all",
+                 "trade gating.")
+        .define("enforcement.block_trades", true);
+
     private static final ModConfigSpec.BooleanValue BLOCK_CROP_GROWTH = BUILDER
         .comment("Block planting, bonemealing, and random-tick growth of locked crops.")
         .define("enforcement.block_crop_growth", true);
@@ -614,6 +621,9 @@ public class StageConfig {
     private static final ModConfigSpec.ConfigValue<String> MSG_TYPE_LABEL_SCREEN_ITEM = BUILDER
         .comment("Type label used for blocked item-opened GUIs (backpacks, portable crafting, etc.) in chat messages.")
         .define("messages.type_label_screen_item", "This item's GUI");
+    private static final ModConfigSpec.ConfigValue<String> MSG_TYPE_LABEL_TRADE = BUILDER
+        .comment("Type label used for blocked villager/merchant trades in chat messages.")
+        .define("messages.type_label_trade", "This trade");
     private static final ModConfigSpec.ConfigValue<String> MSG_TYPE_LABEL_STRUCTURE_CONTENTS = BUILDER
         .comment("Type label used for blocked structure contents (containers inside locked structures) in chat messages.")
         .define("messages.type_label_structure_contents", "This structure's contents");
@@ -716,6 +726,7 @@ public class StageConfig {
     private static int mobSpawnCheckRadius;
     private static boolean blockEnchants;
     private static boolean blockScreenOpen;
+    private static boolean blockTrades;
     private static boolean blockCropGrowth;
     private static boolean blockPetInteract;
     private static boolean blockLootDrops;
@@ -827,6 +838,7 @@ public class StageConfig {
     private static String msgTypeLabelEnchantment;
     private static String msgTypeLabelScreen;
     private static String msgTypeLabelScreenItem;
+    private static String msgTypeLabelTrade;
     private static String msgTypeLabelStructureContents;
     private static String msgTypeLabelPetTaming;
     private static String msgTypeLabelPetBreeding;
@@ -872,6 +884,7 @@ public class StageConfig {
         mobSpawnCheckRadius = MOB_SPAWN_CHECK_RADIUS.get();
         blockEnchants = BLOCK_ENCHANTS.get();
         blockScreenOpen = BLOCK_SCREEN_OPEN.get();
+        blockTrades = BLOCK_TRADES.get();
         blockCropGrowth = BLOCK_CROP_GROWTH.get();
         blockPetInteract = BLOCK_PET_INTERACT.get();
         blockLootDrops = BLOCK_LOOT_DROPS.get();
@@ -979,6 +992,7 @@ public class StageConfig {
         msgTypeLabelEnchantment = MSG_TYPE_LABEL_ENCHANTMENT.get();
         msgTypeLabelScreen = MSG_TYPE_LABEL_SCREEN.get();
         msgTypeLabelScreenItem = MSG_TYPE_LABEL_SCREEN_ITEM.get();
+        msgTypeLabelTrade = MSG_TYPE_LABEL_TRADE.get();
         msgTypeLabelStructureContents = MSG_TYPE_LABEL_STRUCTURE_CONTENTS.get();
         msgTypeLabelPetTaming = MSG_TYPE_LABEL_PET_TAMING.get();
         msgTypeLabelPetBreeding = MSG_TYPE_LABEL_PET_BREEDING.get();
@@ -1044,6 +1058,7 @@ public class StageConfig {
     public static int getMobSpawnCheckRadius() { return mobSpawnCheckRadius; }
     public static boolean isBlockEnchants() { return blockEnchants; }
     public static boolean isBlockScreenOpen() { return blockScreenOpen; }
+    public static boolean isBlockTrades() { return blockTrades; }
     public static boolean isBlockCropGrowth() { return blockCropGrowth; }
     public static boolean isBlockPetInteract() { return blockPetInteract; }
     public static boolean isBlockLootDrops() { return blockLootDrops; }
@@ -1163,6 +1178,7 @@ public class StageConfig {
     public static String getMsgTypeLabelEnchantment() { return msgTypeLabelEnchantment != null ? msgTypeLabelEnchantment : "This enchantment"; }
     public static String getMsgTypeLabelScreen()          { return msgTypeLabelScreen != null ? msgTypeLabelScreen : "This screen"; }
     public static String getMsgTypeLabelScreenItem()      { return msgTypeLabelScreenItem != null ? msgTypeLabelScreenItem : "This item's GUI"; }
+    public static String getMsgTypeLabelTrade()           { return msgTypeLabelTrade != null ? msgTypeLabelTrade : "This trade"; }
     public static String getMsgTypeLabelStructureContents(){ return msgTypeLabelStructureContents != null ? msgTypeLabelStructureContents : "This structure's contents"; }
     public static String getMsgTypeLabelPetTaming()       { return msgTypeLabelPetTaming != null ? msgTypeLabelPetTaming : "Taming this pet"; }
     public static String getMsgTypeLabelPetBreeding()     { return msgTypeLabelPetBreeding != null ? msgTypeLabelPetBreeding : "Breeding this pet"; }

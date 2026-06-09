@@ -65,6 +65,7 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
         // Hide locked items if configured
         if (!StageConfig.isShowLockedRecipes()) {
             hideLockedItems();
+            hideLockedRecipesJei();
         }
 
         // Register an ingredient listener so we react to live add/remove notifications
@@ -124,8 +125,14 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
             }
         }
 
+        // Bug fix: also hide items whose crafting recipe is gated via [recipes].locked_items —
+        // removing the output item drops it AND its recipes from JEI. recipe-id locks
+        // (locked_ids) are handled separately in hideLockedRecipesJei().
+        lockedItemIds.addAll(ClientLockCache.getRecipeOutputLockedItemIds());
+
         if (lockedItemIds.isEmpty()) {
-            LOGGER.info("[ProgressiveStages] JEI: No locked items to hide");
+            // Nothing to hide as items, but fluids may still be locked.
+            hideLockedFluids();
             return;
         }
 
@@ -279,16 +286,20 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
         }
 
         try {
-            // Build sets of locked and unlocked item IDs
-            // v2.0: multi-stage — locked iff player is missing ANY gating stage.
-            var lockedItems = ClientLockCache.getAllItemLocks();
+            // Build sets of locked and unlocked item IDs.
+            // v2.0: multi-stage — locked iff player is missing ANY gating stage, considering BOTH
+            // plain [items] locks AND [recipes].locked_items recipe-output locks (so a recipe-locked
+            // item is hidden, and re-shown once unlocked).
             Set<ResourceLocation> lockedItemIds = new java.util.HashSet<>();
             Set<ResourceLocation> unlockedItemIds = new java.util.HashSet<>();
 
-            for (var entry : lockedItems.entrySet()) {
-                ResourceLocation itemId = entry.getKey();
+            Set<ResourceLocation> candidateIds = new java.util.HashSet<>(ClientLockCache.getAllItemLocks().keySet());
+            candidateIds.addAll(ClientLockCache.getAllRecipeItemLocks().keySet());
 
-                if (ClientLockCache.playerOwnsAllStagesFor(itemId)) {
+            for (ResourceLocation itemId : candidateIds) {
+                boolean owned = ClientLockCache.playerOwnsAllStagesFor(itemId)
+                             && ClientLockCache.playerOwnsAllStagesForRecipeOutput(itemId);
+                if (owned) {
                     unlockedItemIds.add(itemId);
                 } else if (!StageConfig.isShowLockedRecipes()) {
                     lockedItemIds.add(itemId);
@@ -366,10 +377,94 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
                 LOGGER.debug("[ProgressiveStages] refreshJei extended sweep failed: {}", t.getMessage());
             }
 
+            // Reapply / release recipe-id recipe hiding ([recipes].locked_ids).
+            hideLockedRecipesJei();
+
             // Force JEI to rebuild its filter so removed entries actually disappear.
             notifyJeiIngredientFilter(jeiRuntime);
         } catch (Exception e) {
             LOGGER.debug("[ProgressiveStages] Error refreshing JEI: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Maps a vanilla minecraft RecipeType to the corresponding JEI RecipeType, so a recipe
+     * locked by ID ([recipes].locked_ids) can be hidden via {@code IRecipeManager.hideRecipes}.
+     * Only vanilla recipe types are mappable; modded recipe types are skipped (their recipes
+     * can't be resolved to a JEI RecipeType from here). The output-item path covers the rest.
+     */
+    private static final java.util.Map<net.minecraft.world.item.crafting.RecipeType<?>, mezz.jei.api.recipe.RecipeType<?>>
+        VANILLA_JEI_RECIPE_TYPES = buildVanillaRecipeTypeMap();
+
+    private static java.util.Map<net.minecraft.world.item.crafting.RecipeType<?>, mezz.jei.api.recipe.RecipeType<?>> buildVanillaRecipeTypeMap() {
+        java.util.Map<net.minecraft.world.item.crafting.RecipeType<?>, mezz.jei.api.recipe.RecipeType<?>> m = new java.util.HashMap<>();
+        try {
+            m.put(net.minecraft.world.item.crafting.RecipeType.CRAFTING,         mezz.jei.api.constants.RecipeTypes.CRAFTING);
+            m.put(net.minecraft.world.item.crafting.RecipeType.SMELTING,         mezz.jei.api.constants.RecipeTypes.SMELTING);
+            m.put(net.minecraft.world.item.crafting.RecipeType.BLASTING,         mezz.jei.api.constants.RecipeTypes.BLASTING);
+            m.put(net.minecraft.world.item.crafting.RecipeType.SMOKING,          mezz.jei.api.constants.RecipeTypes.SMOKING);
+            m.put(net.minecraft.world.item.crafting.RecipeType.CAMPFIRE_COOKING, mezz.jei.api.constants.RecipeTypes.CAMPFIRE_COOKING);
+            m.put(net.minecraft.world.item.crafting.RecipeType.STONECUTTING,     mezz.jei.api.constants.RecipeTypes.STONECUTTING);
+            m.put(net.minecraft.world.item.crafting.RecipeType.SMITHING,         mezz.jei.api.constants.RecipeTypes.SMITHING);
+        } catch (Throwable ignored) {}
+        return m;
+    }
+
+    /**
+     * Hide (or un-hide) recipes locked by RECIPE ID ([recipes].locked_ids), mirroring the EMI
+     * plugin. Recipe-output locks ([recipes].locked_items) and [items] locks are handled by the
+     * item-hiding path (hiding the output item drops its recipes too). Best-effort and defensive:
+     * unmappable (modded) recipe types are skipped.
+     */
+    private static void hideLockedRecipesJei() {
+        if (jeiRuntime == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+
+        var recipeLocks = ClientLockCache.getAllRecipeLocks();
+        if (recipeLocks.isEmpty()) {
+            try { recipeLocks = LockRegistry.getInstance().getAllRecipeLocks(); } catch (Throwable ignored) {}
+        }
+        if (recipeLocks.isEmpty()) return;
+
+        try {
+            var rm = jeiRuntime.getRecipeManager();
+            var vanillaRm = mc.level.getRecipeManager();
+            boolean showAll = StageConfig.isShowLockedRecipes() || ClientLockCache.isCreativeBypass();
+
+            java.util.Map<net.minecraft.world.item.crafting.RecipeType<?>, List<net.minecraft.world.item.crafting.RecipeHolder<?>>> toHide = new java.util.HashMap<>();
+            java.util.Map<net.minecraft.world.item.crafting.RecipeType<?>, List<net.minecraft.world.item.crafting.RecipeHolder<?>>> toShow = new java.util.HashMap<>();
+
+            for (var entry : recipeLocks.entrySet()) {
+                var holderOpt = vanillaRm.byKey(entry.getKey());
+                if (holderOpt.isEmpty()) continue;
+                net.minecraft.world.item.crafting.RecipeHolder<?> holder = holderOpt.get();
+                net.minecraft.world.item.crafting.RecipeType<?> mcType = holder.value().getType();
+                boolean owned = showAll || ClientStageCache.hasStage(entry.getValue());
+                (owned ? toShow : toHide).computeIfAbsent(mcType, k -> new ArrayList<>()).add(holder);
+            }
+
+            applyRecipeVisibility(rm, toHide, true);
+            applyRecipeVisibility(rm, toShow, false);
+        } catch (Throwable t) {
+            LOGGER.debug("[ProgressiveStages] JEI recipe-id hide failed: {}", t.getMessage());
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void applyRecipeVisibility(
+            mezz.jei.api.recipe.IRecipeManager rm,
+            java.util.Map<net.minecraft.world.item.crafting.RecipeType<?>, List<net.minecraft.world.item.crafting.RecipeHolder<?>>> byType,
+            boolean hide) {
+        for (var e : byType.entrySet()) {
+            mezz.jei.api.recipe.RecipeType<?> jeiType = VANILLA_JEI_RECIPE_TYPES.get(e.getKey());
+            if (jeiType == null) continue; // non-vanilla recipe type — not mappable to JEI here
+            try {
+                if (hide) rm.hideRecipes((mezz.jei.api.recipe.RecipeType) jeiType, (Collection) e.getValue());
+                else      rm.unhideRecipes((mezz.jei.api.recipe.RecipeType) jeiType, (Collection) e.getValue());
+            } catch (Throwable t) {
+                LOGGER.debug("[ProgressiveStages] JEI {}hideRecipes failed for {}: {}", hide ? "" : "un", e.getKey(), t.getMessage());
+            }
         }
     }
 

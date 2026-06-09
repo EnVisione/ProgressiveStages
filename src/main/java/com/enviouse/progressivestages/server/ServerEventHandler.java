@@ -268,6 +268,11 @@ public class ServerEventHandler {
             return;
         }
 
+        // v2.0.2: ore-spoof now runs entirely via chunk-rewriter mixins. No
+        // per-tick scan needed — the masquerade is baked into chunk packets at
+        // send time. The break-speed / harvest-check / drop-replacement hooks
+        // below still apply.
+
         UUID playerId = player.getUUID();
         long currentTime = player.level().getGameTime();
 
@@ -377,6 +382,13 @@ public class ServerEventHandler {
             }
             if (!StructureEnforcer.canPlaceBlock(player, pos)) {
                 event.setCanceled(true);
+                return;
+            }
+            // v2.0.1: mark this position as player-placed so ore-spoof skips it forever
+            if (com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()
+                    && event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+                PlayerPlacedBlocksData.get(sl).markPlayerPlaced(event.getPos());
+                OreSpoofManager.get().onBlockChanged(sl, event.getPos());
             }
         }
     }
@@ -410,6 +422,14 @@ public class ServerEventHandler {
             }
             if (!StructureEnforcer.canBreakBlock(player, pos)) {
                 event.setCanceled(true);
+                return;
+            }
+
+            // v2.0.1: clear player-placed tracking on break + invalidate spoof cache
+            if (com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()
+                    && event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
+                PlayerPlacedBlocksData.get(sl).clearPlayerPlaced(pos);
+                OreSpoofManager.get().onBlockChanged(sl, pos);
             }
         }
     }
@@ -674,6 +694,25 @@ public class ServerEventHandler {
         // Crop-harvest filter — keep only seeds when the broken block is a locked crop.
         LootEnforcer.filterCropHarvest(event.getDrops(), sl, event.getState().getBlock(),
             pos.getX(), pos.getY(), pos.getZ(), breaker);
+
+        // v2.0.1: ore-spoof — replace drops with displayAs loot when the block was
+        // currently spoofed for the breaker. Fast-path: skip when feature unused.
+        if (com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()
+                && breaker instanceof ServerPlayer sp) {
+            OreSpoofDropHandler.maybeReplaceDrops(event, sp, sl, pos);
+
+            // v2.0.3: also suppress XP. If we replaced the drops (e.g. real
+            // diamond_ore → drop_as cobblestone), the event still carries the
+            // real block's XP yield (diamond_ore drops 3-7 XP). Zero it out so
+            // the masquerade is complete. We only zero when the real block has
+            // an active override for this player, which is the same condition
+            // OreSpoofDropHandler used to decide to replace.
+            var ov = com.enviouse.progressivestages.common.lock.LockRegistry.getInstance()
+                .findActiveOreOverride(sp, event.getState().getBlock());
+            if (ov.isPresent()) {
+                event.setDroppedExperience(0);
+            }
+        }
     }
 
     // ============ 2.0: Fluid Enforcement ============
@@ -721,6 +760,85 @@ public class ServerEventHandler {
             lastRegionCheck.remove(player.getUUID());
             ItemEnforcer.clearCooldowns(player.getUUID());
             DimensionEnforcer.cleanupPlayer(player.getUUID());
+            OreSpoofManager.get().onPlayerLogout(player);
         }
+    }
+
+    // ============ v2.0.1: ore-spoof — chunk send + break-speed + harvest-check ============
+
+    /**
+     * v2.0.2: chunk-rewriter handles initial visibility entirely at packet send
+     * time (see ClientboundLevelChunkPacketDataMixin). This ChunkWatchEvent.Sent
+     * subscriber is intentionally absent — the previous per-position block-update
+     * burst it produced was the main TPS cost in v2.0.1 and is no longer needed.
+     * The chunk-rewriter produces a single, normal-shape chunk packet with the
+     * spoof already in the palette.
+     */
+
+    /**
+     * Client-server mining timer agreement: when the player breaks a spoofed block,
+     * the client uses the displayAs block's hardness (e.g. stone = 0.5) but the
+     * server uses the real block (e.g. iron_ore = 3.0). The server rejects "early"
+     * break attempts, causing "block doesn't break" or "takes forever to break".
+     * Adjust server-side break speed to match what the client expects.
+     */
+    @SubscribeEvent
+    public static void onBreakSpeed(net.neoforged.neoforge.event.entity.player.PlayerEvent.BreakSpeed event) {
+        if (!com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()) return;
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        var posOpt = event.getPosition();
+        if (posOpt.isEmpty()) return;
+        var realBlock = event.getState().getBlock();
+        var ov = com.enviouse.progressivestages.common.lock.LockRegistry.getInstance()
+            .findActiveOreOverride(sp, realBlock);
+        if (ov.isEmpty()) return;
+        var displayBlockId = ov.get().displayAs;
+        var displayBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(displayBlockId);
+        if (displayBlock == null) return;
+        // Recompute speed against the displayAs block so client and server agree.
+        // getDestroySpeed mirrors Player.getDestroySpeed; we just swap the BlockState.
+        net.minecraft.world.level.block.state.BlockState fake = displayBlock.defaultBlockState();
+        float speed = sp.getDestroySpeed(fake);
+        event.setNewSpeed(speed);
+    }
+
+    /**
+     * The displayAs block may be harvestable by a weaker tool than the real block
+     * (e.g. stone harvestable by wood pickaxe, iron_ore requires stone). Without
+     * this hook, an empty-handed or wood-pick player mining "stone" (real: iron_ore)
+     * would have the server say "can't harvest" → no drops at all. We force
+     * canHarvest based on what the displayAs block needs.
+     */
+    @SubscribeEvent
+    public static void onHarvestCheck(net.neoforged.neoforge.event.entity.player.PlayerEvent.HarvestCheck event) {
+        if (!com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()) return;
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        var realBlock = event.getTargetBlock().getBlock();
+        var ov = com.enviouse.progressivestages.common.lock.LockRegistry.getInstance()
+            .findActiveOreOverride(sp, realBlock);
+        if (ov.isEmpty()) return;
+        var displayBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(ov.get().displayAs);
+        if (displayBlock == null) return;
+        net.minecraft.world.level.block.state.BlockState fake = displayBlock.defaultBlockState();
+        // hasCorrectToolForDrops: does the player's held tool harvest the fake block?
+        boolean fakeHarvestable = sp.hasCorrectToolForDrops(fake);
+        event.setCanHarvest(fakeHarvestable);
+    }
+
+    /**
+     * v2.0.3: when a player switches game mode (survival → creative, etc.),
+     * resend any chunks in view containing spoofable targets. Creative players
+     * with allow_creative_bypass = true should immediately see the real ore;
+     * switching back to survival should re-hide it.
+     */
+    @SubscribeEvent
+    public static void onChangeGameMode(
+            net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangeGameModeEvent event) {
+        if (!com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()) return;
+        if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        // Defer to next tick: the gamemode change isn't fully applied until
+        // after this event returns, and resendChunksInView's creative-bypass
+        // check would still read the OLD mode.
+        sp.server.execute(() -> OreSpoofManager.get().resendChunksInView(sp));
     }
 }

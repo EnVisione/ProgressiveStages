@@ -9,9 +9,23 @@
     "ResultSlotMixin",
     "EnchantmentMenuMixin",
     "ServerPlayerMerchantMixin",
-    "AnvilMenuMixin"
+    "MerchantContainerMixin",
+    "ServerGamePacketListenerMerchantMixin",
+    "AnvilMenuMixin",
+    "SmithingMenuMixin",
+    "StonecutterMenuMixin",
+    "LoomMenuMixin",
+    "CartographyTableMenuMixin",
+    "CrafterBlockMixin",
+    "PlayerChunkSenderMixin",
+    "ClientboundLevelChunkPacketDataMixin",
+    "LevelChunkSectionAccessor",
+    "ServerCommonPacketListenerImplMixin",
+    "ClientboundSectionBlocksUpdatePacketAccessor"
   ],
-  "client": [],
+  "client": [
+    "client.ClientLightUpdateMixin"
+  ],
   "injectors": {
     "defaultRequire": 0
   },

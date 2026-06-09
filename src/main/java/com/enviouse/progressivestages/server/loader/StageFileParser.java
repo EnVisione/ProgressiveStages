@@ -155,6 +155,7 @@ public final class StageFileParser {
         b.crops(        parseCategory(config, "crops"));
         b.screens(      parseCategory(config, "screens"));
         b.loot(         parseCategory(config, "loot"));
+        b.trades(       parseCategory(config, "trades"));
         b.mobSpawns(    parseCategoryField(config, "mobs", "locked_spawns"));
 
         // pets: two named lists in the same table
@@ -403,6 +404,16 @@ public final class StageFileParser {
         b.allowedHotbar(stringList(section, "allowed_hotbar"));
         b.allowedMousePickup(stringList(section, "allowed_mouse_pickup"));
         b.allowedInventory(stringList(section, "allowed_inventory"));
+
+        // v2.0.1: transitive crafting / automated crafting toggles
+        Object bclI = section.get("block_crafting_with_locked_ingredients");
+        if (bclI instanceof Boolean bool) b.blockCraftingWithLockedIngredients(bool);
+        Object bAC = section.get("block_automated_crafting");
+        if (bAC instanceof Boolean bool) b.blockAutomatedCrafting(bool);
+        Object radius = section.get("crafter_check_radius");
+        if (radius instanceof Number n) b.crafterCheckRadius(n.intValue());
+        Object oreRadius = section.get("ore_spoof_radius");
+        if (oreRadius instanceof Number n) b.oreSpoofRadius(n.intValue());
     }
 
     // -------------------- helpers --------------------

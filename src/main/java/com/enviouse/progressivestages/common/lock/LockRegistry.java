@@ -57,6 +57,7 @@ public final class LockRegistry {
     /** Mirror of {@link #screenCat} typed to Item, so item-opened GUIs (backpacks, portable crafting) also gate. */
     private final ResolvedCategory<Item>              screenItemCat   = new ResolvedCategory<>(Registries.ITEM);
     private final ResolvedCategory<Item>              lootCat         = new ResolvedCategory<>(Registries.ITEM);
+    private final ResolvedCategory<Item>              tradeCat        = new ResolvedCategory<>(Registries.ITEM);
     private final ResolvedCategory<EntityType<?>>     petTamingCat      = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petBreedingCat    = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petCommandingCat  = new ResolvedCategory<>(Registries.ENTITY_TYPE);
@@ -87,6 +88,25 @@ public final class LockRegistry {
     // ------- v2.0: per-stage [unlocks] carve-out lists -------
     private final Map<StageId, LockDefinition.UnlockGateLists> stageUnlocks = new ConcurrentHashMap<>();
 
+    // ------- v2.0.1: per-stage transitive crafting / automated-craft opt-in maps -------
+    /** Stages that have block_crafting_with_locked_ingredients = true. */
+    private final Set<StageId> ingredientGatingStages = ConcurrentHashMap.newKeySet();
+    /** Stages that have block_automated_crafting = true. */
+    private final Set<StageId> autoCraftGatingStages = ConcurrentHashMap.newKeySet();
+    /** Stage -> crafter_check_radius. Only present for stages in autoCraftGatingStages. */
+    private final Map<StageId, Integer> stageCrafterRadius = new ConcurrentHashMap<>();
+    /** Fast-path: max radius across all opted-in stages, computed at register time. */
+    private volatile int maxCrafterCheckRadius = 32;
+
+    // ------- v2.0.1: ore-override fast lookup + per-stage spoof radius -------
+    /** Block → list of override entries that target it. Built at registerStage time. */
+    private final Map<net.minecraft.world.level.block.Block, java.util.List<OreOverrideEntry>>
+        oreOverrideByTarget = new ConcurrentHashMap<>();
+    /** Stage → ore_spoof_radius (only stages that actually have ore overrides). */
+    private final Map<StageId, Integer> stageOreSpoofRadius = new ConcurrentHashMap<>();
+    /** Fast-path: max ore-spoof radius across all opted-in stages. */
+    private volatile int maxOreSpoofRadius = 0;
+
     // ------- caches -------
     private final Map<Item, Optional<StageId>> itemStageCache = new ConcurrentHashMap<>();
     private Map<ResourceLocation, StageId> resolvedItemLocksCache;
@@ -104,7 +124,7 @@ public final class LockRegistry {
 
     public void clear() {
         itemCat.clear(); blockCat.clear(); fluidCat.clear(); entityCat.clear(); spawnCat.clear();
-        enchantCat.clear(); cropCat.clear(); screenCat.clear(); screenItemCat.clear(); lootCat.clear();
+        enchantCat.clear(); cropCat.clear(); screenCat.clear(); screenItemCat.clear(); lootCat.clear(); tradeCat.clear();
         petTamingCat.clear(); petBreedingCat.clear(); petCommandingCat.clear();
         recipeIdCat.clear(); recipeOutputCat.clear();
         dimensionLocks.clear();
@@ -118,6 +138,13 @@ public final class LockRegistry {
         mousePickupExemptions.clear(); inventoryExemptions.clear();
         vanillaNamespaceGatingStages.clear();
         stageUnlocks.clear();
+        ingredientGatingStages.clear();
+        autoCraftGatingStages.clear();
+        stageCrafterRadius.clear();
+        maxCrafterCheckRadius = 32;
+        oreOverrideByTarget.clear();
+        stageOreSpoofRadius.clear();
+        maxOreSpoofRadius = 0;
         clearCache();
     }
 
@@ -144,6 +171,7 @@ public final class LockRegistry {
         screenCat.register(locks.screens(), id);
         screenItemCat.register(locks.screens(), id);
         lootCat.register(locks.loot(), id);
+        tradeCat.register(locks.trades(), id);
         petTamingCat.register(locks.petsTaming(), id);
         petBreedingCat.register(locks.petsBreeding(), id);
         petCommandingCat.register(locks.petsCommanding(), id);
@@ -169,7 +197,25 @@ public final class LockRegistry {
         }
 
         for (LockDefinition.OreOverride o : locks.oreOverrides()) {
-            oreOverrides.add(new OreOverrideEntry(o.target(), o.displayAs(), o.dropAs(), id));
+            OreOverrideEntry entry = new OreOverrideEntry(o.target(), o.displayAs(), o.dropAs(), id);
+            oreOverrides.add(entry);
+            if (o.target() != null) {
+                // Resolve target block once now (still in registry-warm phase). Skip silently
+                // if the id doesn't resolve — could be a mod block that isn't present.
+                net.minecraft.world.level.block.Block tgt =
+                    BuiltInRegistries.BLOCK.get(o.target());
+                if (tgt != null && tgt != net.minecraft.world.level.block.Blocks.AIR) {
+                    oreOverrideByTarget
+                        .computeIfAbsent(tgt, k -> new java.util.ArrayList<>())
+                        .add(entry);
+                }
+            }
+        }
+        if (locks.oreSpoofRadius() > 0) {
+            stageOreSpoofRadius.put(id, locks.oreSpoofRadius());
+            if (locks.oreSpoofRadius() > maxOreSpoofRadius) {
+                maxOreSpoofRadius = locks.oreSpoofRadius();
+            }
         }
 
         structures = structures.merge(locks.structures(), id);
@@ -204,6 +250,17 @@ public final class LockRegistry {
         LockDefinition.UnlockGateLists u = locks.unlocks();
         if (u != null && !u.isEmpty()) {
             stageUnlocks.put(id, u);
+        }
+
+        // v2.0.1: per-stage transitive crafting / automated-craft toggles
+        if (locks.blockCraftingWithLockedIngredients()) {
+            ingredientGatingStages.add(id);
+        }
+        if (locks.blockAutomatedCrafting()) {
+            autoCraftGatingStages.add(id);
+            int r = locks.crafterCheckRadius();
+            stageCrafterRadius.put(id, r);
+            if (r > maxCrafterCheckRadius) maxCrafterCheckRadius = r;
         }
 
         LOGGER.debug("Registered locks for stage: {}", id);
@@ -892,6 +949,26 @@ public final class LockRegistry {
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
 
+    /** [trades] — gating stages for a villager/merchant offer whose RESULT is {@code item}. */
+    public Set<StageId> getRequiredStagesForTrade(Item item) {
+        if (item == null) return Set.of();
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        Set<StageId> raw = tradeCat.findStages(id, item.builtInRegistryHolder());
+        return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
+    }
+
+    public boolean isTradeBlockedFor(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return false;
+        Set<StageId> gating = getRequiredStagesForTrade(item);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForTrade(net.minecraft.server.level.ServerPlayer player, Item item) {
+        if (player == null || item == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForTrade(item));
+    }
+
     public Set<StageId> getRequiredStagesForPetTaming(EntityType<?> type) {
         if (type == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
@@ -1280,6 +1357,188 @@ public final class LockRegistry {
             this.def = def;
             this.requiredStage = requiredStage;
         }
+    }
+
+    // ================================================================
+    // v2.0.1: transitive crafting / automated-craft helpers
+    // ================================================================
+
+    /** True if at least one stage has opted into ingredient-transitive crafting gating. */
+    public boolean isIngredientGatingActive() {
+        return !ingredientGatingStages.isEmpty();
+    }
+
+    /** True if at least one stage has opted into automated-craft gating. */
+    public boolean isAutoCraftGatingActive() {
+        return !autoCraftGatingStages.isEmpty();
+    }
+
+    /** Stages that have block_crafting_with_locked_ingredients = true. Read-only. */
+    public Set<StageId> getIngredientGatingStages() {
+        return Collections.unmodifiableSet(ingredientGatingStages);
+    }
+
+    /** Stages that have block_automated_crafting = true. Read-only. */
+    public Set<StageId> getAutoCraftGatingStages() {
+        return Collections.unmodifiableSet(autoCraftGatingStages);
+    }
+
+    /** Per-stage automated-craft radius (0 if not opted in). */
+    public int getCrafterCheckRadius(StageId id) {
+        Integer r = stageCrafterRadius.get(id);
+        return r == null ? 0 : r;
+    }
+
+    /** Max radius across all auto-craft opted-in stages — for nearest-player precheck. */
+    public int getMaxCrafterCheckRadius() {
+        return maxCrafterCheckRadius;
+    }
+
+    /**
+     * Test if the given player is missing a stage that (a) gates one of the ingredient
+     * items and (b) has opted into block_crafting_with_locked_ingredients.
+     *
+     * <p>Fast path: if no stage is opted in, returns {@link Optional#empty()} immediately.
+     *
+     * @param player the player attempting to craft
+     * @param ingredients distinct ingredient items (caller should dedupe via Set when feasible)
+     * @return the first offending (stage, item) pair, or empty if not blocked
+     */
+    public Optional<IngredientBlockResult> firstBlockingIngredientStage(
+            net.minecraft.server.level.ServerPlayer player,
+            java.util.Collection<Item> ingredients) {
+        if (player == null || ingredients == null || ingredients.isEmpty()) return Optional.empty();
+        if (ingredientGatingStages.isEmpty()) return Optional.empty();
+        com.enviouse.progressivestages.common.stage.StageManager sm =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+        for (Item ing : ingredients) {
+            if (ing == null) continue;
+            Set<StageId> gating = getRequiredStages(ing);
+            if (gating.isEmpty()) continue;
+            for (StageId s : gating) {
+                if (!ingredientGatingStages.contains(s)) continue;
+                if (!sm.hasStage(player, s)) {
+                    return Optional.of(new IngredientBlockResult(s, ing));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Variant for automated-craft gating. Same as {@link #firstBlockingIngredientStage}
+     * but only stages opted into block_automated_crafting are consulted, and the player
+     * is the nearest-player surrogate (caller resolves who that is). Output item is also
+     * considered as a gating source (treated as an ingredient for the predicate).
+     */
+    public Optional<IngredientBlockResult> firstBlockingAutoCraftStage(
+            net.minecraft.server.level.ServerPlayer nearest,
+            java.util.Collection<Item> ingredients,
+            Item output,
+            net.minecraft.resources.ResourceLocation recipeId) {
+        if (nearest == null) return Optional.empty();
+        if (autoCraftGatingStages.isEmpty()) return Optional.empty();
+        com.enviouse.progressivestages.common.stage.StageManager sm =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+
+        // Output item gating
+        if (output != null) {
+            Set<StageId> gating = getRequiredStages(output);
+            for (StageId s : gating) {
+                if (!autoCraftGatingStages.contains(s)) continue;
+                if (!sm.hasStage(nearest, s)) return Optional.of(new IngredientBlockResult(s, output));
+            }
+            // recipe_items (locked_items) gating for the output
+            Set<StageId> rg = getRequiredStagesForRecipeByOutput(output);
+            for (StageId s : rg) {
+                if (!autoCraftGatingStages.contains(s)) continue;
+                if (!sm.hasStage(nearest, s)) return Optional.of(new IngredientBlockResult(s, output));
+            }
+        }
+
+        // Recipe id gating
+        if (recipeId != null) {
+            Set<StageId> rg = getRequiredStagesForRecipe(recipeId);
+            for (StageId s : rg) {
+                if (!autoCraftGatingStages.contains(s)) continue;
+                if (!sm.hasStage(nearest, s)) return Optional.of(new IngredientBlockResult(s, output));
+            }
+        }
+
+        // Ingredients
+        if (ingredients != null) {
+            for (Item ing : ingredients) {
+                if (ing == null) continue;
+                Set<StageId> gating = getRequiredStages(ing);
+                if (gating.isEmpty()) continue;
+                for (StageId s : gating) {
+                    if (!autoCraftGatingStages.contains(s)) continue;
+                    if (!sm.hasStage(nearest, s)) {
+                        return Optional.of(new IngredientBlockResult(s, ing));
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** Holder for the first (stage, item) pair that caused an ingredient/auto block. */
+    public static final class IngredientBlockResult {
+        public final StageId stage;
+        public final Item offendingItem;
+        public IngredientBlockResult(StageId stage, Item offendingItem) {
+            this.stage = stage;
+            this.offendingItem = offendingItem;
+        }
+    }
+
+    // ================================================================
+    // v2.0.1: ore-override (spoof) helpers
+    // ================================================================
+
+    /** True if at least one stage has any ore overrides registered. */
+    public boolean isOreSpoofActive() {
+        return !oreOverrideByTarget.isEmpty();
+    }
+
+    /** Max ore-spoof radius across all stages with overrides. */
+    public int getMaxOreSpoofRadius() {
+        return maxOreSpoofRadius;
+    }
+
+    /** Per-stage ore-spoof radius (0 if not opted in). */
+    public int getOreSpoofRadius(StageId id) {
+        Integer r = stageOreSpoofRadius.get(id);
+        return r == null ? 0 : r;
+    }
+
+    /**
+     * Get all ore-override entries that target the given block. Returns an empty
+     * list if no override targets it. Fast: backed by the indexed map built at
+     * registerStage time, no scanning per call.
+     */
+    public java.util.List<OreOverrideEntry> getOreOverridesFor(net.minecraft.world.level.block.Block block) {
+        if (block == null) return java.util.Collections.emptyList();
+        java.util.List<OreOverrideEntry> l = oreOverrideByTarget.get(block);
+        return l == null ? java.util.Collections.emptyList() : l;
+    }
+
+    /**
+     * For a player, find the first applicable ore override for the given block
+     * (i.e. the player is missing the required stage). Returns empty if not spoofed.
+     */
+    public Optional<OreOverrideEntry> findActiveOreOverride(
+            net.minecraft.server.level.ServerPlayer player,
+            net.minecraft.world.level.block.Block block) {
+        if (player == null || block == null) return Optional.empty();
+        java.util.List<OreOverrideEntry> list = oreOverrideByTarget.get(block);
+        if (list == null || list.isEmpty()) return Optional.empty();
+        com.enviouse.progressivestages.common.stage.StageManager sm =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+        for (OreOverrideEntry e : list) {
+            if (!sm.hasStage(player, e.requiredStage)) return Optional.of(e);
+        }
+        return Optional.empty();
     }
 
     public static final class OreOverrideEntry {

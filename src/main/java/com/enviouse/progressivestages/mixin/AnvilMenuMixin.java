@@ -40,6 +40,16 @@ public abstract class AnvilMenuMixin extends ItemCombinerMenu {
 
         if (blocked) {
             this.resultSlots.setItem(0, ItemStack.EMPTY);
+            return;
+        }
+
+        // v2.0.1: transitive ingredient gating (per-stage opt-in). Anvil treats both
+        // input slots as ingredients of the synthesized "recipe".
+        java.util.Optional<com.enviouse.progressivestages.common.lock.LockRegistry.IngredientBlockResult>
+            ingBlock = com.enviouse.progressivestages.server.enforcement.IngredientGateHelper
+                .checkContainer(sp, this.inputSlots);
+        if (ingBlock.isPresent()) {
+            this.resultSlots.setItem(0, ItemStack.EMPTY);
         }
     }
 }

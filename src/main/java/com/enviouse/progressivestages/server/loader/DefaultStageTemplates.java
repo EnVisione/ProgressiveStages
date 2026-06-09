@@ -158,6 +158,7 @@ public final class DefaultStageTemplates {
             #  14.  [[ores.overrides]]   — (on hold for 2.0, parsed for forward compat)
             #  15.  [pets]               — taming / breeding / commanding / riding
             #  16.  [screens]            — block OR item GUI opens (incl. shulkers/lootr)
+            #  16a. [trades]             — villager / wandering-trader trade gating (by result)
             #  17.  [structures]         — entry push-back + per-structure rule flags
             #  18.  [[regions]]          — 3D boxes with flags + debuffs
             #  19.  [curios]             — per-slot gating when Curios is installed
@@ -562,18 +563,63 @@ public final class DefaultStageTemplates {
 
 
             # ============================================================================
-            # 14. [[ores.overrides]] — (ON HOLD FOR 2.0)
+            # 14. [[ores.overrides]] — VISUAL MASQUERADE (per-stage)
             # ============================================================================
-            # Parsed for forward compatibility but NOT yet enforced. Implementing visual
-            # masquerade requires client-side chunk packet rewriting, which is scoped for
-            # a post-2.0 release. You can leave entries here and they won't error — they
-            # just won't do anything yet.
+            # Make a real block APPEAR as a different block to any player who is
+            # missing this stage. The real block is unchanged on the server — it's a
+            # purely visual + drop-replacement gate. Once the player unlocks this
+            # stage, the masquerade vanishes immediately (a stage-grant flush kicks
+            # out the fake state and the real ore comes back).
+            #
+            # FIELDS (all three are REQUIRED, all three must be exact namespaced IDs):
+            #   target       the real block in the world to disguise
+            #   display_as   what the client should render instead
+            #   drop_as      what mining the disguised block yields
+            #                (set this to the display_as item id if you want "stone
+            #                that drops cobble" behavior, like vanilla mining)
+            #
+            # MULTIPLE OVERRIDES:
+            #   Add as many [[ores.overrides]] blocks as you want — each is one
+            #   target → display_as pair, scoped to THIS stage. Iron, gold, redstone,
+            #   lapis can all hide under stone, or each can hide under a different
+            #   filler block. Modded ores work the same way — just use the mod's
+            #   block ID for target.
+            #
+            # PER-STAGE NATURE:
+            #   These overrides apply ONLY while THIS stage is locked for the
+            #   player. iron_age.toml can hide iron ore, diamond_age.toml can hide
+            #   diamond ore — each player only sees the masquerade for stages they
+            #   haven't earned yet. A player with iron_age but not diamond_age sees
+            #   real iron ore and fake "stone" where diamond ore would be.
+            #
+            # PERFORMANCE — `ore_spoof_radius`:
+            #   Goes in [enforcement] below. Cube radius (in blocks) around each
+            #   player within which spoof packets are sent. Default 8. Larger =
+            #   more accurate visuals when the player walks toward unloaded ore,
+            #   smaller = less per-tick work. Server view-distance bounds it
+            #   anyway. Recommended 8-16.
+            #
+            # PLAYER-PLACED BLOCKS:
+            #   If a player places real iron ore (e.g. for decoration), it's never
+            #   spoofed — only naturally-generated / non-player blocks are masked.
+            #   The mod tracks player placements per-dimension in SavedData.
+            #
+            # DROPS:
+            #   When a disguised block is broken, vanilla loot is discarded and the
+            #   drop_as item is dropped in its place. Silk-touch and fortune are
+            #   intentionally ignored on the gated block — once unlocked, the real
+            #   ore returns and silk/fortune work normally.
             # ----------------------------------------------------------------------------
 
-            # [[ores.overrides]]
-            # target = "id:minecraft:diamond_ore"
-            # display_as = "id:minecraft:stone"
-            # drop_as = "id:minecraft:cobblestone"
+            [[ores.overrides]]
+            target = "id:minecraft:diamond_ore"
+            display_as = "id:minecraft:stone"
+            drop_as = "id:minecraft:cobblestone"
+
+            [[ores.overrides]]
+            target = "id:minecraft:deepslate_diamond_ore"
+            display_as = "id:minecraft:deepslate"
+            drop_as = "id:minecraft:cobbled_deepslate"
 
 
             # ============================================================================
@@ -635,6 +681,45 @@ public final class DefaultStageTemplates {
                 # "tag:minecraft:shulker_boxes",   # blocks
                 # "tag:c:shulker_boxes",           # item tag variant — locks held shulkers too
                 # "tag:lootr:chests",              # all Lootr chests
+            ]
+
+
+            # ============================================================================
+            # 16a. [trades] — VILLAGER / WANDERING-TRADER TRADE GATING
+            # ============================================================================
+            # Hides AND blocks any villager or wandering-trader offer whose RESULT item
+            # matches this list — using the same prefix system as everything else
+            # (id: / mod: / tag: / name:). Use this when you want "you can't BUY this yet"
+            # without locking the item itself: unlike [items], the player can still hold,
+            # use, and obtain the result through other means — they just can't trade for it.
+            #
+            #   • The offer disappears from the trade GUI (server-filtered, so a vanilla
+            #     client never sees it), AND
+            #   • the trade is blocked server-side even for a tampered/desynced client
+            #     (the result slot is cleared authoritatively), so it can't be completed.
+            #
+            # NBT-AWARE: enchanted-book / enchanted-gear trades are ALSO gated by the
+            # [enchants] category above — if the result carries a locked enchantment, the
+            # trade is hidden/blocked too (no need to list enchanted_book here).
+            #
+            # Creative and spectator players bypass. Toggle globally with
+            # enforcement.block_trades in progressivestages.toml.
+            #
+            # Example: "diamonds are post-Nether" — lock the diamond-tier tool/armor and
+            # enchanted-book trades so blacksmith/toolsmith/weaponsmith offers for them
+            # vanish until the stage is earned, while diamonds themselves stay usable.
+            # ----------------------------------------------------------------------------
+
+            [trades]
+            locked = [
+                # "id:minecraft:diamond_pickaxe",  # blacksmith/toolsmith diamond-pick trade
+                # "id:minecraft:diamond_chestplate",
+                # "tag:c:tools",                   # every tool result, across mods
+                # "mod:create",                    # any Create item sold by a (modded) trader
+            ]
+            # always_unlocked — carve-outs exempt from this stage's [trades] locks.
+            always_unlocked = [
+                # "id:minecraft:diamond_hoe",
             ]
 
 
@@ -852,6 +937,38 @@ public final class DefaultStageTemplates {
                 # "minecraft:diamond_ore",
                 # "minecraft:deepslate_diamond_ore",
             ]
+
+            # v2.0.1: per-stage radius (blocks) around each player within which
+            # ore-masquerade packets are sent. Only consulted when this stage has
+            # at least one [[ores.overrides]] entry. Default 8. Larger = smoother
+            # visuals when running into fresh chunks, smaller = less per-tick work.
+            ore_spoof_radius = 12
+
+            # v2.0.1: Block crafting recipes whose INGREDIENTS contain any item
+            # that is locked under THIS stage. Without this, a player who has
+            # locked iron_ingot can still craft a hopper (uses iron) as long as
+            # the hopper itself isn't locked. With this set to true, the crafting
+            # output is suppressed whenever any ingredient is gated by this stage.
+            # Covers crafting table, anvil, smithing table, stonecutter, loom,
+            # cartography table (all output slots).
+            # Default: false. Set per-stage as appropriate — e.g. iron_age.toml
+            # may want this true so iron is truly a "you can't use it for ANYTHING"
+            # gate, while diamond_age.toml might leave it false.
+            block_crafting_with_locked_ingredients = true
+
+            # v2.0.1: Block automated crafting (vanilla Crafter, mod auto-crafters
+            # via the public API hook) from producing items whose recipe contains
+            # any locked ingredient — checked against the NEAREST player within
+            # crafter_check_radius. Prevents bypassing the manual-craft gate via
+            # autocrafters loaded with locked materials by another player.
+            # Default: false.
+            block_automated_crafting = true
+
+            # Radius (blocks) for the nearest-player check used by automated-craft
+            # gating. Only consulted when block_automated_crafting = true.
+            # Default 32. Larger = stricter (catches autocrafters further from the
+            # gated player), smaller = looser.
+            crafter_check_radius = 32
 
 
             # ============================================================================
