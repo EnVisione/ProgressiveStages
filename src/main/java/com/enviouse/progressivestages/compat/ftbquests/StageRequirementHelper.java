@@ -76,6 +76,9 @@ public final class StageRequirementHelper {
         if (stageIdStr == null || stageIdStr.isBlank()) {
             return true;
         }
+        if (net.neoforged.fml.loading.FMLEnvironment.dist != net.neoforged.api.distmarker.Dist.DEDICATED_SERVER) {
+            return hasStageClient(stageIdStr);
+        }
         try {
             Class<?> sqfClass = Class.forName("dev.ftb.mods.ftbquests.quest.ServerQuestFile");
             Object instance = sqfClass.getMethod("getInstance").invoke(null);

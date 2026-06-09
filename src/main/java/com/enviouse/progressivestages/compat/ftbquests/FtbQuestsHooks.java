@@ -224,8 +224,10 @@ public final class FtbQuestsHooks {
         boolean has;
         if (player instanceof ServerPlayer serverPlayer) {
             has = ProgressiveStagesAPI.hasStage(serverPlayer, stageId);
-        } else {
+        } else if (net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT) {
             has = com.enviouse.progressivestages.client.ClientStageCache.hasStage(stageId);
+        } else {
+            has = false;
         }
 
         LOGGER.debug("[ProgressiveStages] FTB Provider has('{}', '{}') = {}", player.getName().getString(), stage, has);
