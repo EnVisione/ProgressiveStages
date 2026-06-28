@@ -85,11 +85,10 @@ public class Progressivestages {
             }
         }
 
-        // Generate default stage files if no stage TOML files exist (excluding triggers.toml)
+        // Generate default stage files if no stage TOML files exist
+        // (v2.3: triggers.toml is no longer generated — triggers now live in each stage file's
+        // [[triggers]] section. A leftover legacy triggers.toml is ignored by the loader.)
         generateDefaultStageFilesIfNeeded(configFolder);
-
-        // Generate triggers.toml if it doesn't exist
-        generateTriggersFileIfNeeded(configFolder);
     }
 
     /**
@@ -122,21 +121,6 @@ public class Progressivestages {
         generateStoneAgeFile(configFolder);
         generateIronAgeFile(configFolder);
         generateDiamondAgeFile(configFolder);
-    }
-
-    /**
-     * Generate triggers.toml if it doesn't exist.
-     * Called during mod init so pack devs have example triggers immediately.
-     */
-    private void generateTriggersFileIfNeeded(Path configFolder) {
-        Path triggersFile = configFolder.resolve("triggers.toml");
-        if (Files.exists(triggersFile)) {
-            LOGGER.debug("[ProgressiveStages] triggers.toml already exists, skipping generation");
-            return;
-        }
-
-        LOGGER.info("[ProgressiveStages] Generating triggers.toml...");
-        writeStageFile(triggersFile, com.enviouse.progressivestages.server.loader.DefaultStageTemplates.triggers());
     }
 
     private void generateStoneAgeFile(Path configFolder) {

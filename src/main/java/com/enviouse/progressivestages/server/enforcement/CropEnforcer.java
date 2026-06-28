@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.server.enforcement;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -25,9 +26,12 @@ public final class CropEnforcer {
     private CropEnforcer() {}
 
     public static boolean canPlace(ServerPlayer player, Block block) {
-        if (!StageConfig.isBlockCropGrowth()) return true;
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockCropGrowth() && !reg.hasEnforcementOverrides()) return true;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
-        return !LockRegistry.getInstance().isCropBlockedFor(player, block);
+        // v2.3: per-stage override across ALL missing gating stages (matches shouldCancelGrowth).
+        java.util.Set<StageId> missing = reg.missingGatingStages(player, reg.getRequiredStagesForCrop(block));
+        return missing.isEmpty() || !reg.isCategoryEnforced(missing, EnforcementCategory.CROP_GROWTH);
     }
 
     public static boolean canBonemeal(ServerPlayer player, Block block) {
@@ -40,9 +44,12 @@ public final class CropEnforcer {
      * v2.0: multi-stage — cancels if the nearest player is missing ANY of the gating stages.
      */
     public static boolean shouldCancelGrowth(ServerLevel level, Block block, double x, double y, double z) {
-        if (!StageConfig.isBlockCropGrowth()) return false;
-        java.util.Set<StageId> gating = LockRegistry.getInstance().getRequiredStagesForCrop(block);
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockCropGrowth() && !reg.hasEnforcementOverrides()) return false;
+        java.util.Set<StageId> gating = reg.getRequiredStagesForCrop(block);
         if (gating.isEmpty()) return false;
+        // v2.3: per-stage override — skip if no gating stage enforces crop growth.
+        if (!reg.isCategoryEnforced(gating, EnforcementCategory.CROP_GROWTH)) return false;
 
         double radius = StageConfig.getMobSpawnCheckRadius();
         return NearestPlayerCheck.nearestPlayerLacksAll(level, x, y, z, radius, gating);

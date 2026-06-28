@@ -27,9 +27,12 @@ public final class ScreenEnforcer {
      *         {@code false} if the screens category would block it.
      */
     public static boolean canOpenScreen(ServerPlayer player, Block block) {
-        if (!StageConfig.isBlockScreenOpen()) return true;
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockScreenOpen() && !reg.hasEnforcementOverrides()) return true;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
-        return !LockRegistry.getInstance().isScreenBlockedFor(player, block);
+        var gate = reg.primaryRestrictingStageForScreen(player, block);
+        return gate.isEmpty() || !reg.isCategoryEnforced(gate.get(),
+            com.enviouse.progressivestages.common.lock.EnforcementCategory.SCREEN_OPEN);
     }
 
     public static void notifyLocked(ServerPlayer player, Block block) {
@@ -44,10 +47,13 @@ public final class ScreenEnforcer {
      * stack's item isn't in the {@code [screens] locked} list, or the player has all gating stages.
      */
     public static boolean canOpenFromItem(ServerPlayer player, net.minecraft.world.item.ItemStack stack) {
-        if (!StageConfig.isBlockScreenOpen()) return true;
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockScreenOpen() && !reg.hasEnforcementOverrides()) return true;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
         if (stack.isEmpty()) return true;
-        return !LockRegistry.getInstance().isScreenItemBlockedFor(player, stack.getItem());
+        var gate = reg.primaryRestrictingStageForScreenItem(player, stack.getItem());
+        return gate.isEmpty() || !reg.isCategoryEnforced(gate.get(),
+            com.enviouse.progressivestages.common.lock.EnforcementCategory.SCREEN_OPEN);
     }
 
     public static void notifyLockedItem(ServerPlayer player, net.minecraft.world.item.ItemStack stack) {

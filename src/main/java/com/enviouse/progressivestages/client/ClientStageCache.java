@@ -7,6 +7,7 @@ import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import org.slf4j.Logger;
 
@@ -29,9 +30,17 @@ public class ClientStageCache {
     private static final Map<StageId, StageDefinitionData> stageDefinitions = new HashMap<>();
 
     /**
-     * Stage definition data for client-side use (v1.3)
+     * Stage definition data for client-side use.
+     *
+     * <p>v2.3: extended with description, icon, the resolved per-stage [display] flags (server
+     * already folds in the global progressivestages.toml defaults), and whether the stage has
+     * auto-grant triggers — everything the tooltip handler and GUI tree viewer need.
      */
-    public record StageDefinitionData(StageId id, String displayName, List<StageId> dependencies) {
+    public record StageDefinitionData(StageId id, String displayName, List<StageId> dependencies,
+                                      String description, Optional<ResourceLocation> icon,
+                                      boolean displayAsUnknownItem, boolean obscureIcon,
+                                      boolean showTooltip, boolean showDescriptionOnTooltip,
+                                      boolean hasTriggers) {
     }
 
     /**
@@ -58,12 +67,69 @@ public class ClientStageCache {
         return def != null ? def.dependencies() : Collections.emptyList();
     }
 
+    /** v2.3: every stage id the client knows a definition for (for the GUI tree viewer). */
+    public static Set<StageId> getAllStageDefinitionIds() {
+        return Collections.unmodifiableSet(stageDefinitions.keySet());
+    }
+
     /**
      * Get display name for a stage (v1.3)
      */
     public static String getDisplayName(StageId stageId) {
         StageDefinitionData def = stageDefinitions.get(stageId);
         return def != null ? def.displayName() : stageId.getPath();
+    }
+
+    // ---- v2.3 per-stage display metadata (falls back to the global config when unsynced) ----
+
+    public static String getDescription(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.description() : "";
+    }
+
+    public static Optional<ResourceLocation> getIcon(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.icon() : Optional.empty();
+    }
+
+    public static boolean isDisplayAsUnknownItem(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.displayAsUnknownItem() : StageConfig.isMaskLockedItemNames();
+    }
+
+    public static boolean isObscureIcon(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.obscureIcon() : StageConfig.isObscureLockedItemIcons();
+    }
+
+    public static boolean isShowTooltip(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.showTooltip() : StageConfig.isShowTooltip();
+    }
+
+    public static boolean isShowDescriptionOnTooltip(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.showDescriptionOnTooltip() : StageConfig.isShowStageDescriptionOnTooltip();
+    }
+
+    public static boolean stageHasTriggers(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null && def.hasTriggers();
+    }
+
+    /**
+     * v2.3: true if {@code item} is locked for the player AND at least one of its missing gating
+     * stages requests icon obscuring. Used by {@link com.enviouse.progressivestages.client.renderer.LockedItemDecorator}.
+     */
+    public static boolean shouldObscureItemIcon(Item item) {
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
+        if (itemId == null) return false;
+        Set<StageId> gating = ClientLockCache.getRequiredStagesForItem(itemId);
+        if (gating.isEmpty()) gating = LockRegistry.getInstance().getRequiredStages(item);
+        for (StageId s : gating) {
+            if (!hasStage(s) && isObscureIcon(s)) return true;
+        }
+        return false;
     }
 
     /**
@@ -286,7 +352,13 @@ public class ClientStageCache {
      * Get the progress string (e.g., "2/5")
      */
     public static String getProgressString() {
-        int total = StageOrder.getInstance().getStageCount();
+        // v2.3 fix: use the client-synced definition count, not StageOrder. StageOrder is only
+        // populated on the server JVM; on a dedicated server the client's StageOrder is empty so
+        // this previously rendered "X/0". stageDefinitions is synced via StageDefinitionsSyncPayload.
+        // Fall back to StageOrder for the integrated-server/singleplayer case where it's populated.
+        int total = stageDefinitions.isEmpty()
+            ? StageOrder.getInstance().getStageCount()
+            : stageDefinitions.size();
         return stages.size() + "/" + total;
     }
 

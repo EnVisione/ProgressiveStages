@@ -201,8 +201,27 @@ public class StageConfig {
     private static final ModConfigSpec.BooleanValue MASK_LOCKED_ITEM_NAMES = BUILDER
         .comment("Rename locked items to hide their identity",
                  "If true, locked items show as 'Unknown Item' instead of real name",
-                 "Players must unlock the stage to see the real name")
+                 "Players must unlock the stage to see the real name",
+                 "GLOBAL DEFAULT — a stage can override it with [display].display_as_unknown_item = true/false")
         .define("enforcement.mask_locked_item_names", true);
+
+    private static final ModConfigSpec.BooleanValue OBSCURE_LOCKED_ITEM_ICONS = BUILDER
+        .comment("v2.3: replace the ICON of locked items with a '?' placeholder so the item is fully",
+                 "unrecognizable (not just its name). Applies in the player's own inventory/hotbar.",
+                 "GLOBAL DEFAULT — a stage can override it with [display].obscure_icon = true/false.")
+        .define("enforcement.obscure_locked_item_icons", false);
+
+    private static final ModConfigSpec.BooleanValue SHOW_STAGE_DESCRIPTION_ON_TOOLTIP = BUILDER
+        .comment("v2.3: append the gating stage's description to a locked item's tooltip.",
+                 "GLOBAL DEFAULT — a stage can override it with [display].show_description_on_tooltip = true/false.")
+        .define("emi.show_stage_description_on_tooltip", false);
+
+    private static final ModConfigSpec.IntValue TRIGGER_POLL_INTERVAL = BUILDER
+        .comment("v2.3: how often (in ticks; 20 = 1 second) the per-stage [[triggers]] engine re-checks",
+                 "a player's counter progress (kills/distance/etc). Lower = snappier auto-grants but",
+                 "slightly more work; relevant events (kills, advancements, dimension changes) also force",
+                 "an immediate re-check, so this is mostly a safety-net cadence.")
+        .defineInRange("enforcement.trigger_poll_interval", 20, 5, 200);
 
     private static final ModConfigSpec.IntValue NOTIFICATION_COOLDOWN = BUILDER
         .comment("Cooldown in milliseconds between lock notification messages",
@@ -318,6 +337,12 @@ public class StageConfig {
                  "{stage} = current stage name, {progress} = progress string (e.g. 2/5).",
                  "Supports & color codes.")
         .define("messages.tooltip_current_stage", "&7Current stage: &f{stage} &8({progress})");
+
+    private static final ModConfigSpec.ConfigValue<String> MSG_TOOLTIP_STAGE_DESCRIPTION = BUILDER
+        .comment("v2.3: tooltip line that shows the gating stage's description (when enabled via",
+                 "show_stage_description_on_tooltip or a stage's [display].show_description_on_tooltip).",
+                 "{description} = the stage description. Supports & color codes.")
+        .define("messages.tooltip_stage_description", "&8“&7{description}&8”");
 
     // --- Chat / Enforcement Messages ---
 
@@ -737,6 +762,9 @@ public class StageConfig {
     private static boolean allowCreativeBypass;
     private static boolean revealStageNamesOnlyToOperators;
     private static boolean maskLockedItemNames;
+    private static boolean obscureLockedItemIcons;
+    private static boolean showStageDescriptionOnTooltip;
+    private static int triggerPollInterval;
     private static int notificationCooldown;
     private static boolean showLockMessage;
     private static boolean playLockSound;
@@ -766,6 +794,7 @@ public class StageConfig {
     private static String msgTooltipRecipeLocked;
     private static String msgTooltipStageRequired;
     private static String msgTooltipCurrentStage;
+    private static String msgTooltipStageDescription;
     private static String msgItemLocked;
     private static String msgTypeLocked;
     private static String msgItemLockedGeneric;
@@ -895,6 +924,9 @@ public class StageConfig {
         allowCreativeBypass = ALLOW_CREATIVE_BYPASS.get();
         revealStageNamesOnlyToOperators = REVEAL_STAGE_NAMES_ONLY_TO_OPERATORS.get();
         maskLockedItemNames = MASK_LOCKED_ITEM_NAMES.get();
+        obscureLockedItemIcons = OBSCURE_LOCKED_ITEM_ICONS.get();
+        showStageDescriptionOnTooltip = SHOW_STAGE_DESCRIPTION_ON_TOOLTIP.get();
+        triggerPollInterval = TRIGGER_POLL_INTERVAL.get();
         notificationCooldown = NOTIFICATION_COOLDOWN.get();
         showLockMessage = SHOW_LOCK_MESSAGE.get();
         playLockSound = PLAY_LOCK_SOUND.get();
@@ -923,6 +955,7 @@ public class StageConfig {
         msgTooltipRecipeLocked = MSG_TOOLTIP_RECIPE_LOCKED.get();
         msgTooltipStageRequired = MSG_TOOLTIP_STAGE_REQUIRED.get();
         msgTooltipCurrentStage = MSG_TOOLTIP_CURRENT_STAGE.get();
+        msgTooltipStageDescription = MSG_TOOLTIP_STAGE_DESCRIPTION.get();
         msgItemLocked = MSG_ITEM_LOCKED.get();
         msgTypeLocked = MSG_TYPE_LOCKED.get();
         msgItemLockedGeneric = MSG_ITEM_LOCKED_GENERIC.get();
@@ -1069,6 +1102,9 @@ public class StageConfig {
     public static boolean isAllowCreativeBypass() { return allowCreativeBypass; }
     public static boolean isRevealStageNamesOnlyToOperators() { return revealStageNamesOnlyToOperators; }
     public static boolean isMaskLockedItemNames() { return maskLockedItemNames; }
+    public static boolean isObscureLockedItemIcons() { return obscureLockedItemIcons; }
+    public static boolean isShowStageDescriptionOnTooltip() { return showStageDescriptionOnTooltip; }
+    public static int getTriggerPollInterval() { return triggerPollInterval; }
     public static int getNotificationCooldown() { return notificationCooldown; }
     public static boolean isShowLockMessage() { return showLockMessage; }
     public static boolean isPlayLockSound() { return playLockSound; }
@@ -1107,6 +1143,7 @@ public class StageConfig {
     public static String getMsgTooltipRecipeLocked() { return msgTooltipRecipeLocked != null ? msgTooltipRecipeLocked : "\uD83D\uDD12 Recipe Locked"; }
     public static String getMsgTooltipStageRequired() { return msgTooltipStageRequired != null ? msgTooltipStageRequired : "Stage required: {stage}"; }
     public static String getMsgTooltipCurrentStage() { return msgTooltipCurrentStage != null ? msgTooltipCurrentStage : "Current stage: {stage} ({progress})"; }
+    public static String getMsgTooltipStageDescription() { return msgTooltipStageDescription != null ? msgTooltipStageDescription : "&8“&7{description}&8”"; }
     public static String getMsgItemLocked() { return msgItemLocked != null ? msgItemLocked : "&c\uD83D\uDD12 You haven't unlocked this item yet! &7Required: &f{stage}"; }
     public static String getMsgTypeLocked() { return msgTypeLocked != null ? msgTypeLocked : "&c\uD83D\uDD12 {type} is locked! &7Required: &f{stage}"; }
     public static String getMsgItemLockedGeneric() { return msgItemLockedGeneric != null ? msgItemLockedGeneric : "&c\uD83D\uDD12 You haven't unlocked this item yet!"; }

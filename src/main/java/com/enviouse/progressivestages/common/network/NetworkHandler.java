@@ -104,6 +104,86 @@ public class NetworkHandler {
                 (payload, context) -> {}
             )
         );
+
+        // v2.3: stage-tree GUI data (server -> client; arrival opens the screen)
+        registrar.playToClient(
+            StageGuiDataPayload.TYPE,
+            StageGuiDataPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleStageGuiDataClient,
+                (payload, context) -> {}
+            )
+        );
+
+        // v2.3: stage-tree GUI request (client -> server; e.g. keybind press)
+        registrar.playToServer(
+            RequestStageGuiPayload.TYPE,
+            RequestStageGuiPayload.STREAM_CODEC,
+            NetworkHandler::handleRequestStageGuiServer
+        );
+    }
+
+    /**
+     * v2.3: gather the player's live per-stage trigger progress and push it to the client,
+     * which opens the stage-tree GUI on arrival.
+     */
+    public static void sendStageGuiData(ServerPlayer player) {
+        // Build the per-stage "unlocks" preview once by scanning the item registry a single time
+        // and bucketing each item under every stage that gates it (cheap, on-demand).
+        final int SAMPLE_CAP = 90;
+        Map<StageId, List<ResourceLocation>> unlockSample = new HashMap<>();
+        Map<StageId, Integer> unlockTotal = new HashMap<>();
+        LockRegistry reg = LockRegistry.getInstance();
+        for (Item item : net.minecraft.core.registries.BuiltInRegistries.ITEM) {
+            ResourceLocation iid = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+            if (iid == null) continue;
+            for (StageId s : reg.getRequiredStages(item)) {
+                unlockTotal.merge(s, 1, Integer::sum);
+                List<ResourceLocation> list = unlockSample.computeIfAbsent(s, k -> new ArrayList<>());
+                if (list.size() < SAMPLE_CAP) list.add(iid);
+            }
+        }
+
+        List<StageProgress> out = new ArrayList<>();
+        for (StageId stageId : StageOrder.getInstance().getAllStageIds()) {
+            List<RuleLine> ruleLines = new ArrayList<>();
+            for (var rp : com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator
+                    .describeProgress(player, stageId)) {
+                List<CondLine> conds = new ArrayList<>();
+                for (var cp : rp.conditions()) {
+                    conds.add(new CondLine(
+                        conditionLabel(cp.condition()),
+                        (int) Math.min(Integer.MAX_VALUE, cp.current()),
+                        (int) Math.min(Integer.MAX_VALUE, cp.threshold()),
+                        cp.satisfied()));
+                }
+                ruleLines.add(new RuleLine(rp.mode().name().toLowerCase(), rp.description(), rp.satisfied(), conds));
+            }
+            out.add(new StageProgress(
+                stageId.getResourceLocation(),
+                ruleLines,
+                unlockSample.getOrDefault(stageId, List.of()),
+                unlockTotal.getOrDefault(stageId, 0)));
+        }
+        PacketDistributor.sendToPlayer(player, new StageGuiDataPayload(out));
+    }
+
+    private static String conditionLabel(com.enviouse.progressivestages.common.trigger.TriggerCondition c) {
+        String type = c.type().name().toLowerCase().replace('_', ' ');
+        return c.target().isEmpty() ? type : (type + " " + c.target());
+    }
+
+    private static void handleRequestStageGuiServer(RequestStageGuiPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer sp) {
+                sendStageGuiData(sp);
+            }
+        });
+    }
+
+    private static void handleStageGuiDataClient(StageGuiDataPayload payload, IPayloadContext context) {
+        context.enqueueWork(() ->
+            com.enviouse.progressivestages.client.ClientTriggerProgress.acceptAndOpen(payload.stages()));
     }
 
     /**
@@ -189,15 +269,32 @@ public class NetworkHandler {
                 List<ResourceLocation> deps = def.getDependencies().stream()
                     .map(StageId::getResourceLocation)
                     .toList();
+                // v2.3: resolve each per-stage [display] override against the global default.
                 definitions.add(new StageDefinitionEntry(
                     stageId.getResourceLocation(),
                     def.getDisplayName(),
-                    deps
+                    deps,
+                    def.getDescription() == null ? "" : def.getDescription(),
+                    def.getIcon().map(ResourceLocation::toString).orElse(""),
+                    resolveFlag(def.getDisplayAsUnknownItem(),
+                        com.enviouse.progressivestages.common.config.StageConfig.isMaskLockedItemNames()),
+                    resolveFlag(def.getObscureIcon(),
+                        com.enviouse.progressivestages.common.config.StageConfig.isObscureLockedItemIcons()),
+                    resolveFlag(def.getShowTooltip(),
+                        com.enviouse.progressivestages.common.config.StageConfig.isShowTooltip()),
+                    resolveFlag(def.getShowDescriptionOnTooltip(),
+                        com.enviouse.progressivestages.common.config.StageConfig.isShowStageDescriptionOnTooltip()),
+                    def.hasTriggers()
                 ));
             });
         }
 
         PacketDistributor.sendToPlayer(player, new StageDefinitionsSyncPayload(definitions));
+    }
+
+    /** v2.3: a per-stage [display] override (nullable) falls back to the global default. */
+    private static boolean resolveFlag(Boolean override, boolean globalDefault) {
+        return override != null ? override : globalDefault;
     }
 
     /**
@@ -287,10 +384,20 @@ public class NetworkHandler {
                 List<StageId> deps = entry.dependencies().stream()
                     .map(StageId::fromResourceLocation)
                     .toList();
+                java.util.Optional<ResourceLocation> icon = entry.icon().isEmpty()
+                    ? java.util.Optional.empty()
+                    : java.util.Optional.ofNullable(ResourceLocation.tryParse(entry.icon()));
                 definitions.put(stageId, new ClientStageCache.StageDefinitionData(
                     stageId,
                     entry.displayName(),
-                    deps
+                    deps,
+                    entry.description(),
+                    icon,
+                    entry.displayAsUnknownItem(),
+                    entry.obscureIcon(),
+                    entry.showTooltip(),
+                    entry.showDescriptionOnTooltip(),
+                    entry.hasTriggers()
                 ));
             }
             ClientStageCache.setStageDefinitions(definitions);
@@ -397,17 +504,46 @@ public class NetworkHandler {
     }
 
     /**
-     * Stage definition entry for network serialization (v1.3)
+     * Stage definition entry for network serialization.
+     *
+     * <p>v2.3: carries description, icon, the resolved per-stage [display] flags, and a
+     * hasTriggers bit for the GUI tree viewer + tooltip handler. Hand-written codec because
+     * the field count exceeds {@code StreamCodec.composite}'s arity.
      */
-    public record StageDefinitionEntry(ResourceLocation stageId, String displayName, List<ResourceLocation> dependencies) {
-        public static final StreamCodec<FriendlyByteBuf, StageDefinitionEntry> STREAM_CODEC = StreamCodec.composite(
-            ResourceLocation.STREAM_CODEC,
-            StageDefinitionEntry::stageId,
-            ByteBufCodecs.STRING_UTF8,
-            StageDefinitionEntry::displayName,
-            ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()),
-            StageDefinitionEntry::dependencies,
-            StageDefinitionEntry::new
+    public record StageDefinitionEntry(ResourceLocation stageId, String displayName,
+                                       List<ResourceLocation> dependencies, String description,
+                                       String icon, boolean displayAsUnknownItem, boolean obscureIcon,
+                                       boolean showTooltip, boolean showDescriptionOnTooltip,
+                                       boolean hasTriggers) {
+
+        private static final StreamCodec<io.netty.buffer.ByteBuf, List<ResourceLocation>> DEPS_CODEC =
+            ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list());
+
+        public static final StreamCodec<FriendlyByteBuf, StageDefinitionEntry> STREAM_CODEC = StreamCodec.of(
+            (buf, e) -> {
+                ResourceLocation.STREAM_CODEC.encode(buf, e.stageId());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.displayName());
+                DEPS_CODEC.encode(buf, e.dependencies());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.description());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.icon());
+                buf.writeBoolean(e.displayAsUnknownItem());
+                buf.writeBoolean(e.obscureIcon());
+                buf.writeBoolean(e.showTooltip());
+                buf.writeBoolean(e.showDescriptionOnTooltip());
+                buf.writeBoolean(e.hasTriggers());
+            },
+            buf -> new StageDefinitionEntry(
+                ResourceLocation.STREAM_CODEC.decode(buf),
+                ByteBufCodecs.STRING_UTF8.decode(buf),
+                DEPS_CODEC.decode(buf),
+                ByteBufCodecs.STRING_UTF8.decode(buf),
+                ByteBufCodecs.STRING_UTF8.decode(buf),
+                buf.readBoolean(),
+                buf.readBoolean(),
+                buf.readBoolean(),
+                buf.readBoolean(),
+                buf.readBoolean()
+            )
         );
     }
 
@@ -500,6 +636,75 @@ public class NetworkHandler {
             OreSpoofPayload::dimensionReset,
             OreSpoofPayload::new
         );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    // ============ v2.3 stage-tree GUI payloads ============
+
+    /** One condition's progress for the GUI: a human label + current/threshold + satisfied. */
+    public record CondLine(String label, int current, int threshold, boolean satisfied) {
+        public static final StreamCodec<FriendlyByteBuf, CondLine> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8, CondLine::label,
+            ByteBufCodecs.VAR_INT, CondLine::current,
+            ByteBufCodecs.VAR_INT, CondLine::threshold,
+            ByteBufCodecs.BOOL, CondLine::satisfied,
+            CondLine::new
+        );
+    }
+
+    /** One trigger rule's progress: its mode, description, satisfied flag, and conditions. */
+    public record RuleLine(String mode, String description, boolean satisfied, List<CondLine> conditions) {
+        public static final StreamCodec<FriendlyByteBuf, RuleLine> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8, RuleLine::mode,
+            ByteBufCodecs.STRING_UTF8, RuleLine::description,
+            ByteBufCodecs.BOOL, RuleLine::satisfied,
+            CondLine.STREAM_CODEC.apply(ByteBufCodecs.list()), RuleLine::conditions,
+            RuleLine::new
+        );
+    }
+
+    /**
+     * Per-stage GUI data: trigger-rule progress plus a preview of the items this stage unlocks
+     * (a capped sample for icon rendering + the true total count).
+     */
+    public record StageProgress(ResourceLocation stageId, List<RuleLine> rules,
+                                List<ResourceLocation> unlockSample, int unlockTotal) {
+        public static final StreamCodec<FriendlyByteBuf, StageProgress> STREAM_CODEC = StreamCodec.composite(
+            ResourceLocation.STREAM_CODEC, StageProgress::stageId,
+            RuleLine.STREAM_CODEC.apply(ByteBufCodecs.list()), StageProgress::rules,
+            ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()), StageProgress::unlockSample,
+            ByteBufCodecs.VAR_INT, StageProgress::unlockTotal,
+            StageProgress::new
+        );
+    }
+
+    /** Server -> client: per-stage trigger progress; the client opens the GUI when it arrives. */
+    public record StageGuiDataPayload(List<StageProgress> stages) implements CustomPacketPayload {
+        public static final Type<StageGuiDataPayload> TYPE = new Type<>(Constants.STAGE_GUI_DATA_PACKET);
+
+        public static final StreamCodec<FriendlyByteBuf, StageGuiDataPayload> STREAM_CODEC = StreamCodec.composite(
+            StageProgress.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            StageGuiDataPayload::stages,
+            StageGuiDataPayload::new
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Client -> server: request a fresh stage-GUI data push (and open). No fields. */
+    public record RequestStageGuiPayload() implements CustomPacketPayload {
+        public static final Type<RequestStageGuiPayload> TYPE = new Type<>(Constants.REQUEST_STAGE_GUI_PACKET);
+        public static final RequestStageGuiPayload INSTANCE = new RequestStageGuiPayload();
+
+        public static final StreamCodec<FriendlyByteBuf, RequestStageGuiPayload> STREAM_CODEC =
+            StreamCodec.unit(INSTANCE);
 
         @Override
         public Type<? extends CustomPacketPayload> type() {

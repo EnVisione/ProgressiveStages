@@ -143,6 +143,37 @@ public class LockIconRenderer {
     }
 
     /**
+     * v2.3: fully obscure an item's icon. Paints an opaque panel over the slot and a centered
+     * "?" glyph so the item is unrecognizable, then the normal lock icon on top. Used when the
+     * gating stage sets {@code [display].obscure_icon = true} (or the global default is on).
+     */
+    public static void renderObscuredOverlay(GuiGraphics graphics, int x, int y, int slotSize) {
+        graphics.flush();
+        RenderSystem.disableDepthTest();
+        RenderSystem.enableBlend();
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 1000); // above the item model
+        // Opaque panel hides the underlying item icon entirely.
+        graphics.fill(x, y, x + slotSize, y + slotSize, 0xFF1A1A1A);
+        graphics.fill(x, y, x + slotSize, y + 1, 0xFF000000);
+        graphics.fill(x, y + slotSize - 1, x + slotSize, y + slotSize, 0xFF000000);
+        // Centered "?" so the player knows a hidden item occupies the slot.
+        var font = net.minecraft.client.Minecraft.getInstance().font;
+        String q = "?";
+        int tw = font.width(q);
+        graphics.drawString(font, q, x + (slotSize - tw) / 2, y + (slotSize - font.lineHeight) / 2 + 1,
+            0xFFB0B0B0, false);
+        graphics.pose().popPose();
+        // Flush the panel + glyph while blend is still enabled / depth disabled, so they aren't
+        // drawn with the restored GL state.
+        graphics.flush();
+        RenderSystem.disableBlend();
+        RenderSystem.enableDepthTest();
+        // Lock icon on top (respects show_lock_icon + position config).
+        render(graphics, x, y, slotSize);
+    }
+
+    /**
      * Render just the lock icon without highlight (for search bar/favorites)
      */
     public static void renderLockIconOnly(GuiGraphics graphics, int x, int y, int slotSize) {

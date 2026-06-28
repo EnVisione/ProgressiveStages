@@ -44,8 +44,18 @@ public enum StageCause {
      * Stage granted because every sub-trigger of a multi-requirement was satisfied.
      * Multi-requirements live in triggers.toml under {@code [[multi]]} and are tracked
      * by {@code MultiTriggerManager}.
+     *
+     * @deprecated v2.3 replaced the global triggers.toml multi-requirements with per-stage
+     *             {@code [[triggers]]} rules tracked by {@code StageTriggerEvaluator}, which
+     *             reports {@link #TRIGGER}. Retained for back-compat with stored cause logs.
      */
+    @Deprecated
     MULTI_TRIGGER,
+
+    /**
+     * Stage granted because a per-stage {@code [[triggers]]} rule was satisfied (v2.3).
+     */
+    TRIGGER,
 
     /**
      * Stage changed due to team propagation

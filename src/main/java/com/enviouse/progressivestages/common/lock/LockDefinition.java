@@ -98,6 +98,9 @@ public final class LockDefinition {
      */
     private final int oreSpoofRadius;
 
+    // ---- v2.3: per-stage [enforcement] category overrides (nullable per category; absent = inherit global). ----
+    private final java.util.Map<EnforcementCategory, Boolean> enforcementOverrides;
+
     // ---- v2.0: gates the minecraft: namespace for this stage.
     private final boolean minecraftNamespace;
 
@@ -136,6 +139,9 @@ public final class LockDefinition {
         this.blockAutomatedCrafting             = b.blockAutomatedCrafting;
         this.crafterCheckRadius                 = b.crafterCheckRadius;
         this.oreSpoofRadius                     = b.oreSpoofRadius;
+        this.enforcementOverrides = b.enforcementOverrides.isEmpty()
+            ? java.util.Map.of()
+            : new java.util.EnumMap<>(b.enforcementOverrides);
         this.minecraftNamespace  = b.minecraftNamespace;
         this.unlocks             = b.unlocks != null ? b.unlocks : UnlockGateLists.EMPTY;
     }
@@ -190,6 +196,13 @@ public final class LockDefinition {
 
     /** v2.0: per-stage carve-outs from this stage's own gating set. Empty by default. */
     public UnlockGateLists unlocks() { return unlocks; }
+
+    /**
+     * v2.3: per-stage enforcement-category overrides. Maps a category to the explicit boolean the
+     * stage set in {@code [enforcement]}; categories the stage didn't mention are absent (inherit
+     * the global default). Empty for stages with no overrides.
+     */
+    public java.util.Map<EnforcementCategory, Boolean> enforcementOverrides() { return enforcementOverrides; }
 
     public boolean isEmpty() {
         return items.isEmpty() && blocks.isEmpty() && fluids.isEmpty() && entities.isEmpty()
@@ -424,6 +437,7 @@ public final class LockDefinition {
         private int crafterCheckRadius = 32;
         private int oreSpoofRadius = 8;
 
+        private java.util.Map<EnforcementCategory, Boolean> enforcementOverrides = new java.util.EnumMap<>(EnforcementCategory.class);
         private boolean minecraftNamespace = false;
         private UnlockGateLists unlocks = UnlockGateLists.EMPTY;
 
@@ -488,6 +502,15 @@ public final class LockDefinition {
 
         public Builder minecraftNamespace(boolean v) { this.minecraftNamespace = v; return this; }
         public Builder unlocks(UnlockGateLists v)    { this.unlocks = v != null ? v : UnlockGateLists.EMPTY; return this; }
+
+        /** v2.3: set a single per-stage enforcement override (null value clears it). */
+        public Builder enforcementOverride(EnforcementCategory cat, Boolean value) {
+            if (cat != null) {
+                if (value == null) this.enforcementOverrides.remove(cat);
+                else this.enforcementOverrides.put(cat, value);
+            }
+            return this;
+        }
 
         public LockDefinition build() {
             return new LockDefinition(this);

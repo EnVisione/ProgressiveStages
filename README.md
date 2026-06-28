@@ -10,6 +10,16 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ---
 
+## What's new in 2.3
+
+- **Per-stage `[[triggers]]`** — auto-grant triggers now live inside each stage's TOML (the global `triggers.toml` is gone). Each `[[triggers]]` block is one OR-ed rule of `all_of` / `any_of` conditions over kills, mining, crafting, pickups, item use/drop/breaking, distance travelled, raw statistics, play time, level/XP, inventory holdings, advancements, dimensions, and biomes. Counter conditions read vanilla statistics, so they're retroactive and need no extra save files.
+- **In-game Stage Tree viewer** — an "Open Progression Tree" keybind (unbound by default) and `/stage gui` open a read-only two-pane screen: a status-coloured stage tree on the left, and the selected stage's description, prerequisite checklist, live `[[triggers]]` % progress, and an icon grid of the items it unlocks on the right.
+- **Per-stage `[display]` overrides** — `display_as_unknown_item`, `obscure_icon` (mask the icon with a `?`), `show_tooltip`, and `show_description_on_tooltip` let a stage override the global tooltip/icon defaults for its own locked items.
+- **Per-stage `[enforcement]` overrides** — a stage's `[enforcement]` can now override the global enforcement toggles (`block_item_use`, `block_item_pickup`, `block_item_inventory`, `block_block_placement`, `block_block_interaction`, `block_dimension_travel`, `block_entity_attack`, `block_screen_open`, `block_crop_growth`, `block_pet_interact`) for just that stage's gated resources — opt a stage out of (or in to) a category without touching global config. Most-restrictive-wins where several stages gate the same resource.
+- **Triggers respect dependencies** — a stage's `[[triggers]]` no longer auto-grant until all of its `dependency` prerequisites are owned; counter progress keeps accruing in the meantime. Omit a stage's `dependency` to let its triggers fire freely.
+
+---
+
 ## What's new in 2.0
 
 - **Unified prefix lock model** — `id:`, `mod:`, `tag:`, `name:` (no prefix = `id:`) replace v1's scattered `items` / `item_tags` / `item_mods` arrays. One list, one syntax.
@@ -102,6 +112,7 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[[regions]]` | `dimension`, `pos1`, `pos2`, `prevent_entry`, `prevent_explosions`, ... | 3D bounding-box gates |
 | `[structures]` | `locked_entry` + `[structures.rules]` (`prevent_block_break`, `prevent_block_place`, `prevent_explosions`, `disable_mob_spawning`) | Block entry into specific generated structures |
 | `[enforcement]` | `allowed_use`, `allowed_pickup`, `allowed_hotbar`, `allowed_mouse_pickup`, `allowed_inventory` | Per-stage exception lists for in-inventory enforcement |
+| `[enforcement]` (overrides) | `block_item_use`, `block_item_pickup`, `block_item_inventory`, `block_block_placement`, `block_block_interaction`, `block_dimension_travel`, `block_entity_attack`, `block_screen_open`, `block_crop_growth`, `block_pet_interact` | **New in 2.3.** Per-stage override of the same-named global enforcement toggle, applied only to this stage's gated resources (omit = inherit global). Most-restrictive-wins across multi-stage gates. |
 | (root) | `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
 
 Two whitelist mechanisms exist:
@@ -182,6 +193,53 @@ This registers a synthetic `mod:minecraft` entry into items, blocks, fluids, and
 
 ---
 
+## Automatic Triggers (`[[triggers]]`)
+
+A stage grants **itself** when a player meets its triggers. Declare them per-stage with `[[triggers]]` blocks (the old global `triggers.toml` is gone). Each block is one **rule**; rules are **OR-ed** (any complete rule unlocks the stage). Inside a rule, one or more `[[triggers.conditions]]` combine via `mode = "all_of"` (default) or `mode = "any_of"`; a single-condition rule can put the condition fields straight on the `[[triggers]]` table.
+
+```toml
+# Grant when the player mines 10 diamond ore (single-condition shorthand)
+[[triggers]]
+type  = "mine"
+block = "minecraft:diamond_ore"
+count = 10
+
+# ...or kills 10 endermen AND the ender dragon (a second, OR-ed rule)
+[[triggers]]
+mode = "all_of"
+
+  [[triggers.conditions]]
+  type   = "kill"
+  entity = "minecraft:enderman"
+  count  = 10
+
+  [[triggers.conditions]]
+  type   = "kill"
+  entity = "minecraft:ender_dragon"
+```
+
+Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance` (blocks travelled, by movement kind or `all`), `stat` (any vanilla custom statistic), `play_time` (minutes), `level`, `xp`, `has_item`, `advancement`, `dimension`, `biome`. Subjects accept `#tag`/`tag:` form; `count` defaults to 1. The counter types read vanilla statistics, so they're **retroactive** and survive restarts with no extra save files; `dimension`/`biome` "visited" one-shots are persisted per player (reset with `/progressivestages trigger reset <player> <stage>`). Progress is per-player and the first team member to satisfy a rule unlocks the stage for the whole team. Poll cadence is `enforcement.trigger_poll_interval` ticks (relevant events also force an immediate re-check).
+
+**Triggers respect dependencies:** a stage is not auto-granted by its triggers until every `[stage].dependency` prerequisite is owned. Counters keep accruing while a prerequisite is missing, so the next poll after the last prerequisite is granted completes the unlock. Omit a stage's `dependency` to let its triggers fire freely, regardless of progression.
+
+---
+
+## Stage Tree Viewer & Per-Stage `[display]`
+
+Players can open an in-game **Stage Tree / Progression viewer** via `/stage gui` or the "Open Progression Tree" keybind (category *ProgressiveStages*, unbound by default — assign it in Controls). It's a **read-only, two-pane master/detail screen**. The **left pane** is the stage tree: every stage indented by dependency depth and colour-coded by status (unlocked / ready-to-unlock / locked). Selecting a stage fills the **right pane** with its icon, name, and status; description; the **prerequisites needed to advance** (each marked ✓/✗); a **"% to unlock" progress bar** with the live per-condition `[[triggers]]` breakdown; and an **icon-grid preview of the items that stage unlocks**, with a total count.
+
+Each stage can override the global tooltip/icon defaults for its own locked items with a `[display]` block — all keys optional, inheriting the global default when omitted:
+
+```toml
+[display]
+display_as_unknown_item     = true    # mask the item NAME as "Unknown Item"
+obscure_icon                = true    # also replace the ICON with a "?" placeholder
+show_tooltip                = true    # show the lock / required-stage tooltip lines
+show_description_on_tooltip = true    # append [stage].description to the tooltip
+```
+
+---
+
 ## Mod Compatibility
 
 | Mod | Integration |
@@ -212,8 +270,12 @@ All integrations are reflection-loaded; absent mods are silently skipped. Each c
 | `/stage check <player> <stage>` | OP | Check if a player has a stage |
 | `/stage info <stage>` | OP | Print a stage's full definition |
 | `/stage tree` | OP | Print the stage dependency tree |
+| `/stage gui` | OP | Open the in-game Stage Tree / Progression viewer (any player can open it via the keybind) |
+| `/stage progress [next\|all\|<stage>] [player]` | OP | Show live `[[triggers]]` rule/condition progress toward stages |
 | `/stage validate` | OP | Validate every stage TOML file (registry existence, dependency cycles, malformed entries) |
-| `/stage reload` | OP | Reload stage and trigger configs from disk |
+| `/stage reload` | OP | Reload stage configs (incl. each stage's `[[triggers]]`) from disk |
+| `/progressivestages triggers list [player]` | OP | List every stage that declares `[[triggers]]`; with a player, show their live per-condition progress |
+| `/progressivestages trigger reset <player> <stage>` | OP | Clear a stage's persisted one-shot (dimension / biome visited) progress |
 | `/stage diagnose ftbquests` | OP | Dump FTB Quests integration status (provider registered, team mode, recheck queue) |
 
 Every line of every command's output is a configurable template via `messages.cmd_*` keys in `progressivestages.toml`. `&` color codes and `{placeholder}` substitution work everywhere.
@@ -225,9 +287,9 @@ Every line of every command's output is a configurable template via `messages.cm
 `config/progressivestages.toml` — high-level groups:
 
 - **`[general]`** — `starting_stages`, `team_mode` (`ftb_teams` / `solo`), `linear_progression`, `reapply_starting_stages_on_login`, `debug_logging`.
-- **`[enforcement]`** — every per-category enforcement toggle (`block_item_use`, `block_block_placement`, `block_dimension_travel`, `block_enchants`, `block_crop_growth`, `block_pet_interact`, `block_loot_drops`, `block_mob_spawns`, `block_mob_replacements`, `block_region_entry`, `block_structure_entry`, `block_screen_open`, ...), plus `allow_creative_bypass`, `mask_locked_item_names`, `notification_cooldown`, `reveal_stage_names_only_to_operators`, lock-sound config, eject-blocked-inventory frequency.
-- **`[messages]`** — every player-facing string. Supports `&` color codes (`&0`–`&f`, `&l/m/n/o/k/r`) and named placeholders. Generic `*_generic` variants are emitted when `reveal_stage_names_only_to_operators = true` and the player is non-op. Includes the `messages.prefix` template, `messages.tooltip_*`, `messages.cmd_*`, `messages.type_label_*`, and `messages.cmd_ftb_status_*` families.
-- **`[emi]`** — `enabled`, `show_lock_icon`, `lock_icon_position`, `lock_icon_size`, `show_highlight`, `highlight_color`, `show_tooltip`, `show_locked_recipes`.
+- **`[enforcement]`** — every per-category enforcement toggle (`block_item_use`, `block_block_placement`, `block_dimension_travel`, `block_enchants`, `block_crop_growth`, `block_pet_interact`, `block_loot_drops`, `block_mob_spawns`, `block_mob_replacements`, `block_region_entry`, `block_structure_entry`, `block_screen_open`, ...), plus `allow_creative_bypass`, `mask_locked_item_names`, `obscure_locked_item_icons` (new — replace a locked item's icon with a `?`), `trigger_poll_interval` (new — `[[triggers]]` poll cadence in ticks), `notification_cooldown`, `reveal_stage_names_only_to_operators`, lock-sound config, eject-blocked-inventory frequency.
+- **`[messages]`** — every player-facing string. Supports `&` color codes (`&0`–`&f`, `&l/m/n/o/k/r`) and named placeholders. Generic `*_generic` variants are emitted when `reveal_stage_names_only_to_operators = true` and the player is non-op. Includes the `messages.prefix` template, `messages.tooltip_*` (now including `tooltip_stage_description`), `messages.cmd_*`, `messages.type_label_*`, and `messages.cmd_ftb_status_*` families.
+- **`[emi]`** — `enabled`, `show_lock_icon`, `lock_icon_position`, `lock_icon_size`, `show_highlight`, `highlight_color`, `show_tooltip`, `show_stage_description_on_tooltip` (new — append the gating stage's description to a locked item's tooltip), `show_locked_recipes`.
 - **`[integration.ftbquests]`** — `enabled`, `team_mode` (delegates to FTB Teams' `TeamStagesHelper`), `recheck_budget_per_tick`.
 - **`[integration.ftbteams]`** — `enabled`.
 - **`[performance]`** — `enable_lock_cache`, `lock_cache_size`.
@@ -300,6 +362,15 @@ compat/
 ---
 
 ## Changelog
+
+### v2.3
+- **Per-stage `[[triggers]]`** — auto-grant triggers moved into each stage's TOML; global `triggers.toml` removed. OR-ed rules of `all_of` / `any_of` conditions over kills, mining, crafting, pickups, use/drop/break, distance, raw stats, play time, level/XP, inventory, advancements, dimensions, and biomes. Counter conditions are retroactive (read vanilla statistics).
+- **Triggers respect dependencies** — a stage's triggers don't grant until all its `dependency` prerequisites are owned; counters keep accruing while waiting. Omit `dependency` to fire freely.
+- **In-game Stage Tree viewer** — read-only two-pane master/detail screen. "Open Progression Tree" keybind (unbound by default) + `/stage gui`; left pane = status-coloured stage tree by dependency depth, right pane = selected stage's description, prerequisite checklist (✓/✗), live `[[triggers]]` % progress, and an icon grid of the items it unlocks.
+- **Per-stage `[display]`** — `display_as_unknown_item`, `obscure_icon`, `show_tooltip`, `show_description_on_tooltip` override the global tooltip/icon defaults.
+- **Per-stage `[enforcement]` overrides** — override the same-named global enforcement toggles (`block_item_use/pickup/inventory`, `block_block_placement/interaction`, `block_dimension_travel`, `block_entity_attack`, `block_screen_open`, `block_crop_growth`, `block_pet_interact`) for just that stage's gated resources; most-restrictive-wins across multi-stage gates.
+- **New config keys** — `enforcement.obscure_locked_item_icons`, `enforcement.trigger_poll_interval`, `emi.show_stage_description_on_tooltip`, message template `messages.tooltip_stage_description`.
+- **Command changes** — added `/stage gui` and `/progressivestages triggers list`; `/progressivestages trigger reset` now takes `<stage>`; removed `/progressivestages multi list`.
 
 ### v2.0
 - **Unified prefix lock model** — `id:`, `mod:`, `tag:`, `name:` replace v1's scattered arrays.

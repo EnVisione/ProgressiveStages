@@ -131,12 +131,22 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             // Get the underlying ItemStack from the EmiStack
             var itemStack = stack.getItemStack();
             if (!itemStack.isEmpty()) {
+                // Real item stack: the resolved item-lock set is AUTHORITATIVE here and already
+                // honors always_unlocked / per-stage [unlocks]. We intentionally do NOT fall
+                // through to the mod-class heuristic below for item stacks — doing so would hide
+                // whitelisted items whose Java Item class happens to live inside a blocked mod's
+                // module (e.g. Create's WrenchItem, BeltConnectorItem, large_water_wheel,
+                // mechanical_press/mixer), while sibling blocks that use vanilla BlockItem
+                // (shaft, cogwheel, gearbox…) slip through — the exact bug this guard fixes.
+                // JEI already does this (its mod-class fallback skips VanillaTypes.ITEM_STACK).
                 ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
-                if (finalLockedItemIds.contains(itemId)) return true;
+                return finalLockedItemIds.contains(itemId);
             }
 
-            // Class-based fallback: catches Mekanism gases/pigments whose registry id is
-            // "minecraft:" but whose class lives inside a blocked mod's module.
+            // Class-based fallback — ONLY for non-item EmiStacks (getItemStack() is empty), e.g.
+            // Mekanism gases/chemicals/pigments whose registry id is "minecraft:" but whose class
+            // lives inside a blocked mod's module. These have no item id to match against, so we
+            // gate them by the owning mod of their Java class instead.
             if (!finalBlockedModIds.isEmpty()) {
                 try {
                     var stackOwner = com.enviouse.progressivestages.compat.recipeviewer.RecipeViewerModHints.owningModIdForClass(stack.getClass());
@@ -420,9 +430,9 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
      * Get the display name for a stage
      */
     public static String getStageDisplayName(StageId stageId) {
-        return StageOrder.getInstance().getStageDefinition(stageId)
-            .map(StageDefinition::getDisplayName)
-            .orElse(stageId.getPath());
+        // v2.3 fix: read from ClientStageCache (synced from server), not StageOrder, which is
+        // empty on a dedicated-server client. getDisplayName already falls back to getPath().
+        return ClientStageCache.getDisplayName(stageId);
     }
 
     /**

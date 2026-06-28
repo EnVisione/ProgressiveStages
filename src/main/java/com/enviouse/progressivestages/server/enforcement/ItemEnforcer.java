@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
@@ -40,7 +41,9 @@ public class ItemEnforcer {
      * @return true if allowed, false if blocked
      */
     public static boolean canUseItem(ServerPlayer player, ItemStack stack) {
-        if (!StageConfig.isBlockItemUse()) {
+        LockRegistry reg = LockRegistry.getInstance();
+        // Fast path: category globally off AND no stage overrides anywhere → never enforced.
+        if (!StageConfig.isBlockItemUse() && !reg.hasEnforcementOverrides()) {
             return true;
         }
 
@@ -59,11 +62,14 @@ public class ItemEnforcer {
         }
 
         // Check enforcement exemption before blocking
-        if (LockRegistry.getInstance().isExemptFromUse(stack.getItem())) {
+        if (reg.isExemptFromUse(stack.getItem())) {
             return true;
         }
 
-        return !isItemLockedForPlayer(player, stack.getItem());
+        // v2.3: per-stage override — enforce ITEM_USE only if a missing gating stage requires it.
+        java.util.Set<StageId> missing = reg.missingStagesForItem(player, stack.getItem());
+        if (missing.isEmpty()) return true;
+        return !reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_USE);
     }
 
     /**
@@ -71,7 +77,8 @@ public class ItemEnforcer {
      * @return true if allowed, false if blocked
      */
     public static boolean canPickupItem(ServerPlayer player, ItemStack stack) {
-        if (!StageConfig.isBlockItemPickup()) {
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockItemPickup() && !reg.hasEnforcementOverrides()) {
             return true;
         }
 
@@ -90,11 +97,13 @@ public class ItemEnforcer {
         }
 
         // Check enforcement exemption before blocking
-        if (LockRegistry.getInstance().isExemptFromPickup(stack.getItem())) {
+        if (reg.isExemptFromPickup(stack.getItem())) {
             return true;
         }
 
-        return !isItemLockedForPlayer(player, stack.getItem());
+        java.util.Set<StageId> missing = reg.missingStagesForItem(player, stack.getItem());
+        if (missing.isEmpty()) return true;
+        return !reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_PICKUP);
     }
 
     /**
@@ -102,7 +111,8 @@ public class ItemEnforcer {
      * @return true if allowed, false if should be dropped
      */
     public static boolean canHoldItem(ServerPlayer player, ItemStack stack) {
-        if (!StageConfig.isBlockItemInventory()) {
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockItemInventory() && !reg.hasEnforcementOverrides()) {
             return true;
         }
 
@@ -121,11 +131,13 @@ public class ItemEnforcer {
         }
 
         // Check enforcement exemption before blocking
-        if (LockRegistry.getInstance().isExemptFromInventory(stack.getItem())) {
+        if (reg.isExemptFromInventory(stack.getItem())) {
             return true;
         }
 
-        return !isItemLockedForPlayer(player, stack.getItem());
+        java.util.Set<StageId> missing = reg.missingStagesForItem(player, stack.getItem());
+        if (missing.isEmpty()) return true;
+        return !reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_INVENTORY);
     }
 
     /**

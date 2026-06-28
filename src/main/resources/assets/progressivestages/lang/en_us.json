@@ -12,6 +12,11 @@
   "progressivestages.command.stage_not_found": "Stage not found: %s",
   "progressivestages.command.reload_success": "Reloaded stage definitions",
 
+  "key.categories.progressivestages": "ProgressiveStages",
+  "key.progressivestages.open_tree": "Open Progression Tree",
+  "gui.progressivestages.tree.title": "Progression",
+  "gui.progressivestages.tree.empty": "No stages defined",
+
   "progressivestages.quest.required_stage": "Stage Required",
   "progressivestages.quest.required_stage.tooltip": "If set, this quest is hidden until the player has this stage. Leave empty for no requirement. Example: iron_age or progressivestages:diamond_age",
   "progressivestages.chapter.required_stage": "Stage Required",

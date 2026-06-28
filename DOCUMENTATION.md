@@ -35,10 +35,16 @@
    - [4.18 `[curios]` — per-slot gating when Curios is installed](#418-curios--per-slot-gating-when-curios-is-installed)
    - [4.19 `[[ores.overrides]]` — parsed but deferred post-2.0](#419-oresoverrides--parsed-but-deferred-post-20)
    - [4.20 `[unlocks]` — per-stage carve-outs](#420-unlocks--per-stage-carve-outs)
-   - [4.21 `[enforcement]` — per-stage exemptions](#421-enforcement--per-stage-exemptions)
-5. [Triggers — Automatic Stage Grants](#5-triggers--automatic-stage-grants)
-   - [5.1 Single-trigger sections](#51-single-trigger-sections)
-   - [5.2 `[[multi]]` — multi-trigger requirements (NEW IN 2.0)](#52-multi--multi-trigger-requirements-new-in-20)
+   - [4.21 `[enforcement]` — per-stage exemptions + toggle overrides](#421-enforcement--per-stage-exemptions--toggle-overrides)
+   - [4.22 `[display]` — per-stage tooltip + icon overrides](#422-display--per-stage-tooltip--icon-overrides)
+   - [4.23 `[[triggers]]` — automatic stage grants](#423-triggers--automatic-stage-grants)
+5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
+   - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
+   - [5.2 Condition types](#52-condition-types)
+   - [5.3 Tags, counts, and retroactivity](#53-tags-counts-and-retroactivity)
+   - [5.4 Worked examples](#54-worked-examples)
+   - [5.5 Polling, persistence, and reset](#55-polling-persistence-and-reset)
+   - [5.6 The Stage Tree viewer + keybind](#56-the-stage-tree-viewer--keybind)
 6. [Global Configuration — `progressivestages.toml`](#6-global-configuration--progressivestagestoml)
 7. [Commands](#7-commands)
 8. [EMI / JEI Integration](#8-emi--jei-integration)
@@ -70,14 +76,17 @@ as `stone_age`, `iron_age`, `nether_explorer`) in TOML files. Each stage carries
 - An optional list of **dependencies** — other stages that must be unlocked
   before this one can be granted.
 - Optional **display metadata** (display name, description, icon, unlock
-  broadcast message).
+  broadcast message) plus per-stage tooltip / lock-icon overrides.
+- Optional **automatic-grant triggers** — a per-stage `[[triggers]]` block that
+  watches player actions (kills, mining, crafting, travel, advancements,
+  dimensions, biomes, XP, …) and grants the stage when any rule is satisfied.
 
 Players gain stages through:
 
 - Admin command (`/stage grant`)
-- Automatic triggers (advancement, item pickup, dimension entry, boss kill)
-- **Multi-trigger requirements** (NEW in 2.0 — see §5.2) where MULTIPLE
-  sub-conditions must all fire before the stage is granted
+- Automatic per-stage `[[triggers]]` (see §5) — one or more OR-ed rules, each a
+  set of AND/OR-combined conditions over kills, mining, crafting, distance,
+  statistics, advancements, dimensions, biomes, and inventory/level state
 - FTB Quests rewards
 - KubeJS scripts
 - Starting-stage list (auto-granted on first join)
@@ -180,25 +189,30 @@ Stage TOMLs live in the **global config directory** (NOT per-world):
 
 ```
 config/ProgressiveStages/<stage>.toml
-config/ProgressiveStages/triggers.toml
 config/progressivestages.toml         (global mod config — note: outside ProgressiveStages/)
 ```
 
 This means stage definitions are **shared across all worlds** on the same
 server/instance. Per-world stage state lives inside each world's saved data.
 
+> **Changed in 2.1.** The global `config/ProgressiveStages/triggers.toml` is
+> **gone**. Auto-grant triggers are now declared **per-stage** inside each
+> stage file's `[[triggers]]` block (see §5). A leftover legacy `triggers.toml`
+> is simply ignored.
+
 Three default stage files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`)
-plus `triggers.toml` are generated on first launch if the directory is empty.
-The `diamond_age.toml` template is the canonical 2.0 reference file — every
-category is shown with inline documentation.
+are generated on first launch if the directory is empty. The `diamond_age.toml`
+template is the canonical reference file — every category, the `[display]`
+overrides, and a worked `[[triggers]]` example are shown with inline
+documentation.
 
 ---
 
 ## 3. Quick Start — Your First Stage in 90 Seconds
 
 1. Launch the game once with ProgressiveStages installed. The default stage
-   files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`) plus
-   `triggers.toml` appear in `config/ProgressiveStages/`.
+   files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`) appear in
+   `config/ProgressiveStages/`.
 
 2. Open `config/ProgressiveStages/iron_age.toml`. The minimum useful 2.0 stage
    file looks like this:
@@ -226,22 +240,25 @@ category is shown with inline documentation.
    ]
    ```
 
-3. In `triggers.toml`, point an item-pickup or advancement at the stage:
+3. In the **same** `iron_age.toml`, add a `[[triggers]]` rule so the stage
+   grants itself when the player earns the smelt-iron advancement:
 
    ```toml
-   [items]
-   "minecraft:iron_ingot" = "iron_age"
-
-   [advancements]
-   "minecraft:story/smelt_iron" = "iron_age"
+   [[triggers]]
+   type = "advancement"
+   advancement = "minecraft:story/smelt_iron"
    ```
+
+   This is the single-condition shorthand — one rule, one condition, fields
+   placed directly on the `[[triggers]]` table. See §5 for multi-condition
+   rules and the full condition list.
 
 4. Either restart the server or run `/progressivestages reload` in-game.
 
 5. Verify:
    - `/stage info iron_age` — prints the parsed definition.
    - `/stage list <player>` — shows which stages the player has.
-   - Pick up an iron ingot. The stage is granted; the unlock message broadcasts;
+   - Smelt iron. The stage is granted; the unlock message broadcasts;
      locks for `iron_pickaxe`, `iron_sword`, `iron_block` lift instantly.
 
 That's the entire core loop. Sections 4 and 5 below cover every category and
@@ -1026,7 +1043,7 @@ exemption from a gating *set*, not a match against the locked list).
 This is most often used alongside `[locks].minecraft = true` or
 `mod:vanilla_namespace` — see the next subsection.
 
-### 4.21 `[enforcement]` — per-stage exemptions
+### 4.21 `[enforcement]` — per-stage exemptions + toggle overrides
 
 ```toml
 [enforcement]
@@ -1093,230 +1110,420 @@ The implementation: per-stage exemption lists are stored on
 [`LockDefinition`](src/main/java/com/enviouse/progressivestages/common/lock/LockDefinition.java)
 and queried by each enforcer at the corresponding event.
 
----
+#### Per-stage enforcement *overrides* — **New in 2.1**
 
-## 5. Triggers — Automatic Stage Grants
+Where the `allowed_*` lists exempt **named entries** while a global toggle is on,
+the `[enforcement]` section can also **override the global toggle itself** —
+but only for the resources **that stage** gates. Each override key uses the
+**same name** as the matching toggle in `progressivestages.toml`. **Omit a key**
+to inherit the global default; **set it `true`/`false`** to override the global
+default just for this stage's gated resources.
 
-Triggers live in **one file**: `config/ProgressiveStages/triggers.toml`. They
-grant stages automatically based on player actions, without per-tick polling.
+Ten override keys are supported, each mapping to the identically-named global
+toggle:
 
-### 5.1 Single-trigger sections
+| Override key (in stage `[enforcement]`) | Mirrors global toggle | Category it governs for this stage |
+|-----------------------------------------|-----------------------|------------------------------------|
+| `block_item_use` | `block_item_use` | Using / right-/left-clicking / mining / attacking with this stage's items |
+| `block_item_pickup` | `block_item_pickup` | Picking this stage's items up from the ground |
+| `block_item_inventory` | `block_item_inventory` | Auto-dropping this stage's items from the inventory |
+| `block_block_placement` | `block_block_placement` | Placing this stage's blocks |
+| `block_block_interaction` | `block_block_interaction` | Right-clicking this stage's blocks |
+| `block_dimension_travel` | `block_dimension_travel` | Traveling to this stage's dimensions |
+| `block_entity_attack` | `block_entity_attack` | Attacking this stage's `[entities]` |
+| `block_screen_open` | `block_screen_open` | Opening this stage's `[screens]` |
+| `block_crop_growth` | `block_crop_growth` | This stage's `[crops]` planting / growth / bonemeal / harvest |
+| `block_pet_interact` | `block_pet_interact` | This stage's `[pets]` taming / breeding / commanding / riding |
 
-Four sections — each is a flat `"key" = "stage_id"` map. The stage ID
-on the right side is normalized (case, namespace, whitespace) when loaded,
-so `"iron_age"` and `"progressivestages:iron_age"` are interchangeable.
+**Semantics:**
 
-#### `[advancements]` — one advancement → one stage
+- **Opt-OUT** (global ON, stage sets `false`). The global toggle is on, but the
+  stage sets e.g. `block_item_pickup = false` → this stage's gated items **can
+  be picked up** even though pickup is blocked everywhere else. Classic use:
+  *"this stage hides `mod:create` and stops players USING or placing its items,
+  but lets them carry the items around."*
+- **Opt-IN** (global OFF, stage sets `true`). The global toggle is off, but the
+  stage sets e.g. `block_item_use = true` → use-blocking is enforced **only for
+  this stage's resources**, leaving every other stage unaffected.
+- **Most-restrictive wins (multi-stage rule).** A resource gated by several
+  stages is enforced for a category if **ANY** of its still-missing gating
+  stages enforces it. One stage opting out can never free a resource that
+  another gating stage locks *and* enforces.
+- **No overrides anywhere → identical to pure global toggles.** With no stage
+  declaring any of these keys, behaviour is exactly the global config.
 
-```toml
-[advancements]
-"minecraft:story/mine_stone" = "stone_age"
-"minecraft:story/smelt_iron" = "iron_age"
-"minecraft:story/mine_diamond" = "diamond_age"
-"minecraft:nether/return_to_sender" = "nether_warrior"
-```
-
-Fires immediately when the player earns the advancement, no relog required.
-Stage is granted once per (player, stage); re-earning has no effect.
-
-#### `[items]` — one item → one stage
+**Worked example.** "This stage hides Create items and blocks their *use* and
+*placement*, but players may freely pick up and carry the items":
 
 ```toml
 [items]
-"minecraft:iron_ingot" = "iron_age"
-"minecraft:diamond" = "diamond_age"
-"minecraft:netherite_ingot" = "netherite_age"
+locked = ["mod:create"]
+[blocks]
+locked = ["mod:create"]
+
+[enforcement]
+# Global config has all of these ON. Override two of them OFF for THIS stage:
+block_item_pickup    = false   # let players carry Create items
+block_item_inventory = false   # ...and keep them in their inventory
+# block_item_use omitted       → inherits global (use still blocked)
+# block_block_placement omitted → inherits global (placement still blocked)
 ```
 
-Fires on TWO surfaces:
-
-- **Pickup** — `ItemEntityPickupEvent.Pre`.
-- **Login inventory scan** — `PlayerLoggedInEvent`. Walks the player's main
-  inventory; if they already have the item, the stage is granted retroactively.
-
-#### `[dimensions]` — first entry → stage (one-time, persisted)
+### 4.22 `[display]` — per-stage tooltip + icon overrides
 
 ```toml
-[dimensions]
-"minecraft:the_nether" = "nether_explorer"
-"minecraft:the_end" = "end_explorer"
+[display]
+display_as_unknown_item     = true    # mask the item NAME as "Unknown Item"
+obscure_icon                = false   # also replace the ICON with a "?" placeholder
+show_tooltip                = true    # show the lock / required-stage tooltip lines
+show_description_on_tooltip = false   # append [stage].description to the tooltip
 ```
 
-Fires on `PlayerEvent.PlayerChangedDimensionEvent`. **Persisted per-world** in
-`world/data/progressivestages_triggers.dat` so it survives restarts. The
-trigger fires once per (player, dimension) — re-entering after the trigger
-has fired does nothing, even if the stage is later revoked.
+Per-stage overrides of the global tooltip / icon defaults. **Every key is
+optional** — omit a key and the stage inherits the matching global default
+from `progressivestages.toml`. These only affect how this stage's *locked*
+items present to a player who hasn't unlocked the stage.
 
-Reset: `/progressivestages trigger reset <player> dimension <id>`
+| Key | Type | Global default it overrides | Effect |
+|-----|------|-----------------------------|--------|
+| `display_as_unknown_item` | bool | `enforcement.mask_locked_item_names` | Mask the item NAME as `"Unknown Item"` (configurable text). |
+| `obscure_icon` | bool | `enforcement.obscure_locked_item_icons` (default `false`) | **New in 2.3.** Also replace the item ICON with a `?` placeholder in the player's inventory — the item becomes fully unidentifiable, not just its name. |
+| `show_tooltip` | bool | `emi.show_tooltip` | Whether to show the lock / required-stage tooltip lines for this stage's items. |
+| `show_description_on_tooltip` | bool | `emi.show_stage_description_on_tooltip` (default `false`) | **New in 2.3.** Append this stage's `[stage].description` to a locked item's tooltip, rendered through the `messages.tooltip_stage_description` template. |
 
-#### `[bosses]` — first kill → stage (one-time, persisted)
+**Worked example.** "Make endgame items completely mysterious until unlocked,
+and tease the stage's description in the tooltip":
 
 ```toml
-[bosses]
-"minecraft:ender_dragon" = "dragon_slayer"
-"minecraft:wither" = "wither_slayer"
-"minecraft:warden" = "warden_slayer"
+[stage]
+id          = "void_age"
+description = "Something stirs beyond the world's edge."
+
+[display]
+display_as_unknown_item     = true
+obscure_icon                = true
+show_description_on_tooltip = true
 ```
 
-Fires on `LivingDeathEvent`. **Persisted per-world.** Attribution accepts:
+### 4.23 `[[triggers]]` — automatic stage grants
 
-1. Direct killer (entity that dealt the killing blow).
-2. Projectile source (e.g. player who shot an arrow).
-3. Last player who hurt the entity within 5 seconds (100 ticks).
+A stage can grant **itself** when the player performs the right actions. The
+`[[triggers]]` block is the per-stage trigger schema introduced in 2.1; it
+replaces the old global `triggers.toml`. Because it lives in the same file as
+the stage's locks and `[display]`, everything about a stage is in one place.
 
-Reset: `/progressivestages trigger reset <player> boss <id>`
-
-### 5.2 `[[multi]]` — multi-trigger requirements (NEW IN 2.0)
-
-> **The user-requested feature.** When a stage should require MULTIPLE
-> conditions to be met before being granted — e.g. "the player has picked up
-> a stone sword, stone pickaxe, AND stone axe" — single triggers are not
-> enough. `[[multi]]` requirements solve this.
-
-A multi-trigger is a **table-array** entry that lists a stage plus a set of
-sub-conditions that must ALL fire (or, optionally, ANY ONE fire) before the
-stage is granted.
-
-#### Shape
+Full reference and worked examples are in **§5**. A minimal taste:
 
 ```toml
-[[multi]]
-stage = "stone_tools_master"
-description = "Own a full set of stone tools"
-id = "stone_tools_master"        # optional — see PROGRESS + PERSISTENCE below
-all_of = [
-    "item:minecraft:stone_sword",
-    "item:minecraft:stone_pickaxe",
-    "item:minecraft:stone_axe",
-]
+[[triggers]]
+type  = "mine"
+block = "minecraft:diamond_ore"
+count = 10
 ```
 
-| Field | Required? | Notes |
-|-------|-----------|-------|
-| `stage` | **Yes** | The stage ID granted on completion. Normalized like every other stage ID. |
-| `all_of` | Exactly one of `all_of` / `any_of` | List of sub-trigger strings. Stage granted when EVERY sub-trigger has fired at least once. |
-| `any_of` | (alternative) | Stage granted the moment ANY ONE sub-trigger fires. Equivalent to N separate single-trigger lines, but groups intent. |
-| `description` | Optional | Free text used by `/progressivestages multi list`. |
-| `id` | Optional | Stable persistence handle; defaults to a hash of (stage + mode + sorted sub-keys). |
+This single-condition shorthand grants the stage once the player has mined 10
+diamond ore.
 
-#### Sub-trigger prefixes
+---
 
-Each sub-trigger string uses a **surface prefix** plus the resource ID it
-listens on:
+## 5. Triggers — The Per-Stage `[[triggers]]` System
 
-| Prefix | Surface |
-|--------|---------|
-| `item:<namespace:path>` | Item picked up OR found in inventory at login |
-| `advancement:<namespace:path>` | Advancement earned (or already earned at login) |
-| `dimension:<namespace:path>` | Dimension entered (current dimension at login also counts) |
-| `boss:<namespace:path>` | Entity killed by the player |
+Triggers are declared **per stage**, inside that stage's own TOML, in one or
+more `[[triggers]]` blocks. There is no global `triggers.toml` anymore (a
+leftover one is ignored). When a stage's triggers fire, the stage grants
+itself — no `/stage grant` required.
 
-#### Worked examples
+The system reads Minecraft's own **statistics** wherever it can, which makes
+most conditions **retroactive** (a player already past the threshold is
+credited the instant the trigger loads) and **save-file-free** for those
+condition types.
 
-**Example 1 — The canonical case (the user's stone-tools request):**
+**Triggers respect dependencies — New in 2.3.** A stage is **not** auto-granted
+by its `[[triggers]]` until **all** of the stage's `[stage].dependency`
+prerequisites are owned. Counter progress keeps accruing from vanilla stats
+while the stage waits on its prerequisites, so the moment the last prerequisite
+is granted the next poll completes the unlock — no progress is lost. To make a
+trigger fire **freely, regardless of progression**, simply **omit the stage's
+`dependency`** (a stage with no dependencies grants the instant its rule is
+satisfied).
+
+### 5.1 Rules, conditions, and modes
 
 ```toml
-[[multi]]
-stage = "stone_tools_master"
-description = "Own a full set of stone tools"
-all_of = [
-    "item:minecraft:stone_sword",
-    "item:minecraft:stone_pickaxe",
-    "item:minecraft:stone_axe",
-]
+# One stage may declare several [[triggers]] blocks.
+# Each [[triggers]] block is ONE independent RULE.
+# Rules are OR-ed: the stage is granted when ANY rule is fully satisfied.
+
+[[triggers]]
+mode = "all_of"                       # default; "any_of" is the alternative
+
+  [[triggers.conditions]]
+  type  = "kill"
+  entity = "minecraft:enderman"
+  count = 10
+
+  [[triggers.conditions]]
+  type  = "kill"
+  entity = "minecraft:ender_dragon"
+  count = 1
 ```
 
-A player must pick up (or log in already holding) all three tools before
-`stone_tools_master` is granted. The three sub-triggers can be satisfied in
-any order, over any timespan, across sessions.
+Anatomy:
 
-**Example 2 — Cross-surface:**
+- **Rule** — one `[[triggers]]` table. A stage may have several. Rules are
+  **OR-ed**: satisfy *any one* rule and the stage is granted.
+- **Conditions** — one or more `[[triggers.conditions]]` tables inside a rule.
+  How they combine is set by the rule's `mode`:
+  - `mode = "all_of"` (default) — every condition must be satisfied.
+  - `mode = "any_of"` — the rule is satisfied the moment *any* condition is.
+- **Shorthand** — a rule with a **single** condition may put the condition's
+  fields **directly on the `[[triggers]]` table** (no nested
+  `[[triggers.conditions]]`). The two forms below are identical:
+
+  ```toml
+  # shorthand
+  [[triggers]]
+  type  = "mine"
+  block = "minecraft:diamond_ore"
+  count = 10
+  ```
+
+  ```toml
+  # long form
+  [[triggers]]
+  mode = "all_of"
+    [[triggers.conditions]]
+    type  = "mine"
+    block = "minecraft:diamond_ore"
+    count = 10
+  ```
+
+### 5.2 Condition types
+
+Every condition has a `type`. The **subject key** (the second column) tells the
+condition *what* to count; `count` is the threshold (defaults to `1` if
+omitted).
+
+| `type` | Subject key | Meaning | Counter? |
+|--------|-------------|---------|----------|
+| `kill` | `entity` = `<id\|tag>` | Mob kills | yes |
+| `mine` | `block` = `<id\|tag>` | Blocks mined | yes |
+| `craft` | `item` = `<id\|tag>` | Items crafted | yes |
+| `pickup` | `item` = `<id\|tag>` | Items picked up (cumulative) | yes |
+| `use` | `item` = `<id\|tag>` | Items used / right-clicked | yes |
+| `drop` | `item` = `<id\|tag>` | Items dropped | yes |
+| `break_item` | `item` = `<id\|tag>` | Tools / items broken | yes |
+| `distance` | `movement` = `<kind>` | Distance travelled, in **blocks** | yes |
+| `stat` | `stat` = `<custom_stat_id>` | Any vanilla custom statistic | yes |
+| `play_time` | *(none)* | Time played, in **minutes** | yes |
+| `level` | *(none)* | Current experience level | state |
+| `xp` | *(none)* | Current total experience points | state |
+| `has_item` | `item` = `<id\|tag>` | Count currently in inventory | state |
+| `advancement` | `advancement` = `<id>` | Advancement earned | persisted (vanilla) |
+| `dimension` | `dimension` = `<id>` | Dimension entered at least once | one-shot |
+| `biome` | `biome` = `<id\|tag>` | Biome visited at least once | one-shot |
+
+**`distance` movement kinds:** `walk`, `sprint`, `crouch`, `swim`, `fall`,
+`climb`, `fly`, `walk_under_water`, `walk_on_water`, `minecart`, `boat`, `pig`,
+`horse`, `strider`, `aviate` (alias `elytra`), or **`all`** (the sum of every
+kind). All distances are in **blocks** (the mod converts vanilla's cm
+statistics for you).
+
+**`stat` custom statistics:** any vanilla custom stat id works, e.g.
+`minecraft:jump`, `minecraft:deaths`, `minecraft:damage_dealt`,
+`minecraft:mob_kills`, `minecraft:time_since_rest`. Use this when no dedicated
+condition type covers what you want to count.
+
+**State vs. one-shot:**
+
+- `level` / `xp` / `has_item` are **momentary state** checks — they read the
+  player's *current* level, total XP, or inventory at poll time. A condition
+  that was satisfied can become unsatisfied again (e.g. the player spends a
+  level) right up until the whole rule fires and the stage is granted.
+- `advancement` reads vanilla advancement progress (persisted by vanilla).
+- `dimension` / `biome` are **visited** one-shots — once visited, they stay
+  satisfied. Their "visited" flag is persisted by the mod per player (see §5.5).
+
+### 5.3 Tags, counts, and retroactivity
+
+- **`count`** defaults to `1` when omitted.
+- **Tags.** Write the subject as `#namespace:path` or `tag:namespace:path` to
+  count across **all members** of the tag. For example
+  `entity = "#minecraft:skeletons"` counts kills of every skeleton variant;
+  `block = "tag:c:ores"` counts mining any ore.
+- **Retroactive counters.** The counter condition types
+  (`kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance`,
+  `stat`, `play_time`) read Minecraft's vanilla **statistics**. That means:
+  - They are **retroactive** — add a trigger to a server with existing players
+    and anyone already past the threshold is credited the instant the trigger
+    loads.
+  - They **survive restarts** with **no extra save files** (the data already
+    lives in each player's vanilla stats).
+- **Per-player progress, team grant.** Progress is tracked per **player**. The
+  **first team member** to satisfy a whole rule unlocks the stage for the
+  **entire team** (in team mode).
+
+### 5.4 Worked examples
+
+**Example 1 — `all_of`: kill 10 endermen AND the ender dragon.**
 
 ```toml
-[[multi]]
-stage = "true_dragon_slayer"
-description = "Kill the dragon AND finish Free The End"
-all_of = [
-    "boss:minecraft:ender_dragon",
-    "advancement:minecraft:end/kill_dragon",
-]
+[[triggers]]
+mode = "all_of"
+
+  [[triggers.conditions]]
+  type   = "kill"
+  entity = "minecraft:enderman"
+  count  = 10
+
+  [[triggers.conditions]]
+  type   = "kill"
+  entity = "minecraft:ender_dragon"
+  count  = 1
 ```
 
-Mixes a boss-kill sub-trigger with an advancement sub-trigger.
-
-**Example 3 — Any-of:**
+**Example 2 — single-condition shorthand: travel 100,000 blocks (any way).**
 
 ```toml
-[[multi]]
-stage = "off_world_explorer"
-description = "Visit the Nether or the End"
-any_of = [
-    "dimension:minecraft:the_nether",
-    "dimension:minecraft:the_end",
-]
+[[triggers]]
+type     = "distance"
+movement = "all"
+count    = 100000
 ```
 
-Functionally equivalent to two `[dimensions]` entries pointing at the same
-stage, but the `[[multi]]` form documents intent and groups the routes.
+`movement = "all"` sums every travel kind. Want only on-foot distance? Use
+`movement = "walk"`.
 
-**Example 4 — Big endgame gate:**
+**Example 3 — `any_of`: visit the Nether OR the End.**
 
 ```toml
-[[multi]]
-id = "endgame_gate"
-stage = "endgame"
-description = "Beat the major bosses + reach the End"
-all_of = [
-    "boss:minecraft:ender_dragon",
-    "boss:minecraft:wither",
-    "dimension:minecraft:the_end",
-    "advancement:minecraft:adventure/totem_of_undying",
-]
+[[triggers]]
+mode = "any_of"
+
+  [[triggers.conditions]]
+  type      = "dimension"
+  dimension = "minecraft:the_nether"
+
+  [[triggers.conditions]]
+  type      = "dimension"
+  dimension = "minecraft:the_end"
 ```
 
-#### Progress and persistence
+**Example 4 — two independent rules (OR) on one stage.** Either path grants
+the stage: finish the smelt-iron advancement, *or* mine 64 iron ore the hard
+way.
 
-Per-player progress is persisted in
-`world/data/progressivestages_triggers.dat` (the same file used by the
-boss/dimension one-time triggers). Each sub-key of each requirement is either
-**satisfied** or **not** for a given player.
+```toml
+# Rule A — the advancement route (single-condition shorthand)
+[[triggers]]
+type        = "advancement"
+advancement = "minecraft:story/smelt_iron"
 
-The persistence key is `multi:<requirementId>:<surface>:<resourceId>`. The
-`requirementId` is either:
+# Rule B — the grind route (single-condition shorthand, tag subject)
+[[triggers]]
+type  = "mine"
+block = "#c:ores/iron"
+count = 64
+```
 
-- The user-provided `id = "..."` field, OR
-- A hash of `<stage> | <mode> | <sorted sub-keys>` — stable across reorderings
-  of the file but invalidated when you ADD or REMOVE a sub-trigger.
+**Example 5 — mixed condition types in one rule.** Reach level 30 AND craft a
+diamond pickaxe.
 
-**Retroactive credit** (only relevant when a requirement is added to a server
-that already has played players):
+```toml
+[[triggers]]
+mode = "all_of"
 
-| Surface | Retroactive? | How |
-|---------|--------------|-----|
-| `item` | Yes | Login inventory scan |
-| `advancement` | Yes | Login scan of completed advancements |
-| `dimension` | Partial | Current dimension at login counts as visited |
-| `boss` | **No** | Past kills cannot be retrieved; the player must kill the entity again |
+  [[triggers.conditions]]
+  type  = "level"
+  count = 30
 
-#### Inspecting and resetting
+  [[triggers.conditions]]
+  type  = "craft"
+  item  = "minecraft:diamond_pickaxe"
+  count = 1
+```
 
-- `/progressivestages multi list` — every loaded requirement, mode, and
-  sub-trigger list.
-- `/progressivestages multi list <player>` — same, plus that player's
-  progress per requirement (`[2/3]` or `GRANTED`, with ✓ / ✗ next to each
-  sub-trigger).
-- `/progressivestages trigger reset <player> multi <requirement-id>` — clear
-  every sub-key for a player so they can re-satisfy the requirement. Useful
-  for testing and admin overrides.
+### 5.5 Polling, persistence, and reset
 
-#### Implementation pointers
+**Poll cadence.** Counter and state conditions are re-checked on a timer set by
+`enforcement.trigger_poll_interval` (ticks, default `20` = once per second,
+range `5`–`200`). Relevant events — mob kills, advancements earned, dimension
+changes, and login — also force an **immediate** re-check, so most triggers
+feel instant.
 
-- Config parsing: [`TriggerConfigLoader.loadMultiRequirements`](src/main/java/com/enviouse/progressivestages/server/triggers/TriggerConfigLoader.java)
-- Runtime registry + dispatcher: [`MultiTriggerManager`](src/main/java/com/enviouse/progressivestages/server/triggers/MultiTriggerManager.java)
-- Data class: [`MultiTrigger`](src/main/java/com/enviouse/progressivestages/server/triggers/MultiTrigger.java)
-- Cause enum value: `StageCause.MULTI_TRIGGER`
-- Persistence: shared with the boss/dimension `TriggerPersistence`, under the
-  synthetic type `"multi"`.
+**Dependencies gate the grant.** A satisfied rule only grants the stage once
+every `[stage].dependency` prerequisite is owned. While a prerequisite is
+missing the rule may be fully satisfied yet **held back**; counters keep
+accruing, and the very next poll after the last prerequisite is granted
+completes the unlock. Omit the stage's `dependency` to let its triggers fire
+freely.
+
+**Persistence.** Most condition types need **no** save file of their own:
+counters live in vanilla statistics, `level` / `xp` / `has_item` are read live,
+and `advancement` is persisted by vanilla. Only the `dimension` and `biome`
+**visited** one-shots are persisted by the mod, per player, in
+`world/data/progressivestages_triggers.dat`.
+
+**Reset.** Clear a stage's persisted one-shot (dimension / biome) visited flags
+for a player with:
+
+```
+/progressivestages trigger reset <player> <stage>
+```
+
+This affects only the persisted one-shots; retroactive counters are derived
+from vanilla stats and cannot be "un-credited" by the mod (clear the
+underlying vanilla statistic if you truly need to).
+
+**Inspecting.** Use `/progressivestages triggers list [player]` to see every
+stage that declares `[[triggers]]` rules, with a player's live per-condition
+progress, or `/stage progress <stage> [player]` for one stage's full
+rule/condition breakdown. See §7.
+
+### 5.6 The Stage Tree viewer + keybind
+
+ProgressiveStages 2.3 ships an in-game **Stage Tree / Progression viewer** — a
+**read-only, two-pane master/detail screen**. It only *displays* progression; it
+never grants or edits stages.
+
+- **Open it** with the **"Open Progression Tree"** keybind (category
+  *ProgressiveStages* in Controls). It is **UNBOUND by default** — players
+  assign a key in Options → Controls. You can also open it with the command
+  `/stage gui`.
+
+**Left pane — the stage tree.** Lists **every stage**, indented by dependency
+depth and **colour-coded by status**:
+
+- **unlocked** — owned,
+- **ready to unlock** — all dependencies met, not yet granted, and
+- **locked** — at least one dependency still missing.
+
+Selecting a stage in the left pane fills the right pane with its detail.
+
+**Right pane — the selected stage's detail.** Shows, top to bottom:
+
+- the stage's **icon, display name, and status**;
+- its **description**;
+- the **PREREQUISITES needed to advance** — the dependency checklist, each
+  marked **✓** (owned) or **✗** (missing);
+- a **"% to unlock" progress bar** with the **live per-condition `[[triggers]]`
+  breakdown** (current vs. required for each rule/condition); and
+- an **icon-grid preview of the items this stage UNLOCKS**, with a **total
+  count**.
+
+Implementation pointers:
+
+- Data model: [`TriggerRule`](src/main/java/com/enviouse/progressivestages/common/trigger/TriggerRule.java),
+  [`TriggerCondition`](src/main/java/com/enviouse/progressivestages/common/trigger/TriggerCondition.java),
+  [`TriggerConditionType`](src/main/java/com/enviouse/progressivestages/common/trigger/TriggerConditionType.java),
+  [`TriggerMode`](src/main/java/com/enviouse/progressivestages/common/trigger/TriggerMode.java).
+- Server evaluator: [`StageTriggerEvaluator`](src/main/java/com/enviouse/progressivestages/server/triggers/StageTriggerEvaluator.java).
+- One-shot persistence: [`TriggerPersistence`](src/main/java/com/enviouse/progressivestages/server/triggers/TriggerPersistence.java).
+- Cause enum value: `StageCause.TRIGGER`.
+- GUI: [`StageTreeScreen`](src/main/java/com/enviouse/progressivestages/client/gui/StageTreeScreen.java);
+  keybind registered in
+  [`ClientModBusEvents`](src/main/java/com/enviouse/progressivestages/client/ClientModBusEvents.java)
+  (`key.progressivestages.open_tree`, category `key.categories.progressivestages`).
 
 ---
 
@@ -1376,7 +1583,9 @@ that enforcement path for every stage, regardless of stage file content.
 | `block_structure_entry` | `true` | `[structures]` entry + chest locking + rule flags |
 | `allow_creative_bypass` | `true` | Creative-mode players bypass enforcement |
 | `reveal_stage_names_only_to_operators` | `true` | Non-op players see generic lock messages without stage names (spoiler-free progression) |
-| `mask_locked_item_names` | `true` | Locked items show as `"Unknown Item"` (configurable text) |
+| `mask_locked_item_names` | `true` | Locked items show as `"Unknown Item"` (configurable text). Global default for the per-stage `[display].display_as_unknown_item`. |
+| `obscure_locked_item_icons` | `false` | **New in 2.3.** Also replace a locked item's ICON with a `?` placeholder in the player's inventory (fully unidentifiable). Global default for the per-stage `[display].obscure_icon`. |
+| `trigger_poll_interval` | `20` ticks | **New in 2.3.** Cadence for re-checking counter/state `[[triggers]]` conditions (range 5–200). Kills, advancements, dimension changes, and login also force an immediate re-check. |
 | `notification_cooldown` | `3000` ms | Cooldown between repeat lock messages to the same player |
 | `show_lock_message` | `true` | Send a chat message when an action is blocked |
 | `play_lock_sound` | `true` | Play a sound when an action is blocked |
@@ -1395,7 +1604,8 @@ that enforcement path for every stage, regardless of stage file content.
 | `lock_icon_size` | `8` | Icon size in pixels (4–32) |
 | `show_highlight` | `true` | Translucent overlay on locked recipe outputs |
 | `highlight_color` | `"0x50FFAA40"` | ARGB hex |
-| `show_tooltip` | `true` | Add lock info to item tooltips |
+| `show_tooltip` | `true` | Add lock info to item tooltips. Global default for the per-stage `[display].show_tooltip`. |
+| `show_stage_description_on_tooltip` | `false` | **New in 2.3.** Append a locked item's gating stage `[stage].description` to its tooltip (rendered via `messages.tooltip_stage_description`). Global default for the per-stage `[display].show_description_on_tooltip`. |
 | `show_locked_recipes` | `false` | If `false`, locked items / recipes are hidden from the EMI index entirely; if `true`, they are shown with overlays |
 
 ### 6.4 `[performance]`
@@ -1433,6 +1643,11 @@ There are roughly 70 message keys. Rather than list them all here, refer to
 the generated `progressivestages.toml` for inline documentation of each key.
 Source of truth: search `StageConfig.java` for `MSG_`.
 
+**New in 2.1 — `tooltip_stage_description`** (default `&8“&7{description}&8”`,
+placeholder `{description}`): the line template used to render a locked item's
+gating-stage description on its tooltip when `emi.show_stage_description_on_tooltip`
+(or the per-stage `[display].show_description_on_tooltip`) is enabled.
+
 ---
 
 ## 7. Commands
@@ -1450,32 +1665,33 @@ unless otherwise noted.
 | `/stage check <player> <stage>` | Boolean check. |
 | `/stage info <stage>` | Print stage metadata: id, dependencies, description, lock count. |
 | `/stage tree` | ASCII dependency tree of every loaded stage. |
+| `/stage gui` | Open the in-game Stage Tree / Progression viewer for yourself (see §5.6). |
 | `/stage progress` | Shortcut for `/stage progress next` — what the caller can unlock right now. |
-| `/stage progress next [player]` | Lists every stage the player can currently unlock (deps met, not yet granted) with the full per-trigger breakdown for each one. Player defaults to the caller. |
+| `/stage progress next [player]` | Lists every stage the player can currently unlock (deps met, not yet granted) with the full `[[triggers]]` rule/condition breakdown for each one. Player defaults to the caller. |
 | `/stage progress all [player]` | Lists **every** stage the player doesn't yet have — including those still locked behind unmet dependencies — in registration order. Useful for pack-author audits and "show me the whole roadmap" queries. |
-| `/stage progress <stage> [player]` | Per-trigger breakdown for one specific stage. Player defaults to the caller. |
+| `/stage progress <stage> [player]` | `[[triggers]]` rule/condition breakdown for one specific stage. Player defaults to the caller. |
 
 > **Using `/stage progress`.** Three views, one rendering:
 >
 > - **`/stage progress next`** — the "what can I do right now?" view. Walks
 >   every stage you don't own, keeps the ones whose declared dependencies are
->   all satisfied, and renders the per-trigger breakdown for each. If nothing
+>   all satisfied, and renders the `[[triggers]]` breakdown for each. If nothing
 >   is reachable, it says so and points you at `/stage tree`.
 > - **`/stage progress all`** — same renderer, but applied to every stage you
 >   don't yet have (including ones still gated by locked prerequisites). The
 >   full roadmap; useful when authoring a pack.
-> - **`/stage progress <stage>`** — the targeted view. Same per-trigger
->   breakdown as before, scoped to one stage.
+> - **`/stage progress <stage>`** — the targeted view. Same `[[triggers]]`
+>   breakdown, scoped to one stage.
 >
-> Every view reports each surface independently:
+> Every view reports:
 >
 > - **Dependencies** — ✓/✗ against the player's current stage set.
-> - **Advancement** — checked against `PlayerAdvancements` (live advancement state).
-> - **Item** — stateless trigger; shown as ✓ only if the item is currently in the player's inventory.
-> - **Dimension / Boss** — checked against persisted one-shot trigger state (`world/data/progressivestages_triggers.dat`).
-> - **`[[multi]]`** — same `n/total` summary and per-sub-trigger ✓/✗ as `/progressivestages multi list`, filtered to multi-requirements that target this stage. Both `all_of` and `any_of` modes are labeled and counted.
+> - **`[[triggers]]` rules** — each rule is shown with its `all_of` / `any_of`
+>   mode and an `n/total` condition summary; each condition shows its live
+>   progress (`current/count` for counters and state, ✓/✗ for one-shots and
+>   advancements). Rules are OR-ed, so any one rule completing grants the stage.
 >
-> If a stage has no triggers and is granted only by `/stage grant`, the
+> If a stage has no `[[triggers]]` and is granted only by `/stage grant`, the
 > single-stage view says so explicitly; the list views hide that line to keep
 > output compact.
 
@@ -1497,11 +1713,11 @@ Most subcommands require permission level **3** (admin). The exception is
 
 | Command | Permission | Description |
 |---------|------------|-------------|
-| `/progressivestages reload` | 3 | Reload stage TOMLs + triggers.toml; re-sync every online player. |
+| `/progressivestages reload` | 3 | Reload stage TOMLs (including each stage's `[[triggers]]`); re-sync every online player. |
 | `/progressivestages validate` | 3 | Parse every stage file with detailed error reporting; warn about dependency issues. |
 | `/progressivestages ftb status [player]` | 3 | Diagnostics for the FTB Quests integration. |
-| `/progressivestages trigger reset <player> <type> <key>` | 3 | Clear a persisted trigger. Types: `dimension`, `boss`, `multi` (key is the multi-requirement id). |
-| `/progressivestages multi list [player]` | 3 | List every `[[multi]]` requirement and, if a player is given, their per-requirement progress. |
+| `/progressivestages triggers list [player]` | 3 | List every stage that declares `[[triggers]]` rules; with a player, show their live per-condition progress. |
+| `/progressivestages trigger reset <player> <stage>` | 3 | Clear the persisted one-shot (`dimension` / `biome` visited) progress for that stage. |
 | `/progressivestages no-creative-popup` | any player | Toggle the creative-bypass warning popup for the calling player only. |
 
 ### 7.3 `/progressivestages ftb status` output
@@ -1811,9 +2027,13 @@ methods:
 
 The enum tracks the source of a stage change for events and logging:
 
-`COMMAND`, `ADVANCEMENT`, `ITEM_PICKUP`, `INVENTORY_CHECK`, `QUEST_REWARD`,
-`DIMENSION_ENTRY`, `BOSS_KILL`, **`MULTI_TRIGGER`** (NEW in 2.0),
-`TEAM_SYNC`, `AUTO`, `STARTING_STAGE`, `API`, `UNKNOWN`.
+`COMMAND`, **`TRIGGER`** (the per-stage `[[triggers]]` system — 2.1),
+`ADVANCEMENT`, `ITEM_PICKUP`, `INVENTORY_CHECK`, `QUEST_REWARD`,
+`DIMENSION_ENTRY`, `BOSS_KILL`, `MULTI_TRIGGER` (legacy), `TEAM_SYNC`, `FTB`,
+`AUTO`, `STARTING_STAGE`, `API`, `UNKNOWN`.
+
+(The legacy `*_TRIGGER`/`*_ENTRY` causes are retained for binary compatibility;
+all 2.1 auto-grants from `[[triggers]]` report `StageCause.TRIGGER`.)
 
 ### 15.4 Events
 
@@ -1912,21 +2132,37 @@ The nearest-player check uses `enforcement.mob_spawn_check_radius` (default
 no one is there to see it. Increase the radius if you want more aggressive
 gating — max is 512.
 
-### 17.5 Multi-trigger isn't granting
+### 17.5 A `[[triggers]]` rule isn't granting
 
-Run `/progressivestages multi list <player>`. Each requirement prints the
-mode, sub-trigger list, and ✓/✗ per sub-key. If a sub-key shows ✗ that you
-think should be ✓:
+Run `/progressivestages triggers list <player>` (or `/stage progress <stage>
+<player>`). Each rule prints its `all_of` / `any_of` mode and ✓/✗ (or
+`current/count`) per condition. If a condition isn't progressing as expected:
 
-- For `item:` and `advancement:`, log out and back in — the login scan will
-  refresh.
-- For `dimension:`, the player has to ENTER the dimension (`PlayerEvent.PlayerChangedDimensionEvent`).
-  Currently being in it on login is also enough.
-- For `boss:`, past kills are NOT credited retroactively. The player has to
-  kill the boss again, or you can `/stage grant` directly.
+- **Remember rules are OR-ed, conditions are AND/OR-ed.** The stage only grants
+  when one whole rule is satisfied. An `all_of` rule needs *every* condition;
+  an `any_of` rule needs *one*.
+- **Counters (`kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`,
+  `distance`, `stat`, `play_time`)** read vanilla statistics and are
+  retroactive — they should reflect existing progress immediately. If a counter
+  reads `0`, double-check the subject id/tag and that vanilla actually tracks
+  that statistic. `distance` is in blocks; `play_time` in minutes.
+- **State (`level`, `xp`, `has_item`)** is momentary — it must hold true at the
+  moment a rule's other conditions are also met. Spending a level can un-satisfy
+  a `level` condition.
+- **One-shots (`dimension`, `biome`)** must be *visited at least once*. If a
+  player visited before the trigger existed, the visit may not be recorded —
+  re-enter the dimension / biome.
+- **Polling.** If nothing seems to update, lower
+  `enforcement.trigger_poll_interval` (default 20 ticks) or note that kills,
+  advancements, dimension changes, and login force an immediate re-check anyway.
+- **Dependencies gate the grant.** If a rule shows **fully satisfied** but the
+  stage still isn't granted, the stage is **waiting on a `[stage].dependency`**.
+  Triggers only fire once every prerequisite is owned (`/stage check <player>
+  <dependency>`). Grant the missing prerequisite — the next poll completes the
+  unlock — or omit the stage's `dependency` to let it fire freely.
 
-To start over:
-`/progressivestages trigger reset <player> multi <requirement-id>`.
+To clear a stage's one-shot (`dimension` / `biome`) progress and start over:
+`/progressivestages trigger reset <player> <stage>`.
 
 ### 17.6 FTB Quests stage tasks not completing
 
@@ -1975,19 +2211,22 @@ Documented in
 
 `/progressivestages reload` does:
 
-- Reload every `*.toml` in `config/ProgressiveStages/` (stage files).
-- Reload `triggers.toml`.
+- Reload every `*.toml` in `config/ProgressiveStages/` (stage files, including
+  each stage's `[[triggers]]` rules and `[display]` overrides).
+- Re-evaluate `[[triggers]]` against online players — retroactive counter
+  conditions can grant a stage immediately on reload.
 - Re-sync lock data + stage definitions to every online client.
 - Trigger EMI/JEI refresh on every client.
 
 It does NOT:
 
-- Clear one-time trigger history (dimension / boss / multi).
+- Clear the persisted one-shot (`dimension` / `biome`) visited history.
 - Reset player stage state.
 - Re-fire starting-stage grants (unless `reapply_starting_stages_on_login` is
   on, in which case the next login of each player will catch up).
 
-To reset trigger persistence: `/progressivestages trigger reset <player> <type> <key>`.
+To reset a stage's persisted one-shot trigger progress:
+`/progressivestages trigger reset <player> <stage>`.
 
 ### 17.11 EMI lock icon missing
 
@@ -2073,24 +2312,26 @@ server/
   integration/
     FTBTeamsIntegration.java         ← FTB Teams membership wiring
   loader/
-    DefaultStageTemplates.java       ← built-in stage + trigger TOML strings
+    DefaultStageTemplates.java       ← built-in stage TOML strings (locks + [[triggers]] + [display])
     StageFileLoader.java             ← directory scan + reload
-    StageFileParser.java             ← TOML → StageDefinition
+    StageFileParser.java             ← TOML → StageDefinition (parses [[triggers]] + [display])
   triggers/
-    AdvancementStageGrants.java      ← [advancements] section
-    ItemPickupStageGrants.java       ← [items] section + login inventory scan
-    DimensionStageGrants.java        ← [dimensions] section (persisted, one-time)
-    BossKillStageGrants.java         ← [bosses] section (persisted, one-time)
-    MultiTrigger.java                ← data class for one [[multi]] requirement (2.0)
-    MultiTriggerManager.java         ← registry + dispatcher + login scan (2.0)
-    TriggerConfigLoader.java         ← parse triggers.toml (incl. [[multi]])
-    TriggerPersistence.java          ← per-world "already triggered" record
+    StageTriggerEvaluator.java       ← per-stage [[triggers]] evaluator (poll + event re-checks, 2.1)
+    TriggerPersistence.java          ← per-world dimension/biome "visited" one-shot record
+
+common/trigger/                      ← per-stage [[triggers]] data model (2.1)
+  TriggerRule.java                   ← one [[triggers]] block (OR-ed rule)
+  TriggerCondition.java              ← one [[triggers.conditions]] entry
+  TriggerConditionType.java          ← kill / mine / craft / … / dimension / biome enum
+  TriggerMode.java                   ← all_of / any_of
 
 client/
   ClientEventHandler.java            ← client-side event subscriptions
-  ClientModBusEvents.java            ← mod bus client setup
+  ClientModBusEvents.java            ← mod bus client setup + "Open Progression Tree" keybind
   ClientStageCache.java              ← client-side stage state mirror
   ClientLockCache.java               ← client-side lock registry mirror
+  ClientTriggerProgress.java         ← client mirror of live [[triggers]] progress (for GUI + tooltips)
+  gui/StageTreeScreen.java           ← Stage Tree / Progression viewer (2.1)
   emi/ProgressiveStagesEMIPlugin.java
   jei/ProgressiveStagesJEIPlugin.java
   renderer/

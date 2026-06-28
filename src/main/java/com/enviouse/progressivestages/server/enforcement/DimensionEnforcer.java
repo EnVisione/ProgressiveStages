@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.server.enforcement;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.mojang.logging.LogUtils;
@@ -66,7 +67,7 @@ public class DimensionEnforcer {
             return true;
         }
 
-        if (!StageConfig.isBlockDimensionTravel()) {
+        if (!StageConfig.isBlockDimensionTravel() && !LockRegistry.getInstance().hasEnforcementOverrides()) {
             return true;
         }
 
@@ -105,7 +106,7 @@ public class DimensionEnforcer {
      * @param to     the dimension the player arrived in
      */
     public static void handlePostTravelSafetyNet(ServerPlayer player, ResourceKey<Level> from, ResourceKey<Level> to) {
-        if (!StageConfig.isBlockDimensionTravel()) {
+        if (!StageConfig.isBlockDimensionTravel() && !LockRegistry.getInstance().hasEnforcementOverrides()) {
             cleanupPlayer(player.getUUID());
             return;
         }
@@ -188,7 +189,11 @@ public class DimensionEnforcer {
      * v2.0: multi-stage aware.
      */
     public static boolean isDimensionLockedForPlayer(ServerPlayer player, ResourceLocation dimensionId) {
-        return LockRegistry.getInstance().isDimensionBlockedFor(player, dimensionId);
+        LockRegistry reg = LockRegistry.getInstance();
+        Optional<StageId> gate = reg.primaryRestrictingStageForDimension(player, dimensionId);
+        // v2.3: per-stage override — a dimension is "locked for travel" only if its gating stage
+        // enforces DIMENSION_TRAVEL (per-stage override, else the global default).
+        return gate.isPresent() && reg.isCategoryEnforced(gate.get(), EnforcementCategory.DIMENSION_TRAVEL);
     }
 
     /**

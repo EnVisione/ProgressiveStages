@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.server.enforcement;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import net.minecraft.server.level.ServerPlayer;
@@ -28,11 +29,15 @@ public final class PetEnforcer {
     private PetEnforcer() {}
 
     public static boolean canInteract(ServerPlayer player, EntityType<?> type, Entity target) {
-        if (!StageConfig.isBlockPetInteract()) return true;
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockPetInteract() && !reg.hasEnforcementOverrides()) return true;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
 
         PetInteractionKind kind = classify(player, target);
-        return !isBlockedFor(player, kind, type);
+        if (!isBlockedFor(player, kind, type)) return true;
+        // v2.3: per-stage override — enforce only if the gating stage requires it.
+        Optional<StageId> gate = primary(player, kind, type);
+        return gate.isEmpty() || !reg.isCategoryEnforced(gate.get(), EnforcementCategory.PET_INTERACT);
     }
 
     public static void notifyLocked(ServerPlayer player, EntityType<?> type, Entity target) {

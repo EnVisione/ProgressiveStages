@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.server.enforcement;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,7 +21,8 @@ public class EntityEnforcer {
      * @return true if allowed, false if blocked
      */
     public static boolean canAttackEntity(ServerPlayer player, EntityType<?> entityType) {
-        if (!StageConfig.isBlockEntityAttack()) {
+        LockRegistry reg = LockRegistry.getInstance();
+        if (!StageConfig.isBlockEntityAttack() && !reg.hasEnforcementOverrides()) {
             return true;
         }
 
@@ -33,7 +35,9 @@ public class EntityEnforcer {
             return true;
         }
 
-        return !isEntityLockedForPlayer(player, entityType);
+        // v2.3: per-stage override — enforce if ANY missing gating stage requires it (most-restrictive).
+        java.util.Set<StageId> missing = reg.missingGatingStages(player, reg.getRequiredStagesForEntity(entityType));
+        return missing.isEmpty() || !reg.isCategoryEnforced(missing, EnforcementCategory.ENTITY_ATTACK);
     }
 
     /**

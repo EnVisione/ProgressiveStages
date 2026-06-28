@@ -69,6 +69,9 @@ public class StageFileLoader {
 
         // Register with lock registry
         registerLocksFromStages();
+
+        // v2.3: build the per-stage trigger registry from the loaded definitions
+        com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
     }
 
     /**
@@ -82,6 +85,9 @@ public class StageFileLoader {
 
         loadAllStages();
         registerLocksFromStages();
+
+        // v2.3: rebuild the per-stage trigger registry from the reloaded definitions
+        com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
 
         LOGGER.info("Reloaded {} stages", loadedStages.size());
     }

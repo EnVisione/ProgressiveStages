@@ -107,6 +107,11 @@ public final class LockRegistry {
     /** Fast-path: max ore-spoof radius across all opted-in stages. */
     private volatile int maxOreSpoofRadius = 0;
 
+    /** v2.3: Stage → per-category [enforcement] overrides (only stages that declared any). */
+    private final Map<StageId, Map<EnforcementCategory, Boolean>> stageEnforcementOverrides = new ConcurrentHashMap<>();
+    /** Fast-path: true if ANY stage declared at least one enforcement override. */
+    private volatile boolean anyEnforcementOverrides = false;
+
     // ------- caches -------
     private final Map<Item, Optional<StageId>> itemStageCache = new ConcurrentHashMap<>();
     private Map<ResourceLocation, StageId> resolvedItemLocksCache;
@@ -145,6 +150,8 @@ public final class LockRegistry {
         oreOverrideByTarget.clear();
         stageOreSpoofRadius.clear();
         maxOreSpoofRadius = 0;
+        stageEnforcementOverrides.clear();
+        anyEnforcementOverrides = false;
         clearCache();
     }
 
@@ -263,7 +270,61 @@ public final class LockRegistry {
             if (r > maxCrafterCheckRadius) maxCrafterCheckRadius = r;
         }
 
+        // v2.3: per-stage enforcement category overrides
+        Map<EnforcementCategory, Boolean> ov = locks.enforcementOverrides();
+        if (ov != null && !ov.isEmpty()) {
+            stageEnforcementOverrides.put(id, new java.util.EnumMap<>(ov));
+            anyEnforcementOverrides = true;
+        }
+
         LOGGER.debug("Registered locks for stage: {}", id);
+    }
+
+    // ================================================================
+    // v2.3 — per-stage enforcement category overrides
+    // ================================================================
+
+    /** True if any stage declared an {@code [enforcement]} category override. Cheap fast-path gate. */
+    public boolean hasEnforcementOverrides() {
+        return anyEnforcementOverrides;
+    }
+
+    /**
+     * Whether a given enforcement category is active for a SINGLE gating stage: the stage's
+     * explicit override if present, else the global default. Most resources are gated by one
+     * stage, so this is the common path.
+     */
+    public boolean isCategoryEnforced(StageId gatingStage, EnforcementCategory cat) {
+        boolean global = cat.globalDefault();
+        if (!anyEnforcementOverrides || gatingStage == null) return global;
+        Map<EnforcementCategory, Boolean> map = stageEnforcementOverrides.get(gatingStage);
+        if (map == null) return global;
+        Boolean override = map.get(cat);
+        return override != null ? override : global;
+    }
+
+    /** The subset of {@code gating} stages the player does NOT own (their "missing" gating set). */
+    public Set<StageId> missingGatingStages(net.minecraft.server.level.ServerPlayer player, Set<StageId> gating) {
+        if (player == null || gating == null || gating.isEmpty()) return Set.of();
+        com.enviouse.progressivestages.common.stage.StageManager sm =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+        Set<StageId> out = new java.util.LinkedHashSet<>();
+        for (StageId s : gating) if (!sm.hasStage(player, s)) out.add(s);
+        return out;
+    }
+
+    /**
+     * Whether a category is enforced for a resource gated by {@code missingStages}: enforced if
+     * ANY of the missing gating stages enforces it (most-restrictive wins, so one stage opting out
+     * never unlocks a resource another stage locks-and-enforces).
+     */
+    public boolean isCategoryEnforced(Set<StageId> missingStages, EnforcementCategory cat) {
+        boolean global = cat.globalDefault();
+        if (!anyEnforcementOverrides || missingStages == null || missingStages.isEmpty()) return global;
+        for (StageId s : missingStages) {
+            if (isCategoryEnforced(s, cat)) return true;
+        }
+        return false;
     }
 
     // ================================================================

@@ -1,5 +1,6 @@
 package com.enviouse.progressivestages.client.renderer;
 
+import com.enviouse.progressivestages.client.ClientLockCache;
 import com.enviouse.progressivestages.client.ClientStageCache;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import net.minecraft.client.gui.Font;
@@ -23,8 +24,10 @@ public class LockedItemDecorator implements IItemDecorator {
 
     @Override
     public boolean render(GuiGraphics graphics, Font font, ItemStack stack, int x, int y) {
-        if (!StageConfig.isShowLockIcon()) return false;
         if (stack == null || stack.isEmpty()) return false;
+        // Creative bypass suppresses all lock UI (matches the tooltip + EMI paths). Guard here too
+        // because isItemLocked()'s integrated-server LockRegistry fallback doesn't honor bypass.
+        if (ClientLockCache.isCreativeBypass()) return false;
         // EMI mixin path owns rendering when inside its SlotWidget.
         if (LockIconRenderer.isInsideSlotWidget()) return false;
         // JEI draws its own greying — don't double-paint over its slot widgets.
@@ -32,6 +35,14 @@ public class LockedItemDecorator implements IItemDecorator {
 
         if (!ClientStageCache.isItemLocked(stack.getItem())) return false;
 
+        // v2.3: if the gating stage marks this item to be shown as an unknown item, paint an
+        // opaque "?" panel over the icon (independent of the show_lock_icon toggle).
+        if (ClientStageCache.shouldObscureItemIcon(stack.getItem())) {
+            LockIconRenderer.renderObscuredOverlay(graphics, x, y, 16);
+            return true;
+        }
+
+        if (!StageConfig.isShowLockIcon()) return false;
         LockIconRenderer.renderLockOverlay(graphics, x, y, 16);
         return true;
     }

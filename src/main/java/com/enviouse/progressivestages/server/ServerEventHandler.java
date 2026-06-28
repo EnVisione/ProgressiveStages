@@ -65,16 +65,12 @@ public class ServerEventHandler {
         // Initialize team stage sync
         TeamStageSync.initialize(event.getServer());
 
-        // Load stage files
+        // Load stage files (StageFileLoader.initialize rebuilds the per-stage trigger registry)
         StageFileLoader.getInstance().initialize(event.getServer());
 
-        // Load trigger config and register trigger event handlers
-        TriggerConfigLoader.loadTriggerConfig();
-        NeoForge.EVENT_BUS.register(AdvancementStageGrants.class);
-        NeoForge.EVENT_BUS.register(ItemPickupStageGrants.class);
-        NeoForge.EVENT_BUS.register(DimensionStageGrants.class);
-        NeoForge.EVENT_BUS.register(BossKillStageGrants.class);
-        NeoForge.EVENT_BUS.register(MultiTriggerManager.class);
+        // v2.3: per-stage [[triggers]] auto-grant engine (replaces the old global triggers.toml).
+        // Registered once; its rule data is (re)built by StageFileLoader on load/reload.
+        NeoForge.EVENT_BUS.register(StageTriggerEvaluator.class);
 
         // Initialize FTB Teams integration (soft dependency)
         // Uses reflection to avoid loading FTBTeamsIntegration class (which imports FTB Teams API)
@@ -277,7 +273,9 @@ public class ServerEventHandler {
         long currentTime = player.level().getGameTime();
 
         // ── Tick-based dimension enforcement (safety net for mods that bypass both events) ──
-        if (StageConfig.isBlockDimensionTravel()) {
+        // v2.3: also run when a stage opts in via a per-stage override (global may be off).
+        if (StageConfig.isBlockDimensionTravel()
+                || com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().hasEnforcementOverrides()) {
             Long lastDimCheck = lastDimensionCheck.get(playerId);
             if (lastDimCheck == null || currentTime - lastDimCheck >= 20) { // Check every 20 ticks (1 second)
                 lastDimensionCheck.put(playerId, currentTime);

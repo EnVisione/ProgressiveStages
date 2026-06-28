@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.common.config;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
+import com.enviouse.progressivestages.common.trigger.TriggerRule;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -39,6 +40,13 @@ public class StageDefinition {
     private final List<String> unlockedBlocks;
     private final List<String> unlockedEntities;
     private final List<String> unlockedFluids;
+    // v2.3: per-stage auto-grant triggers (replaces the old global triggers.toml).
+    private final List<TriggerRule> triggers;
+    // v2.3: per-stage [display] overrides. null == inherit the global progressivestages.toml default.
+    private final Boolean displayAsUnknownItem;
+    private final Boolean obscureIcon;
+    private final Boolean showTooltip;
+    private final Boolean showDescriptionOnTooltip;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -62,6 +70,13 @@ public class StageDefinition {
         this.unlockedFluids = builder.unlockedFluids != null
             ? Collections.unmodifiableList(new ArrayList<>(builder.unlockedFluids))
             : Collections.emptyList();
+        this.triggers = builder.triggers != null
+            ? Collections.unmodifiableList(new ArrayList<>(builder.triggers))
+            : Collections.emptyList();
+        this.displayAsUnknownItem = builder.displayAsUnknownItem;
+        this.obscureIcon = builder.obscureIcon;
+        this.showTooltip = builder.showTooltip;
+        this.showDescriptionOnTooltip = builder.showDescriptionOnTooltip;
     }
 
     public StageId getId() {
@@ -143,6 +158,51 @@ public class StageDefinition {
         return unlockedFluids;
     }
 
+    /**
+     * v2.3: per-stage auto-grant trigger rules parsed from the {@code [[triggers]]} section.
+     * Each rule grants this stage when its conditions are met; rules are OR-ed together.
+     */
+    public List<TriggerRule> getTriggers() {
+        return triggers;
+    }
+
+    /** True if this stage declares at least one auto-grant trigger rule. */
+    public boolean hasTriggers() {
+        return !triggers.isEmpty();
+    }
+
+    /**
+     * v2.3 [display] override: render items locked by this stage with a masked ("???") name.
+     * {@code null} means "inherit the global progressivestages.toml default".
+     */
+    public Boolean getDisplayAsUnknownItem() {
+        return displayAsUnknownItem;
+    }
+
+    /**
+     * v2.3 [display] override: replace the icon of items locked by this stage with a "?" placeholder.
+     * {@code null} means "inherit the global default".
+     */
+    public Boolean getObscureIcon() {
+        return obscureIcon;
+    }
+
+    /**
+     * v2.3 [display] override: whether to show the lock/stage tooltip lines for items locked by
+     * this stage at all. {@code null} means "inherit the global default".
+     */
+    public Boolean getShowTooltip() {
+        return showTooltip;
+    }
+
+    /**
+     * v2.3 [display] override: append this stage's description to the tooltip of items it locks.
+     * {@code null} means "inherit the global default".
+     */
+    public Boolean getShowDescriptionOnTooltip() {
+        return showDescriptionOnTooltip;
+    }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -168,6 +228,11 @@ public class StageDefinition {
         private List<String> unlockedBlocks = new ArrayList<>();
         private List<String> unlockedEntities = new ArrayList<>();
         private List<String> unlockedFluids = new ArrayList<>();
+        private List<TriggerRule> triggers = new ArrayList<>();
+        private Boolean displayAsUnknownItem = null;
+        private Boolean obscureIcon = null;
+        private Boolean showTooltip = null;
+        private Boolean showDescriptionOnTooltip = null;
 
         private Builder(StageId id) {
             this.id = id;
@@ -267,6 +332,33 @@ public class StageDefinition {
          */
         public Builder unlockedFluids(List<String> unlockedFluids) {
             this.unlockedFluids = unlockedFluids != null ? unlockedFluids : new ArrayList<>();
+            return this;
+        }
+
+        /** v2.3: set the per-stage auto-grant trigger rules. */
+        public Builder triggers(List<TriggerRule> triggers) {
+            this.triggers = triggers != null ? triggers : new ArrayList<>();
+            return this;
+        }
+
+        /** v2.3 [display]: null leaves the global default in effect. */
+        public Builder displayAsUnknownItem(Boolean v) {
+            this.displayAsUnknownItem = v;
+            return this;
+        }
+
+        public Builder obscureIcon(Boolean v) {
+            this.obscureIcon = v;
+            return this;
+        }
+
+        public Builder showTooltip(Boolean v) {
+            this.showTooltip = v;
+            return this;
+        }
+
+        public Builder showDescriptionOnTooltip(Boolean v) {
+            this.showDescriptionOnTooltip = v;
             return this;
         }
 

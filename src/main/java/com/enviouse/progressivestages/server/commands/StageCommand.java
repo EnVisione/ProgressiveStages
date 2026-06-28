@@ -9,7 +9,6 @@ import com.enviouse.progressivestages.common.util.TextUtil;
 import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.compat.ftbquests.FtbQuestsHooks;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
-import com.enviouse.progressivestages.server.triggers.TriggerPersistence;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -105,6 +104,10 @@ public class StageCommand {
                     .executes(ctx -> showProgress(ctx, null))
                     .then(Commands.argument("player", EntityArgument.player())
                         .executes(ctx -> showProgress(ctx, EntityArgument.getPlayer(ctx, "player"))))))
+
+            // /stage gui — open the in-game stage-tree viewer for the calling player
+            .then(Commands.literal("gui")
+                .executes(StageCommand::openGui))
         );
 
         // /progressivestages subcommands
@@ -128,29 +131,26 @@ public class StageCommand {
                     .then(Commands.argument("player", EntityArgument.player())
                         .executes(ctx -> ftbStatus(ctx, EntityArgument.getPlayer(ctx, "player"))))))
 
-            // /progressivestages trigger reset <player> <type> <key>
+            // /progressivestages trigger reset <player> <stage>
+            // Clears the persisted one-shot trigger progress (visited dimension/biome) that a
+            // stage's [[triggers]] rules accumulated for a player, so they can be re-tested.
             .then(Commands.literal("trigger")
                 .requires(source -> source.hasPermission(3))
                 .then(Commands.literal("reset")
                     .then(Commands.argument("player", EntityArgument.player())
-                        .then(Commands.argument("type", StringArgumentType.word())
-                            .suggests((ctx, builder) -> {
-                                builder.suggest("dimension");
-                                builder.suggest("boss");
-                                builder.suggest("multi");
-                                return builder.buildFuture();
-                            })
-                            .then(Commands.argument("key", StringArgumentType.greedyString())
-                                .executes(StageCommand::resetTrigger))))))
+                        .then(Commands.argument("stage", StringArgumentType.word())
+                            .suggests(StageCommand::suggestStages)
+                            .executes(StageCommand::resetTrigger)))))
 
-            // /progressivestages multi list [player]
-            // Inspect 2.0 multi-trigger requirements and (optionally) per-player progress.
-            .then(Commands.literal("multi")
+            // /progressivestages triggers list [player]
+            // Lists every stage that declares [[triggers]] rules and (optionally) a player's
+            // live progress toward each condition.
+            .then(Commands.literal("triggers")
                 .requires(source -> source.hasPermission(3))
                 .then(Commands.literal("list")
-                    .executes(ctx -> listMultiRequirements(ctx, null))
+                    .executes(ctx -> listStageTriggers(ctx, null))
                     .then(Commands.argument("player", EntityArgument.player())
-                        .executes(ctx -> listMultiRequirements(ctx,
+                        .executes(ctx -> listStageTriggers(ctx,
                             EntityArgument.getPlayer(ctx, "player"))))))
 
             // /progressivestages no-creative-popup — toggle the creative-mode bypass
@@ -158,6 +158,13 @@ public class StageCommand {
             .then(Commands.literal("no-creative-popup")
                 .executes(StageCommand::toggleCreativePopup))
         );
+    }
+
+    /** /stage gui — push the player's live trigger progress, which opens the GUI client-side. */
+    private static int openGui(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        com.enviouse.progressivestages.common.network.NetworkHandler.sendStageGuiData(player);
+        return 1;
     }
 
     private static int toggleCreativePopup(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -551,10 +558,8 @@ public class StageCommand {
     }
 
     private static int reloadStages(CommandContext<CommandSourceStack> context) {
+        // StageFileLoader.reload() also rebuilds the per-stage [[triggers]] registry (v2.3).
         StageFileLoader.getInstance().reload();
-
-        // Reload trigger config
-        com.enviouse.progressivestages.server.triggers.TriggerConfigLoader.reload();
 
         // Re-sync all online players with updated lock data and stage definitions
         var server = context.getSource().getServer();
@@ -738,90 +743,115 @@ public class StageCommand {
     }
 
     /**
-     * /progressivestages trigger reset <player> <type> <key>
-     * Resets a one-time trigger for a player. Supports {@code dimension}, {@code boss},
-     * and {@code multi} (where {@code key} is the multi-requirement id).
+     * /progressivestages trigger reset <player> <stage>
+     *
+     * <p>Clears the persisted one-shot trigger progress (visited dimension / biome) that a
+     * stage's {@code [[triggers]]} rules accumulated for a player, so those conditions can be
+     * re-tested. Counter conditions (kills, distance, …) read live vanilla statistics and are
+     * not stored by this mod, so they are unaffected.
      */
     private static int resetTrigger(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, "player");
-        String type = StringArgumentType.getString(context, "type");
-        String key = StringArgumentType.getString(context, "key");
+        String stageName = StringArgumentType.getString(context, "stage");
+        StageId stageId = StageId.of(stageName);
 
-        // Validate type
-        if (!type.equals("dimension") && !type.equals("boss") && !type.equals("multi")) {
+        if (!StageOrder.getInstance().stageExists(stageId)) {
             context.getSource().sendFailure(TextUtil.parseColorCodes(
-                StageConfig.getMsgCmdTriggerInvalidType().replace("{type}", type)));
+                StageConfig.getMsgCmdStageNotFound().replace("{stage}", stageName)));
             return 0;
         }
 
-        if (type.equals("multi")) {
-            // Clear every sub-key of the named requirement for this player.
-            com.enviouse.progressivestages.server.triggers.MultiTriggerManager
-                .resetForPlayer(player, key);
-        } else {
-            TriggerPersistence persistence = TriggerPersistence.get(context.getSource().getServer());
-            persistence.clearTrigger(type, key, player.getUUID());
-        }
+        com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.resetStageFor(player, stageId);
 
         String playerName = player.getName().getString();
         context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
             StageConfig.getMsgCmdTriggerReset()
-                .replace("{type}", type)
-                .replace("{key}", key)
+                .replace("{type}", "stage")
+                .replace("{key}", stageId.toString())
                 .replace("{player}", playerName)), true);
 
         return 1;
     }
 
     /**
-     * /progressivestages multi list [player]
+     * /progressivestages triggers list [player]
      *
-     * <p>Lists every loaded {@code [[multi]]} requirement with its stage, mode, and
-     * sub-trigger list. When a player is given, also reports the player's progress
-     * (e.g. "2/3 sub-triggers satisfied"). Useful for diagnosing why a player hasn't
-     * received a multi-stage yet.
+     * <p>Lists every stage that declares {@code [[triggers]]} rules. With a player argument,
+     * also renders that player's live progress toward each condition — the quick way to see
+     * why an auto-grant hasn't fired yet.
      */
-    private static int listMultiRequirements(CommandContext<CommandSourceStack> context, ServerPlayer player) {
-        var reqs = com.enviouse.progressivestages.server.triggers.MultiTriggerManager.getAll();
+    private static int listStageTriggers(CommandContext<CommandSourceStack> context, ServerPlayer player) {
         CommandSourceStack source = context.getSource();
+        Set<StageId> stages = com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.stagesWithTriggers();
 
-        if (reqs.isEmpty()) {
+        if (stages.isEmpty()) {
             source.sendSuccess(() -> TextUtil.parseColorCodes(
-                "&7No multi-trigger requirements loaded. Add &f[[multi]]&7 entries to &ftriggers.toml&7."), false);
+                "&7No stages declare &f[[triggers]]&7 rules yet. Add a &f[[triggers]]&7 section to a stage file."), false);
             return 0;
         }
 
         source.sendSuccess(() -> TextUtil.parseColorCodes(
-            "&6=== Multi-Trigger Requirements (" + reqs.size() + ") ==="), false);
+            "&6=== Stage Triggers (" + stages.size() + " stage(s)) ==="), false);
 
-        for (var req : reqs) {
-            String header = "&e" + req.requirementId() + " &7-> &f" + req.stageId().toString()
-                + " &8(" + req.mode().name().toLowerCase() + ")";
-            if (player != null) {
-                int total = req.subTriggers().size();
-                int done = com.enviouse.progressivestages.server.triggers.MultiTriggerManager
-                    .countSatisfied(req, player);
-                boolean has = StageManager.getInstance().hasStage(player, req.stageId());
-                String progress = has ? "&aGRANTED" : ("&7[" + done + "/" + total + "]");
-                header = header + " " + progress;
+        for (StageId stageId : stages) {
+            String displayName = StageOrder.getInstance().getStageDefinition(stageId)
+                .map(StageDefinition::getDisplayName).orElse(stageId.getPath());
+            String suffix = "";
+            if (player != null && StageManager.getInstance().hasStage(player, stageId)) {
+                suffix = " &aGRANTED";
             }
-            final String headerFinal = header;
-            source.sendSuccess(() -> TextUtil.parseColorCodes(headerFinal), false);
+            final String header = "&e" + stageId.toString() + " &7(&f" + displayName + "&7)" + suffix;
+            source.sendSuccess(() -> TextUtil.parseColorCodes(header), false);
 
-            for (var sub : req.subTriggers()) {
-                String prefix = "    &8• &f" + sub.canonicalKey();
-                if (player != null) {
-                    TriggerPersistence persistence = TriggerPersistence.get(source.getServer());
-                    boolean ok = persistence.hasTriggered("multi",
-                        req.requirementId() + ":" + sub.canonicalKey(), player.getUUID());
-                    prefix = prefix + " " + (ok ? "&a✓" : "&c✗");
+            if (player != null) {
+                renderTriggerRules(source, player, stageId, "    ");
+            } else {
+                int idx = 1;
+                for (var rule : com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rulesFor(stageId)) {
+                    final int ri = idx++;
+                    final String line = "    &8Rule " + ri + " &7(" + rule.mode().name().toLowerCase()
+                        + "): &f" + describeConditions(rule.conditions());
+                    source.sendSuccess(() -> TextUtil.parseColorCodes(line), false);
                 }
-                final String line = prefix;
+            }
+        }
+        return 1;
+    }
+
+    /** Render every {@code [[triggers]]} rule of a stage with live per-condition progress. */
+    private static void renderTriggerRules(CommandSourceStack source, ServerPlayer player,
+                                           StageId stageId, String indent) {
+        var rules = com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator
+            .describeProgress(player, stageId);
+        int idx = 1;
+        for (var rule : rules) {
+            final int ri = idx++;
+            String ruleMark = rule.satisfied() ? "&a✓" : "&7…";
+            String desc = rule.description().isEmpty() ? "" : " &8— &7" + rule.description();
+            final String header = indent + ruleMark + " &8Rule " + ri + " &7("
+                + rule.mode().name().toLowerCase() + ")" + desc;
+            source.sendSuccess(() -> TextUtil.parseColorCodes(header), false);
+
+            for (var cp : rule.conditions()) {
+                String cmark = cp.satisfied() ? "&a✓" : "&c✗";
+                long shown = Math.min(cp.current(), cp.threshold());
+                final String line = indent + "  " + cmark + " &f"
+                    + formatCondition(cp.condition()) + " &7[" + shown + "/" + cp.threshold() + "]";
                 source.sendSuccess(() -> TextUtil.parseColorCodes(line), false);
             }
         }
+    }
 
-        return 1;
+    private static String describeConditions(java.util.List<com.enviouse.progressivestages.common.trigger.TriggerCondition> conditions) {
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        for (var c : conditions) parts.add(formatCondition(c));
+        return String.join("&7, &f", parts);
+    }
+
+    private static String formatCondition(com.enviouse.progressivestages.common.trigger.TriggerCondition c) {
+        String type = c.type().name().toLowerCase().replace('_', ' ');
+        String body = c.target().isEmpty() ? type : (type + " " + c.target());
+        return c.count() > 1 ? (body + " x" + c.count()) : body;
     }
 
     /**
@@ -1019,104 +1049,16 @@ public class StageCommand {
             }
         }
 
-        // ── Single-trigger surfaces (any one grants the stage) ──
-        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> advMatches =
-            collectMatching(com.enviouse.progressivestages.server.triggers.AdvancementStageGrants.getAllMappings(), stageId);
-        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> itemMatches =
-            collectMatching(com.enviouse.progressivestages.server.triggers.ItemPickupStageGrants.getAllMappings(), stageId);
-        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> dimMatches =
-            collectMatching(com.enviouse.progressivestages.server.triggers.DimensionStageGrants.getAllMappings(), stageId);
-        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> bossMatches =
-            collectMatching(com.enviouse.progressivestages.server.triggers.BossKillStageGrants.getAllMappings(), stageId);
-
-        boolean anySingle = !advMatches.isEmpty() || !itemMatches.isEmpty()
-            || !dimMatches.isEmpty() || !bossMatches.isEmpty();
-
-        if (anySingle) {
-            source.sendSuccess(() -> TextUtil.parseColorCodes("&7Single triggers (any one grants):"), false);
-            TriggerPersistence persistence = TriggerPersistence.get(source.getServer());
-
-            for (var e : advMatches) {
-                net.minecraft.advancements.AdvancementHolder holder =
-                    source.getServer().getAdvancements().get(e.getKey());
-                boolean done = holder != null
-                    && player.getAdvancements().getOrStartProgress(holder).isDone();
-                String mark = done ? "&a✓" : "&c✗";
-                source.sendSuccess(() -> TextUtil.parseColorCodes(
-                    "  " + mark + " &8advancement: &f" + e.getKey()), false);
-            }
-            for (var e : itemMatches) {
-                // Item-pickup triggers are stateless (no persistence). Best-effort: report whether
-                // the item is currently in the player's inventory.
-                boolean inInv = playerHasItem(player, e.getKey());
-                String mark = inInv ? "&a✓ (in inventory)" : "&c✗";
-                source.sendSuccess(() -> TextUtil.parseColorCodes(
-                    "  " + mark + " &8item: &f" + e.getKey()), false);
-            }
-            for (var e : dimMatches) {
-                boolean fired = persistence.hasTriggered("dimension", e.getKey().toString(), player.getUUID());
-                String mark = fired ? "&a✓" : "&c✗";
-                source.sendSuccess(() -> TextUtil.parseColorCodes(
-                    "  " + mark + " &8dimension: &f" + e.getKey()), false);
-            }
-            for (var e : bossMatches) {
-                boolean fired = persistence.hasTriggered("boss", e.getKey().toString(), player.getUUID());
-                String mark = fired ? "&a✓" : "&c✗";
-                source.sendSuccess(() -> TextUtil.parseColorCodes(
-                    "  " + mark + " &8boss: &f" + e.getKey()), false);
-            }
-        }
-
-        // ── Multi-requirements targeting this stage ──
-        List<com.enviouse.progressivestages.server.triggers.MultiTrigger> multis =
-            com.enviouse.progressivestages.server.triggers.MultiTriggerManager.getAll()
-                .stream()
-                .filter(req -> req.stageId().equals(stageId))
-                .toList();
-
-        if (!multis.isEmpty()) {
-            source.sendSuccess(() -> TextUtil.parseColorCodes("&7Multi requirements:"), false);
-            TriggerPersistence persistence = TriggerPersistence.get(source.getServer());
-            for (var req : multis) {
-                int total = req.subTriggers().size();
-                int done = com.enviouse.progressivestages.server.triggers.MultiTriggerManager
-                    .countSatisfied(req, player);
-                String header = "  &e" + req.requirementId()
-                    + " &8(" + req.mode().name().toLowerCase() + ") &7[" + done + "/" + total + "]";
-                source.sendSuccess(() -> TextUtil.parseColorCodes(header), false);
-                for (var sub : req.subTriggers()) {
-                    boolean ok = persistence.hasTriggered("multi",
-                        req.requirementId() + ":" + sub.canonicalKey(), player.getUUID());
-                    String mark = ok ? "&a✓" : "&c✗";
-                    source.sendSuccess(() -> TextUtil.parseColorCodes(
-                        "      " + mark + " &f" + sub.canonicalKey()), false);
-                }
-            }
-        }
-
-        if (!anySingle && multis.isEmpty() && !hasStage && verbose) {
+        // ── v2.3 per-stage [[triggers]] (any satisfied rule grants the stage) ──
+        var ruleProgress = com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator
+            .describeProgress(player, stageId);
+        if (!ruleProgress.isEmpty()) {
+            source.sendSuccess(() -> TextUtil.parseColorCodes(
+                "&7Triggers (any satisfied rule grants this stage):"), false);
+            renderTriggerRules(source, player, stageId, "  ");
+        } else if (!hasStage && verbose) {
             source.sendSuccess(() -> TextUtil.parseColorCodes(
                 "&8No triggers grant this stage — only &f/stage grant&8 will award it."), false);
         }
-    }
-
-    private static List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>>
-        collectMatching(Map<net.minecraft.resources.ResourceLocation, StageId> mappings, StageId target) {
-        List<Map.Entry<net.minecraft.resources.ResourceLocation, StageId>> out = new java.util.ArrayList<>();
-        for (var e : mappings.entrySet()) {
-            if (e.getValue().equals(target)) out.add(e);
-        }
-        return out;
-    }
-
-    private static boolean playerHasItem(ServerPlayer player, net.minecraft.resources.ResourceLocation itemId) {
-        var inv = player.getInventory();
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            var stack = inv.getItem(i);
-            if (stack.isEmpty()) continue;
-            var key = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
-            if (key != null && key.equals(itemId)) return true;
-        }
-        return false;
     }
 }

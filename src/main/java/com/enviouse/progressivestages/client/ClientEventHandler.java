@@ -56,33 +56,41 @@ public class ClientEventHandler {
             return; // Nothing to show
         }
 
-        // Determine the primary stage to display (item lock takes priority); kept for masked-name usage.
+        // Determine the primary stage to display (item lock takes priority); used for the
+        // masked-name decision and the description text.
         StageId displayStage = itemLocked ? missingItemStages.iterator().next() : missingRecipeStages.iterator().next();
 
-        List<Component> tooltip = event.getToolTip();
-
-        // Mask item name if configured (only for full item lock)
-        if (itemLocked && StageConfig.isMaskLockedItemNames() && !tooltip.isEmpty()) {
-            // Replace the first line (item name) with configurable masked name (supports & color codes)
-            tooltip.set(0, TextUtil.parseColorCodes(StageConfig.getMsgTooltipMaskedName()));
-        }
-
-        if (!StageConfig.isShowTooltip()) {
-            return;
-        }
-
-        // Aggregate all missing stage names for the multi-stage tooltip line.
+        // Aggregate every missing gating stage. v2.3: per-stage [display] flags are OR-ed across
+        // all of them — a multi-stage-locked item is masked/hidden if ANY gating stage asks for it.
         java.util.LinkedHashSet<StageId> allMissing = new java.util.LinkedHashSet<>();
         allMissing.addAll(missingItemStages);
         allMissing.addAll(missingRecipeStages);
+
+        List<Component> tooltip = event.getToolTip();
+
+        // Mask item name if ANY gating stage requests display_as_unknown_item (overriding the
+        // global mask_locked_item_names default). Only for full item locks, never recipe-only.
+        if (itemLocked && anyStageFlag(missingItemStages, ClientStageCache::isDisplayAsUnknownItem)
+                && !tooltip.isEmpty()) {
+            tooltip.set(0, TextUtil.parseColorCodes(StageConfig.getMsgTooltipMaskedName()));
+        }
+
+        // Show the lock tooltip unless EVERY gating stage suppresses it via show_tooltip = false
+        // (per-stage override of the global emi.show_tooltip default).
+        if (!anyStageFlag(allMissing, ClientStageCache::isShowTooltip)) {
+            return;
+        }
+        // v2.3 fix: read display names from ClientStageCache (synced from server via
+        // StageDefinitionsSyncPayload), NOT StageOrder. StageOrder is only populated on the
+        // server JVM by loading the TOMLs; on a dedicated server the client's StageOrder is
+        // empty, so this previously fell back to the raw stage path. ClientStageCache.getDisplayName
+        // already falls back to stageId.getPath() when a definition is missing.
         String stageDisplayName = allMissing.stream()
-            .map(s -> StageOrder.getInstance().getStageDefinition(s)
-                .map(StageDefinition::getDisplayName).orElse(s.getPath()))
+            .map(ClientStageCache::getDisplayName)
             .collect(java.util.stream.Collectors.joining(", "));
 
         String currentStageName = ClientStageCache.getCurrentStage()
-            .flatMap(id -> StageOrder.getInstance().getStageDefinition(id))
-            .map(StageDefinition::getDisplayName)
+            .map(ClientStageCache::getDisplayName)
             .orElse(StageConfig.getMsgTooltipCurrentStageNone());
 
         String progress = ClientStageCache.getProgressString();
@@ -117,6 +125,18 @@ public class ClientEventHandler {
             .replace("{stage}", currentStageName)
             .replace("{progress}", progress);
         tooltip.add(TextUtil.parseColorCodes(currentStageText));
+
+        // v2.3: optionally append the gating stage's description (per-stage override of the
+        // global show_stage_description_on_tooltip default). Only shown when non-empty AND the
+        // stage name is allowed to be revealed to this viewer.
+        if (anyStageFlag(allMissing, ClientStageCache::isShowDescriptionOnTooltip)
+                && com.enviouse.progressivestages.client.util.ClientStageDisclosure.mayShowRestrictingStageName()) {
+            String desc = ClientStageCache.getDescription(displayStage);
+            if (desc != null && !desc.isEmpty()) {
+                tooltip.add(TextUtil.parseColorCodes(
+                    StageConfig.getMsgTooltipStageDescription().replace("{description}", desc)));
+            }
+        }
     }
 
     /** v2.0.1: clear client-side ore-spoof cache when leaving a level. */
@@ -125,5 +145,28 @@ public class ClientEventHandler {
         if (event.getLevel() instanceof net.minecraft.client.multiplayer.ClientLevel) {
             OreSpoofClientState.clear();
         }
+    }
+
+    /** v2.3: poll the stage-tree keybind; request a progress snapshot, which opens the GUI. */
+    @SubscribeEvent
+    public static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+        // Drain all queued presses (so the keymapping counter is reset) but send at most one
+        // request per tick to avoid flooding the server on a double-tap.
+        boolean pressed = false;
+        while (ClientModBusEvents.OPEN_TREE.consumeClick()) {
+            pressed = true;
+        }
+        if (pressed) {
+            ClientTriggerProgress.requestFromServer();
+        }
+    }
+
+    /** True if any of the given stages reports the flag true (per-stage display flags are OR-ed). */
+    private static boolean anyStageFlag(java.util.Collection<StageId> stages,
+                                        java.util.function.Predicate<StageId> flag) {
+        for (StageId s : stages) {
+            if (flag.test(s)) return true;
+        }
+        return false;
     }
 }

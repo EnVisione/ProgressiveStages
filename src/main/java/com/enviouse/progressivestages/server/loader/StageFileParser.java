@@ -5,8 +5,13 @@ import com.electronwill.nightconfig.toml.TomlParser;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
+import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
+import com.enviouse.progressivestages.common.trigger.TriggerCondition;
+import com.enviouse.progressivestages.common.trigger.TriggerConditionType;
+import com.enviouse.progressivestages.common.trigger.TriggerMode;
+import com.enviouse.progressivestages.common.trigger.TriggerRule;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
@@ -115,7 +120,147 @@ public final class StageFileParser {
         if (icon != null && !icon.isEmpty()) builder.icon(icon);
         if (unlockMessage != null && !unlockMessage.isEmpty()) builder.unlockMessage(unlockMessage);
 
+        // v2.3: per-stage [[triggers]] auto-grant rules + [display] overrides.
+        builder.triggers(parseTriggers(config));
+        applyDisplaySection(config, builder);
+
         return ParseResult.success(builder.build());
+    }
+
+    // -------------------- [[triggers]] (v2.3 per-stage auto-grant) --------------------
+
+    /**
+     * Parse the per-stage triggers. Accepts either an array-of-tables ({@code [[triggers]]} —
+     * one entry per independent rule) or a single table ({@code [triggers]} — one rule). The
+     * stage is auto-granted when ANY rule is satisfied; within a rule, conditions combine by
+     * {@code mode}.
+     */
+    private static List<TriggerRule> parseTriggers(Config config) {
+        Object raw = config.get("triggers");
+        if (raw == null) return Collections.emptyList();
+
+        List<TriggerRule> rules = new ArrayList<>();
+        if (raw instanceof List<?> list) {
+            for (Object o : list) {
+                if (o instanceof Config ruleCfg) {
+                    TriggerRule r = parseTriggerRule(ruleCfg);
+                    if (r != null) rules.add(r);
+                } else {
+                    LOGGER.warn("[ProgressiveStages] [[triggers]] entry is not a table — skipped");
+                }
+            }
+        } else if (raw instanceof Config single) {
+            TriggerRule r = parseTriggerRule(single);
+            if (r != null) rules.add(r);
+        } else {
+            LOGGER.warn("[ProgressiveStages] [triggers] section has an unexpected shape — skipped");
+        }
+        return rules;
+    }
+
+    private static TriggerRule parseTriggerRule(Config c) {
+        TriggerMode mode = TriggerMode.fromString(c.get("mode"));
+        String description = c.get("description");
+
+        List<TriggerCondition> conditions = new ArrayList<>();
+        Object condRaw = c.get("conditions");
+        if (condRaw instanceof List<?> list) {
+            for (Object o : list) {
+                if (o instanceof Config cc) {
+                    TriggerCondition tc = parseCondition(cc);
+                    if (tc != null) conditions.add(tc);
+                }
+            }
+        } else if (condRaw instanceof Config cc) {
+            TriggerCondition tc = parseCondition(cc);
+            if (tc != null) conditions.add(tc);
+        } else if (c.get("type") != null) {
+            // Shorthand: a rule with no `conditions` list but a `type` IS a single condition.
+            TriggerCondition tc = parseCondition(c);
+            if (tc != null) conditions.add(tc);
+        }
+
+        if (conditions.isEmpty()) {
+            LOGGER.warn("[ProgressiveStages] [[triggers]] rule has no valid conditions — skipped");
+            return null;
+        }
+        return new TriggerRule(mode, conditions, description);
+    }
+
+    private static TriggerCondition parseCondition(Config c) {
+        TriggerConditionType type = TriggerConditionType.fromString(c.get("type"));
+        if (type == null) {
+            LOGGER.warn("[ProgressiveStages] Unknown trigger condition type '{}' — skipped", String.valueOf(c.get("type")));
+            return null;
+        }
+        long count = readLong(c, "count", 1L);
+        String target = readTriggerTarget(c, type);
+        if (target.isEmpty() && type.requiresTarget()) {
+            LOGGER.warn("[ProgressiveStages] Trigger condition '{}' is missing its target — skipped",
+                type.name().toLowerCase());
+            return null;
+        }
+        if (target.isEmpty() && type == TriggerConditionType.DISTANCE) {
+            target = "all"; // default movement kind
+        }
+        return new TriggerCondition(type, target, count);
+    }
+
+    /** Read the type-appropriate target key, with generous fallbacks. */
+    private static String readTriggerTarget(Config c, TriggerConditionType type) {
+        String[] keys = switch (type) {
+            case KILL                                        -> new String[]{"entity", "mob", "target", "id"};
+            case MINE                                        -> new String[]{"block", "target", "id"};
+            case CRAFT, PICKUP, USE, DROP, BREAK_ITEM, HAS_ITEM -> new String[]{"item", "target", "id"};
+            case DISTANCE                                    -> new String[]{"movement", "kind", "target"};
+            case STAT                                        -> new String[]{"stat", "id", "target"};
+            case ADVANCEMENT                                 -> new String[]{"advancement", "id", "target"};
+            case DIMENSION                                   -> new String[]{"dimension", "id", "target"};
+            case BIOME                                       -> new String[]{"biome", "id", "target"};
+            case PLAY_TIME, LEVEL, XP                        -> new String[]{};
+        };
+        for (String k : keys) {
+            Object v = c.get(k);
+            if (v instanceof String s && !s.trim().isEmpty()) return s.trim();
+        }
+        return "";
+    }
+
+    private static long readLong(Config c, String key, long def) {
+        Object v = c.get(key);
+        if (v instanceof Number n) return n.longValue();
+        if (v instanceof String s) {
+            try { return Long.parseLong(s.trim()); } catch (NumberFormatException ignored) {}
+        }
+        return def;
+    }
+
+    // -------------------- [display] (v2.3 per-stage tooltip / unknown-item) --------------------
+
+    /**
+     * Parse the optional {@code [display]} section. Each key is a tri-state override: present →
+     * use the stage value; absent → leave {@code null} so the global progressivestages.toml
+     * default applies.
+     */
+    private static void applyDisplaySection(Config config, StageDefinition.Builder builder) {
+        Config sec = config.get("display");
+        if (sec == null) return;
+        builder.displayAsUnknownItem(readOptionalBool(sec, "display_as_unknown_item"));
+        builder.obscureIcon(readOptionalBool(sec, "obscure_icon"));
+        builder.showTooltip(readOptionalBool(sec, "show_tooltip"));
+        builder.showDescriptionOnTooltip(readOptionalBool(sec, "show_description_on_tooltip"));
+    }
+
+    /** Returns the boolean if explicitly present, else {@code null} (inherit global default). */
+    private static Boolean readOptionalBool(Config c, String key) {
+        Object v = c.get(key);
+        if (v instanceof Boolean b) return b;
+        if (v instanceof String s) {
+            String t = s.trim().toLowerCase();
+            if (t.equals("true"))  return Boolean.TRUE;
+            if (t.equals("false")) return Boolean.FALSE;
+        }
+        return null;
     }
 
     // -------------------- [stage].dependency --------------------
@@ -414,6 +559,20 @@ public final class StageFileParser {
         if (radius instanceof Number n) b.crafterCheckRadius(n.intValue());
         Object oreRadius = section.get("ore_spoof_radius");
         if (oreRadius instanceof Number n) b.oreSpoofRadius(n.intValue());
+
+        // v2.3: per-stage enforcement category overrides — the SAME key names as the global
+        // progressivestages.toml toggles (e.g. block_item_use, block_block_placement). Setting one
+        // here overrides that behaviour for the resources THIS stage gates; omit to inherit global.
+        for (EnforcementCategory cat : EnforcementCategory.values()) {
+            Object v = section.get(cat.key());
+            if (v instanceof Boolean bool) {
+                b.enforcementOverride(cat, bool);
+            } else if (v instanceof String s) {
+                String t = s.trim().toLowerCase();
+                if (t.equals("true")) b.enforcementOverride(cat, Boolean.TRUE);
+                else if (t.equals("false")) b.enforcementOverride(cat, Boolean.FALSE);
+            }
+        }
     }
 
     // -------------------- helpers --------------------

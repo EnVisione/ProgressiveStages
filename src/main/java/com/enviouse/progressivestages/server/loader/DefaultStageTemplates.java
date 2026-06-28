@@ -165,7 +165,9 @@ public final class DefaultStageTemplates {
             #  20.  KubeJS integration  — scripting hooks
             #  21.  Lootr integration   — per-player chests, filter chain
             #  22.  [enforcement]        — per-stage exemptions to global enforcement
-            #  23.  TROUBLESHOOTING      — "why isn't my lock working?"
+            #  23.  [[triggers]]         — AUTO-GRANT this stage when conditions are met (NEW v2.3)
+            #  24.  [display]            — per-stage tooltip / unknown-item rendering (NEW v2.3)
+            #  25.  TROUBLESHOOTING      — "why isn't my lock working?"
             # ============================================================================
 
 
@@ -180,7 +182,7 @@ public final class DefaultStageTemplates {
             [stage]
             # The stage ID. Should match the filename without ".toml". Lower-case,
             # no spaces. Must be unique across all stage files in the pack.
-            id = "diamond_age"
+            id = "thdiamond_age"
 
             # Human-readable name shown in the lock message, stage list, EMI tooltip, etc.
             # Supports &-codes for color/formatting when displayed.
@@ -970,9 +972,185 @@ public final class DefaultStageTemplates {
             # gated player), smaller = looser.
             crafter_check_radius = 32
 
+            # ----------------------------------------------------------------------------
+            # v2.3: PER-STAGE ENFORCEMENT OVERRIDES
+            # ----------------------------------------------------------------------------
+            # Override the GLOBAL enforcement toggles from progressivestages.toml for the
+            # resources THIS stage gates. Use the SAME key names as the global toggles.
+            # Omit a key to inherit the global default; set true/false to override it just
+            # for this stage. (Multi-stage: a resource is enforced if ANY of its gating
+            # stages enforces the category, so opting out only frees a resource that no
+            # other stage locks-and-enforces.)
+            #
+            # Example: this stage hides/locks all of "mod:create", but you still want
+            # players to be able to PICK UP and CARRY the items (just not USE/place them):
+            #   block_item_use       = true     # can't right-click/use (default)
+            #   block_item_pickup    = false    # CAN pick up off the ground
+            #   block_item_inventory = false    # CAN keep them in inventory for later
+            #
+            # Supported keys (each maps to the same-named global toggle):
+            #   block_item_use            block_item_pickup        block_item_inventory
+            #   block_block_placement     block_block_interaction  block_dimension_travel
+            #   block_entity_attack       block_screen_open        block_crop_growth
+            #   block_pet_interact
+            #
+            # (Commented out so this default file changes nothing — uncomment to use.)
+            # block_item_use        = true
+            # block_item_pickup     = false
+            # block_item_inventory  = false
+            # block_block_placement = true
+            # block_dimension_travel = false
+
 
             # ============================================================================
-            # 23. TROUBLESHOOTING — "WHY ISN'T MY LOCK WORKING?"
+            # 23. [[triggers]] — AUTO-GRANT THIS STAGE WHEN CONDITIONS ARE MET  (NEW IN v2.3)
+            # ============================================================================
+            # v2.3 replaced the old global config/ProgressiveStages/triggers.toml with this
+            # per-stage [[triggers]] section: define the conditions that AUTO-GRANT this stage
+            # right here, alongside everything else the stage controls.
+            #
+            # SHAPE
+            #   Each [[triggers]] block is ONE independent RULE. A stage may declare several
+            #   rules; they are OR-ed together — the stage is granted the moment ANY rule is
+            #   fully satisfied (great for "kill the dragon OR earn the credits advancement").
+            #
+            #   Inside a rule, list one or more [[triggers.conditions]]. How they combine is
+            #   set by `mode`:
+            #       mode = "all_of"   every condition must be met   (DEFAULT)
+            #       mode = "any_of"   at least one condition must be met
+            #
+            #   Shorthand: a rule with a SINGLE condition may put the condition fields right
+            #   on the [[triggers]] table instead of a nested [[triggers.conditions]].
+            #
+            # PROGRESS, SCOPE & PERSISTENCE
+            #   * Counter conditions read Minecraft's own STATISTICS, so they are RETROACTIVE
+            #     (a player who already did the thing is credited the instant the trigger
+            #     loads) and survive restarts automatically — no extra save files.
+            #   * Progress is per-PLAYER; the FIRST team member to satisfy a whole rule
+            #     unlocks the stage for the entire team.
+            #   * "Visited" one-shots (dimension/biome) are remembered per player; clear them
+            #     with /progressivestages trigger reset <player> <stage>.
+            #   * Inspect live progress with /stage progress <stage> [player],
+            #     /progressivestages triggers list [player], or the in-game tree (/stage gui).
+            #
+            # CONDITION TYPES  (the subject key tells it WHAT to count)
+            #   type = "kill"        entity = "<id|tag>"    count = N   (mob kills)
+            #   type = "mine"        block  = "<id|tag>"    count = N   (blocks mined)
+            #   type = "craft"       item   = "<id|tag>"    count = N   (items crafted)
+            #   type = "pickup"      item   = "<id|tag>"    count = N   (items picked up)
+            #   type = "use"         item   = "<id|tag>"    count = N   (items used)
+            #   type = "drop"        item   = "<id|tag>"    count = N
+            #   type = "break_item"  item   = "<id|tag>"    count = N   (tools/items broken)
+            #   type = "distance"    movement = "<kind>"    count = N   (blocks travelled)
+            #                        kinds: walk sprint crouch swim fall climb fly
+            #                               walk_under_water walk_on_water minecart boat
+            #                               pig horse strider aviate(=elytra)  OR  all
+            #   type = "stat"        stat = "<custom_stat_id>"  count = N
+            #                        any vanilla custom stat, e.g. minecraft:jump,
+            #                        minecraft:deaths, minecraft:damage_dealt, minecraft:mob_kills
+            #   type = "play_time"   count = N   (MINUTES played)
+            #   type = "level"       count = N   (current experience level)
+            #   type = "xp"          count = N   (current total experience points)
+            #   type = "has_item"    item = "<id|tag>"   count = N   (currently in inventory)
+            #   type = "advancement" advancement = "<id>"   (earned; vanilla-persisted)
+            #   type = "dimension"   dimension = "<id>"     (entered at least once)
+            #   type = "biome"       biome = "<id|tag>"     (visited at least once)
+            #
+            #   Tags: write the subject as "#namespace:path" or "tag:namespace:path" to count
+            #   across every member of the tag. `count` defaults to 1 when omitted.
+            # ----------------------------------------------------------------------------
+            #
+            # The examples below are COMMENTED OUT so this default file auto-grants nothing.
+            # Uncomment / adapt them in your own stage files.
+            #
+            # -- Rule 1: kill 10 endermen AND slay the Ender Dragon ----------------------
+            # [[triggers]]
+            # mode = "all_of"
+            # [[triggers.conditions]]
+            # type = "kill"
+            # entity = "minecraft:enderman"
+            # count = 10
+            # [[triggers.conditions]]
+            # type = "kill"
+            # entity = "minecraft:ender_dragon"
+            # count = 1
+            #
+            # -- Rule 2 (alternate path): travel 100,000 blocks by any means -------------
+            # [[triggers]]
+            # [[triggers.conditions]]
+            # type = "distance"
+            # movement = "all"
+            # count = 100000
+            #
+            # -- Single-condition shorthand: just earn an advancement --------------------
+            # [[triggers]]
+            # type = "advancement"
+            # advancement = "minecraft:end/kill_dragon"
+            #
+            # -- any_of: craft 64 diamond blocks OR mine 500 diamond ore -----------------
+            # [[triggers]]
+            # mode = "any_of"
+            # [[triggers.conditions]]
+            # type = "craft"
+            # item = "minecraft:diamond_block"
+            # count = 64
+            # [[triggers.conditions]]
+            # type = "mine"
+            # block = "#minecraft:diamond_ores"
+            # count = 500
+            #
+            # -- More single-condition shorthands (each [[triggers]] is its own rule) -----
+            # [[triggers]]
+            # type = "has_item"
+            # item = "minecraft:netherite_ingot"
+            # count = 1
+            #
+            # [[triggers]]
+            # type = "dimension"
+            # dimension = "minecraft:the_nether"
+            #
+            # [[triggers]]
+            # type = "biome"
+            # biome = "#minecraft:is_badlands"
+            #
+            # [[triggers]]
+            # type = "play_time"
+            # count = 120     # minutes
+            #
+            # [[triggers]]
+            # type = "level"
+            # count = 30
+
+
+            # ============================================================================
+            # 24. [display] — PER-STAGE TOOLTIP / UNKNOWN-ITEM RENDERING  (NEW IN v2.3)
+            # ============================================================================
+            # Controls how items LOCKED BY THIS STAGE appear on the client. Every key is an
+            # OPTIONAL override of a global default in progressivestages.toml — omit a key to
+            # inherit the global value, or set true/false to override it just for this stage.
+            #
+            #   display_as_unknown_item      mask the item NAME as "Unknown Item" in tooltips.
+            #                                global default: enforcement.mask_locked_item_names
+            #   obscure_icon                 also replace the item's ICON with a "?" placeholder
+            #                                in the player's inventory, so the item is completely
+            #                                unidentifiable — not just its name.
+            #                                global default: enforcement.obscure_locked_item_icons
+            #   show_tooltip                 whether to show the lock / required-stage tooltip
+            #                                lines at all for this stage's items.
+            #                                global default: emi.show_tooltip
+            #   show_description_on_tooltip  append THIS stage's [stage].description to a locked
+            #                                item's tooltip (a hint about what unlocks it).
+            #                                global default: emi.show_stage_description_on_tooltip
+            # ----------------------------------------------------------------------------
+            # [display]
+            # display_as_unknown_item = true
+            # obscure_icon = true
+            # show_tooltip = true
+            # show_description_on_tooltip = true
+
+
+            # ============================================================================
+            # 25. TROUBLESHOOTING — "WHY ISN'T MY LOCK WORKING?"
             # ============================================================================
             #
             # "Items in my locked list aren't locked."
@@ -1022,209 +1200,6 @@ public final class DefaultStageTemplates {
             #   items are regular Items and ItemEnforcer still scrubs them from the main
             #   inventory.
             # ============================================================================
-            """;
-    }
-
-    public static String triggers() {
-        return """
-            # ============================================================================
-            # ProgressiveStages 2.0 — Trigger Configuration
-            # ============================================================================
-            # Automatic stage grants based on player actions. All triggers are event-driven
-            # (no per-tick polling). Five sections live in this file:
-            #
-            #   [advancements]   single-shot: earning advancement A grants stage X.
-            #   [items]          single-shot: picking up (or having) item I grants stage X.
-            #   [dimensions]     one-time:   first entry into dimension D grants stage X.
-            #   [bosses]         one-time:   killing entity B grants stage X.
-            #   [[multi]]        N-of-N:     stage X is granted ONLY when MULTIPLE
-            #                                sub-triggers have ALL fired (or ANY fired)
-            #                                for the same player.
-            #
-            # Format for the first four sections:
-            #   "resource_id" = "stage_id"
-            #
-            # The four one-to-one sections are unchanged from 1.x. Multi-trigger is new
-            # in 2.0 — see the [[multi]] section at the bottom of this file for a deep
-            # explanation with worked examples.
-            #
-            # Trigger persistence is stored per-world. To reset a trigger that has already
-            # fired (dimension entry, boss kill, or any multi-requirement):
-            #   /progressivestages trigger reset <player> dimension <id>
-            #   /progressivestages trigger reset <player> boss <id>
-            #   /progressivestages trigger reset <player> multi <requirement-id>
-            #
-            # To see all loaded multi-requirements plus per-player progress:
-            #   /progressivestages multi list [player]
-            # ============================================================================
-
-
-            # ============================================================================
-            # ADVANCEMENT TRIGGERS — one advancement -> one stage
-            # ============================================================================
-            # When the player earns the advancement, the stage is granted IMMEDIATELY
-            # (no restart, no relog). Fires once per (player, stage) — re-earning the
-            # advancement doesn't re-grant. Stages still granted via /stage grant work
-            # normally regardless of advancement state.
-            # ----------------------------------------------------------------------------
-            [advancements]
-            # "minecraft:story/mine_stone" = "stone_age"
-            # "minecraft:story/smelt_iron" = "iron_age"
-            # "minecraft:story/mine_diamond" = "diamond_age"
-            # "minecraft:nether/return_to_sender" = "nether_warrior"
-
-
-            # ============================================================================
-            # ITEM PICKUP TRIGGERS — one item -> one stage
-            # ============================================================================
-            # Two surfaces:
-            #   (a) Pickup event — when a player picks up the item off the ground.
-            #   (b) Login scan   — when a player logs in WITH the item already in their
-            #                      inventory (grants the stage retroactively).
-            # ----------------------------------------------------------------------------
-            [items]
-            # "minecraft:iron_ingot" = "iron_age"
-            # "minecraft:diamond" = "diamond_age"
-            # "minecraft:netherite_ingot" = "netherite_age"
-
-
-            # ============================================================================
-            # DIMENSION ENTRY TRIGGERS — first entry only
-            # ============================================================================
-            # Fires the FIRST time the player enters the dimension. Persisted across
-            # restarts. Reset with: /progressivestages trigger reset <player> dimension <id>
-            # ----------------------------------------------------------------------------
-            [dimensions]
-            # "minecraft:the_nether" = "nether_explorer"
-            # "minecraft:the_end"    = "end_explorer"
-
-
-            # ============================================================================
-            # BOSS KILL TRIGGERS — first kill only
-            # ============================================================================
-            # Fires the FIRST time the player kills the entity. Direct hits, projectiles,
-            # and recently-damaged-by-player attribution all count.  Persisted across
-            # restarts. Reset with: /progressivestages trigger reset <player> boss <id>
-            # ----------------------------------------------------------------------------
-            [bosses]
-            # "minecraft:ender_dragon" = "dragon_slayer"
-            # "minecraft:wither"       = "wither_slayer"
-            # "minecraft:warden"       = "warden_slayer"
-
-
-            # ============================================================================
-            # MULTI-TRIGGER REQUIREMENTS  [[multi]]   — NEW IN 2.0
-            # ============================================================================
-            # A multi-trigger grants a stage ONLY when several sub-triggers have ALL fired
-            # (or, optionally, when ANY ONE of them fires). Use this when "do one thing"
-            # isn't strict enough — for example, "must own a full stone tool set" or "must
-            # have visited both the Nether AND the End".
-            #
-            # SHAPE
-            # -----
-            # Each [[multi]] entry is one requirement. Fields:
-            #
-            #   stage         = "<stage-id>"        REQUIRED. Stage to grant on completion.
-            #   description   = "<free text>"      Optional. Shown by /progressivestages multi list.
-            #   id            = "<stable-id>"      Optional. Persistence handle (see PROGRESS).
-            #                                      If omitted, an id is auto-derived from a hash
-            #                                      of the contents (stable across reorderings).
-            #   all_of        = [ "<sub>", ... ]   Mutually exclusive with any_of. ALL must fire.
-            #   any_of        = [ "<sub>", ... ]   Mutually exclusive with all_of. ONE must fire.
-            #
-            # SUB-TRIGGER PREFIXES
-            # --------------------
-            # Each sub-trigger string uses a "<surface>:<id>" prefix to pick the surface
-            # it listens on:
-            #
-            #   item:<namespace:path>          item picked up OR already in inventory at login
-            #   advancement:<namespace:path>   advancement earned (or already earned at login)
-            #   dimension:<namespace:path>     dimension entered (or current dim at login)
-            #   boss:<namespace:path>          entity killed (NOT retroactive — see PROGRESS)
-            #
-            # ALL OR ANY?
-            # -----------
-            # all_of  -> stage is granted ONLY after every sub-trigger has fired at least
-            #            once for that player. Progress is partial — the player can satisfy
-            #            sub-triggers in any order, over any timespan, across sessions.
-            # any_of  -> stage is granted the moment ANY one sub-trigger fires. (Logically
-            #            this could be split into N separate single-trigger lines, but
-            #            grouping is cleaner when several routes lead to the same stage.)
-            #
-            # PROGRESS, PERSISTENCE, AND RESETS
-            # ---------------------------------
-            # Per-player progress is persisted in world/data/progressivestages_triggers.dat
-            # (the same file as boss/dimension persistence). For each player, each sub-key
-            # of each requirement is either satisfied or not.
-            #
-            # The `id` field controls the persistence key. If two requirements share an id
-            # they share their progress, which is almost never what you want — change the
-            # id if you copy a requirement.
-            #
-            # To reset a player's progress on one requirement:
-            #   /progressivestages trigger reset <player> multi <requirement-id>
-            #
-            # To inspect every requirement plus a player's progress through them:
-            #   /progressivestages multi list <player>
-            #
-            # Retroactive credit:
-            #   item:        scanned at login from inventory
-            #   advancement: scanned at login from advancement progress
-            #   dimension:   the current dimension on login counts as visited
-            #   boss:        NOT scanned (a past kill cannot be retrieved); the player has
-            #                to kill the boss again after the requirement is added. Use the
-            #                reset command + /stage grant to award by hand if needed.
-            #
-            # WORKED EXAMPLES
-            # ---------------
-
-            # Example 1: Stone tool master — must own a stone sword, pickaxe, AND axe.
-            # The user's canonical example. Stage granted only when all three items have
-            # been picked up (or are present in inventory at login).
-            #
-            # [[multi]]
-            # stage = "stone_tools_master"
-            # description = "Own a full set of stone tools"
-            # all_of = [
-            #     "item:minecraft:stone_sword",
-            #     "item:minecraft:stone_pickaxe",
-            #     "item:minecraft:stone_axe",
-            # ]
-
-            # Example 2: Cross-surface — kill the dragon AND earn the achievement.
-            # Mixes two different sub-types in one requirement.
-            #
-            # [[multi]]
-            # stage = "true_dragon_slayer"
-            # description = "Dragon kill + Free The End"
-            # all_of = [
-            #     "boss:minecraft:ender_dragon",
-            #     "advancement:minecraft:end/kill_dragon",
-            # ]
-
-            # Example 3: Any-of — visiting either non-overworld dimension is enough.
-            # Equivalent to two separate [dimensions] lines, but documents intent better.
-            #
-            # [[multi]]
-            # stage = "off_world_explorer"
-            # description = "Visit the Nether or the End"
-            # any_of = [
-            #     "dimension:minecraft:the_nether",
-            #     "dimension:minecraft:the_end",
-            # ]
-
-            # Example 4: Many-of-many — stack several surfaces under one stage.
-            #
-            # [[multi]]
-            # id = "endgame_gate"
-            # stage = "endgame"
-            # description = "Beat the major bosses + reach the End"
-            # all_of = [
-            #     "boss:minecraft:ender_dragon",
-            #     "boss:minecraft:wither",
-            #     "dimension:minecraft:the_end",
-            #     "advancement:minecraft:adventure/totem_of_undying",
-            # ]
             """;
     }
 }
