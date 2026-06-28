@@ -5,6 +5,7 @@ import com.enviouse.progressivestages.common.api.StageCause;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.trigger.TriggerCondition;
 import com.enviouse.progressivestages.common.trigger.TriggerConditionType;
 import com.enviouse.progressivestages.common.trigger.TriggerMode;
@@ -81,6 +82,12 @@ public final class StageTriggerEvaluator {
     // watches, to keep StageCounterData bounded.
     private static final Set<String> watchedKillWith = ConcurrentHashMap.newKeySet(); // "entityId|itemId"
     private static volatile boolean watchTame = false;
+    // v2.4 unlock juice
+    private static final Set<StageId> hudBarStages = ConcurrentHashMap.newKeySet();
+    private static final Set<StageId> nudgeStages = ConcurrentHashMap.newKeySet();
+    private static final Map<String, Boolean> sentNudges = new ConcurrentHashMap<>(); // "uuid|stage|threshold"
+    private static final Map<UUID, String> lastGoalSent = new ConcurrentHashMap<>();
+    private static final int[] NUDGE_THRESHOLDS = {50, 75, 90};
 
     /** Distance movement keyword -> the custom statistic that tracks it (in centimetres). */
     private static final Map<String, ResourceLocation> DISTANCE_STATS = new LinkedHashMap<>();
@@ -114,6 +121,8 @@ public final class StageTriggerEvaluator {
         RULES.clear();
         watchedKillWith.clear();
         watchTame = false;
+        hudBarStages.clear();
+        nudgeStages.clear();
         for (StageDefinition def : stages) {
             if (def.hasTriggers()) {
                 RULES.put(def.getId(), def.getTriggers());
@@ -126,6 +135,8 @@ public final class StageTriggerEvaluator {
                         }
                     }
                 }
+                if (def.getUnlock().hudBar()) hudBarStages.add(def.getId());
+                if (def.getUnlock().progressNudges()) nudgeStages.add(def.getId());
             }
         }
         active = !RULES.isEmpty();
@@ -162,6 +173,80 @@ public final class StageTriggerEvaluator {
         if (last != null && now - last < interval) return;
         lastPoll.put(player.getUUID(), now);
         evaluatePlayer(player);
+        // v2.4 unlock juice (poll-driven, change-detected).
+        if (!hudBarStages.isEmpty()) pushActiveGoal(player);
+        if (!nudgeStages.isEmpty()) checkNudges(player);
+    }
+
+    // ---- v2.4 unlock juice helpers ----
+
+    private static float fraction(ServerPlayer player, StageId stageId, TriggerCondition c) {
+        if (c.count() <= 0) return 1f;
+        return Math.min(1f, (float) currentProgress(player, stageId, c) / (float) c.count());
+    }
+
+    /** Best rule completion fraction for a stage (any_of = best condition, all_of = average). */
+    private static float bestRulePercent(ServerPlayer player, StageId stageId) {
+        float best = 0f;
+        for (TriggerRule rule : rulesFor(stageId)) {
+            float f;
+            if (rule.mode() == TriggerMode.ANY_OF) {
+                f = 0f;
+                for (TriggerCondition c : rule.conditions()) f = Math.max(f, fraction(player, stageId, c));
+            } else if (rule.conditions().isEmpty()) {
+                f = 0f;
+            } else {
+                float s = 0f;
+                for (TriggerCondition c : rule.conditions()) s += fraction(player, stageId, c);
+                f = s / rule.conditions().size();
+            }
+            best = Math.max(best, f);
+        }
+        return Math.min(1f, best);
+    }
+
+    private static void pushActiveGoal(ServerPlayer player) {
+        StageId best = null;
+        float bestPct = -1f;
+        for (StageId id : hudBarStages) {
+            if (ProgressiveStagesAPI.hasStage(player, id) || !dependenciesSatisfied(player, id)) continue;
+            float pct = bestRulePercent(player, id);
+            if (pct > bestPct) { bestPct = pct; best = id; }
+        }
+        String stateKey;
+        if (best != null) {
+            stateKey = "1|" + best + "|" + Math.round(bestPct * 100);
+            if (!stateKey.equals(lastGoalSent.get(player.getUUID()))) {
+                String label = StageOrder.getInstance().getStageDefinition(best)
+                    .map(StageDefinition::getDisplayName).orElse(best.getPath());
+                com.enviouse.progressivestages.common.network.NetworkHandler.sendActiveGoal(player, label, bestPct, true);
+                lastGoalSent.put(player.getUUID(), stateKey);
+            }
+        } else {
+            stateKey = "0";
+            if (!stateKey.equals(lastGoalSent.get(player.getUUID()))) {
+                com.enviouse.progressivestages.common.network.NetworkHandler.sendActiveGoal(player, "", 0f, false);
+                lastGoalSent.put(player.getUUID(), stateKey);
+            }
+        }
+    }
+
+    private static void checkNudges(ServerPlayer player) {
+        for (StageId id : nudgeStages) {
+            if (ProgressiveStagesAPI.hasStage(player, id) || !dependenciesSatisfied(player, id)) continue;
+            int pctInt = Math.round(bestRulePercent(player, id) * 100f);
+            for (int t : NUDGE_THRESHOLDS) {
+                if (pctInt >= t) {
+                    String key = player.getUUID() + "|" + id + "|" + t;
+                    if (sentNudges.putIfAbsent(key, Boolean.TRUE) == null) {
+                        String name = StageOrder.getInstance().getStageDefinition(id)
+                            .map(StageDefinition::getDisplayName).orElse(id.getPath());
+                        player.sendSystemMessage(com.enviouse.progressivestages.common.util.TextUtil
+                            .parseColorCodes("&b✨ &7" + t + "% toward &f" + name));
+                    }
+                }
+            }
+        }
     }
 
     @SubscribeEvent

@@ -129,6 +129,30 @@ public class NetworkHandler {
             RequestPurchasePayload.STREAM_CODEC,
             NetworkHandler::handlePurchaseServer
         );
+
+        // v2.4: unlock toast + active-goal HUD bar (server -> client)
+        registrar.playToClient(UnlockToastPayload.TYPE, UnlockToastPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(NetworkHandler::handleUnlockToastClient, (p, c) -> {}));
+        registrar.playToClient(ActiveGoalPayload.TYPE, ActiveGoalPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(NetworkHandler::handleActiveGoalClient, (p, c) -> {}));
+    }
+
+    public static void sendUnlockToast(ServerPlayer player, String title, String subtitle, String iconItem) {
+        PacketDistributor.sendToPlayer(player, new UnlockToastPayload(title, subtitle, iconItem));
+    }
+
+    public static void sendActiveGoal(ServerPlayer player, String label, float percent, boolean show) {
+        PacketDistributor.sendToPlayer(player, new ActiveGoalPayload(label, percent, show));
+    }
+
+    private static void handleUnlockToastClient(UnlockToastPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> com.enviouse.progressivestages.client.ClientUnlockJuice
+            .showToast(payload.title(), payload.subtitle(), payload.iconItem()));
+    }
+
+    private static void handleActiveGoalClient(ActiveGoalPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> com.enviouse.progressivestages.client.ClientUnlockJuice
+            .setActiveGoal(payload.label(), payload.percent(), payload.show()));
     }
 
     /**
@@ -817,6 +841,28 @@ public class NetworkHandler {
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
+    }
+
+    /** Server -> client: show an advancement-style toast for an unlocked stage (v2.4). */
+    public record UnlockToastPayload(String title, String subtitle, String iconItem) implements CustomPacketPayload {
+        public static final Type<UnlockToastPayload> TYPE = new Type<>(Constants.UNLOCK_TOAST_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, UnlockToastPayload> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8, UnlockToastPayload::title,
+            ByteBufCodecs.STRING_UTF8, UnlockToastPayload::subtitle,
+            ByteBufCodecs.STRING_UTF8, UnlockToastPayload::iconItem,
+            UnlockToastPayload::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /** Server -> client: the active-goal HUD bar (label + % to next stage); show=false hides it (v2.4). */
+    public record ActiveGoalPayload(String label, float percent, boolean show) implements CustomPacketPayload {
+        public static final Type<ActiveGoalPayload> TYPE = new Type<>(Constants.ACTIVE_GOAL_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, ActiveGoalPayload> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8, ActiveGoalPayload::label,
+            ByteBufCodecs.FLOAT, ActiveGoalPayload::percent,
+            ByteBufCodecs.BOOL, ActiveGoalPayload::show,
+            ActiveGoalPayload::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
 
     /** Client -> server: buy a purchasable stage from the GUI (v2.4 skill-tree mode). */

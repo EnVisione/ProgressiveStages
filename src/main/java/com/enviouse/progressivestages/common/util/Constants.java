@@ -33,6 +33,9 @@ public final class Constants {
     public static final ResourceLocation STAGE_GUI_DATA_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "stage_gui_data");
     // v2.4: skill-tree purchase request (C2S)
     public static final ResourceLocation REQUEST_PURCHASE_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "request_purchase");
+    // v2.4: unlock juice — toast popup (S2C) + active-goal HUD bar progress (S2C)
+    public static final ResourceLocation UNLOCK_TOAST_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "unlock_toast");
+    public static final ResourceLocation ACTIVE_GOAL_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "active_goal");
 
     // Stage file directory name (inside config folder)
     public static final String STAGE_FILES_DIRECTORY = "ProgressiveStages";

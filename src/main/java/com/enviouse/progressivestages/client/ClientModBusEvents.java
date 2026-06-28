@@ -40,6 +40,14 @@ public final class ClientModBusEvents {
         event.register(OPEN_TREE);
     }
 
+    /** v2.4: register the active-goal HUD bar just above the vanilla XP bar. */
+    @SubscribeEvent
+    public static void onRegisterGuiLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
+        event.registerAbove(net.neoforged.neoforge.client.gui.VanillaGuiLayers.EXPERIENCE_BAR,
+            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "active_goal_bar"),
+            com.enviouse.progressivestages.client.ClientUnlockJuice::renderHud);
+    }
+
     /**
      * Registers a single shared {@link LockedItemDecorator} for every Item in
      * the registry. This makes lock icons appear in every container Minecraft

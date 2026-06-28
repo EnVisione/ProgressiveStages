@@ -392,6 +392,8 @@ public class StageManager {
                             Component message = TextUtil.parseColorCodes(msg);
                             player.sendSystemMessage(message);
                         });
+                        // v2.4: optional [unlock] toast/title/subtitle/sound/particles.
+                        com.enviouse.progressivestages.server.enforcement.UnlockEffectsApplier.apply(player, def);
                     }
                 }
 
