@@ -851,6 +851,7 @@ public class StageCommand {
     private static String formatCondition(com.enviouse.progressivestages.common.trigger.TriggerCondition c) {
         String type = c.type().name().toLowerCase().replace('_', ' ');
         String body = c.target().isEmpty() ? type : (type + " " + c.target());
+        if (!c.with().isEmpty()) body = body + " with " + c.with();
         return c.count() > 1 ? (body + " x" + c.count()) : body;
     }
 

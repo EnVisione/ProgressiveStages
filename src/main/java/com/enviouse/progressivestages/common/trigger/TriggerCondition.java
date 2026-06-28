@@ -21,16 +21,23 @@ public final class TriggerCondition {
     private final TriggerConditionType type;
     private final String target; // "" when the type takes no target (play_time/level/xp)
     private final long count;     // threshold, clamped to >= 1
+    private final String with;    // v2.4 KILL_WITH: the held item id; "" otherwise
 
     public TriggerCondition(TriggerConditionType type, String target, long count) {
+        this(type, target, count, "");
+    }
+
+    public TriggerCondition(TriggerConditionType type, String target, long count, String with) {
         this.type = Objects.requireNonNull(type, "type");
         this.target = target == null ? "" : target.trim();
         this.count = Math.max(1L, count);
+        this.with = with == null ? "" : with.trim();
     }
 
     public TriggerConditionType type() { return type; }
     public String target()             { return target; }
     public long count()                { return count; }
+    public String with()               { return with; }
 
     /** True if {@link #target} names a tag rather than a single id. */
     public boolean targetIsTag() {

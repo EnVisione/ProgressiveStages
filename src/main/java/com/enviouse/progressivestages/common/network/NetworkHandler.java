@@ -170,7 +170,8 @@ public class NetworkHandler {
 
     private static String conditionLabel(com.enviouse.progressivestages.common.trigger.TriggerCondition c) {
         String type = c.type().name().toLowerCase().replace('_', ' ');
-        return c.target().isEmpty() ? type : (type + " " + c.target());
+        String base = c.target().isEmpty() ? type : (type + " " + c.target());
+        return c.with().isEmpty() ? base : (base + " with " + c.with());
     }
 
     private static void handleRequestStageGuiServer(RequestStageGuiPayload payload, IPayloadContext context) {

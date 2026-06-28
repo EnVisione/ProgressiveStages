@@ -77,6 +77,11 @@ public final class StageTriggerEvaluator {
 
     private static final Map<UUID, Long> lastPoll = new ConcurrentHashMap<>();
 
+    // v2.4: event-counted conditions. We only increment counters for combos some rule actually
+    // watches, to keep StageCounterData bounded.
+    private static final Set<String> watchedKillWith = ConcurrentHashMap.newKeySet(); // "entityId|itemId"
+    private static volatile boolean watchTame = false;
+
     /** Distance movement keyword -> the custom statistic that tracks it (in centimetres). */
     private static final Map<String, ResourceLocation> DISTANCE_STATS = new LinkedHashMap<>();
     static {
@@ -107,9 +112,20 @@ public final class StageTriggerEvaluator {
     /** Rebuild the rule registry from the loaded stage definitions. Called on load + reload. */
     public static void rebuild(Collection<StageDefinition> stages) {
         RULES.clear();
+        watchedKillWith.clear();
+        watchTame = false;
         for (StageDefinition def : stages) {
             if (def.hasTriggers()) {
                 RULES.put(def.getId(), def.getTriggers());
+                for (TriggerRule rule : def.getTriggers()) {
+                    for (TriggerCondition c : rule.conditions()) {
+                        if (c.type() == TriggerConditionType.KILL_WITH) {
+                            watchedKillWith.add(c.targetBody() + "|" + c.with());
+                        } else if (c.type() == TriggerConditionType.TAME) {
+                            watchTame = true;
+                        }
+                    }
+                }
             }
         }
         active = !RULES.isEmpty();
@@ -175,10 +191,34 @@ public final class StageTriggerEvaluator {
     public static void onEntityDeath(LivingDeathEvent event) {
         if (!active) return;
         ServerPlayer killer = resolveKiller(event);
-        if (killer != null) {
-            // Defer one tick: the ENTITY_KILLED statistic is awarded by die() AFTER this event.
-            scheduleEvaluate(killer);
+        if (killer == null) return;
+
+        // v2.4: kill_with counting — count this kill only if some rule watches (victim, held item).
+        if (!watchedKillWith.isEmpty() && killer.server != null) {
+            ResourceLocation victim = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntity().getType());
+            ResourceLocation held = BuiltInRegistries.ITEM.getKey(killer.getMainHandItem().getItem());
+            if (victim != null && held != null) {
+                String key = victim + "|" + held;
+                if (watchedKillWith.contains(key)) {
+                    StageCounterData.get(killer.server).increment(killer.getUUID(), "killwith:" + key, 1);
+                }
+            }
         }
+
+        // Defer one tick: the ENTITY_KILLED statistic is awarded by die() AFTER this event.
+        scheduleEvaluate(killer);
+    }
+
+    /** v2.4: tame counting for the {@code tame} condition. */
+    @SubscribeEvent
+    public static void onAnimalTame(net.neoforged.neoforge.event.entity.living.AnimalTameEvent event) {
+        if (!active || !watchTame) return;
+        if (!(event.getTamer() instanceof ServerPlayer player) || player.server == null) return;
+        StageCounterData data = StageCounterData.get(player.server);
+        data.increment(player.getUUID(), "tame", 1);
+        ResourceLocation animal = BuiltInRegistries.ENTITY_TYPE.getKey(event.getAnimal().getType());
+        if (animal != null) data.increment(player.getUUID(), "tame:" + animal, 1);
+        scheduleEvaluate(player);
     }
 
     private static void scheduleEvaluate(ServerPlayer player) {
@@ -294,7 +334,31 @@ public final class StageTriggerEvaluator {
             case DIMENSION  -> (oneShotMarked(player, stageId, c) || matchesCurrentState(player, c)) ? c.count() : 0L;
             case BIOME      -> (oneShotMarked(player, stageId, c) || matchesCurrentState(player, c)) ? c.count() : 0L;
             case HAS_ITEM   -> heldItemCount(player, c);
+            // v2.4
+            case EFFECT     -> hasEffect(player, c) ? c.count() : 0L;
+            case BREED      -> customStat(player, Stats.ANIMALS_BRED);
+            case DAY_COUNT  -> player.level().getDayTime() / 24000L;
+            case WEATHER, ENTER_STRUCTURE ->
+                (oneShotMarked(player, stageId, c) || matchesCurrentState(player, c)) ? c.count() : 0L;
+            case TAME       -> counterValue(player, c.target().isEmpty() ? "tame" : "tame:" + c.targetBody());
+            case KILL_WITH  -> counterValue(player, killWithKey(c.targetBody(), c.with()));
         };
+    }
+
+    private static long counterValue(ServerPlayer player, String counterKey) {
+        if (player.server == null) return 0;
+        return StageCounterData.get(player.server).get(player.getUUID(), counterKey);
+    }
+
+    private static String killWithKey(String entityId, String itemId) {
+        return "killwith:" + entityId + "|" + itemId;
+    }
+
+    private static boolean hasEffect(ServerPlayer player, TriggerCondition c) {
+        ResourceLocation id = resolve(c.targetBody());
+        if (id == null) return false;
+        var holder = BuiltInRegistries.MOB_EFFECT.getHolder(id).orElse(null);
+        return holder != null && player.hasEffect(holder);
     }
 
     // ---- counter helpers ----
@@ -402,6 +466,24 @@ public final class StageTriggerEvaluator {
                 return biome.is(TagKey.create(Registries.BIOME, id));
             }
             return biome.unwrapKey().map(k -> k.location().equals(id)).orElse(false);
+        }
+        if (c.type() == TriggerConditionType.WEATHER) {
+            String w = c.targetBody().toLowerCase(Locale.ROOT);
+            var level = player.level();
+            return switch (w) {
+                case "thunder", "thundering", "storm", "thunderstorm" -> level.isThundering();
+                case "rain", "raining", "rainy" -> level.isRaining();
+                case "clear", "sunny", "sun" -> !level.isRaining();
+                default -> false;
+            };
+        }
+        if (c.type() == TriggerConditionType.ENTER_STRUCTURE) {
+            ResourceLocation id = resolve(c.targetBody());
+            if (id == null || !(player.level() instanceof net.minecraft.server.level.ServerLevel sl)) return false;
+            var key = net.minecraft.resources.ResourceKey.create(Registries.STRUCTURE, id);
+            var holder = sl.registryAccess().registryOrThrow(Registries.STRUCTURE).getHolder(key).orElse(null);
+            if (holder == null) return false;
+            return sl.structureManager().getStructureWithPieceAt(player.blockPosition(), holder.value()).isValid();
         }
         return false;
     }

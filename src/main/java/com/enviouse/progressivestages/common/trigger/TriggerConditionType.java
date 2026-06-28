@@ -34,7 +34,15 @@ public enum TriggerConditionType {
     ADVANCEMENT, // advancement earned (vanilla-persisted)
     DIMENSION,   // dimension entered (one-shot, persisted)
     BIOME,       // biome visited (one-shot, persisted)
-    HAS_ITEM;    // count currently held in inventory (state)
+    HAS_ITEM,    // count currently held in inventory (state)
+    // v2.4 additions
+    EFFECT,      // currently has a status effect (state)
+    BREED,       // animals bred                    -> Stats.ANIMALS_BRED
+    DAY_COUNT,   // reached world day N (state)
+    WEATHER,     // experienced weather rain/thunder/clear (one-shot, persisted)
+    ENTER_STRUCTURE, // entered a structure (one-shot, persisted)
+    TAME,        // animals tamed (generic counter)
+    KILL_WITH;   // kill entity X while holding item Y (generic counter)
 
     /**
      * Resolve a TOML {@code type = "..."} value (with generous aliases) to a type, or
@@ -59,27 +67,35 @@ public enum TriggerConditionType {
             case "dimension", "dimensions", "enter_dimension", "dim" -> DIMENSION;
             case "biome", "biomes", "visit_biome" -> BIOME;
             case "has_item", "have_item", "possess", "hold_item", "holding", "inventory" -> HAS_ITEM;
+            case "effect", "status_effect", "has_effect", "potion" -> EFFECT;
+            case "breed", "bred", "animals_bred" -> BREED;
+            case "day", "day_count", "days", "world_day", "reach_day" -> DAY_COUNT;
+            case "weather", "survive_weather" -> WEATHER;
+            case "enter_structure", "structure", "visit_structure" -> ENTER_STRUCTURE;
+            case "tame", "tamed", "tame_animal" -> TAME;
+            case "kill_with", "kill_using", "killwith" -> KILL_WITH;
             default -> null;
         };
     }
 
-    /** Counter conditions read a monotonic vanilla statistic (retroactive, restart-proof). */
+    /** Counter conditions read a monotonic statistic/counter (retroactive, restart-proof). */
     public boolean isCounter() {
         return switch (this) {
-            case KILL, MINE, CRAFT, PICKUP, USE, DROP, BREAK_ITEM, DISTANCE, STAT, PLAY_TIME -> true;
+            case KILL, MINE, CRAFT, PICKUP, USE, DROP, BREAK_ITEM, DISTANCE, STAT, PLAY_TIME,
+                 BREED, TAME, KILL_WITH -> true;
             default -> false;
         };
     }
 
     /** One-shot world-state facts we persist ourselves (vanilla doesn't track "ever visited"). */
     public boolean isPersistedOneShot() {
-        return this == DIMENSION || this == BIOME;
+        return this == DIMENSION || this == BIOME || this == WEATHER || this == ENTER_STRUCTURE;
     }
 
     /** Types that require a {@code target} (entity/block/item/id); the rest derive their own. */
     public boolean requiresTarget() {
         return switch (this) {
-            case PLAY_TIME, LEVEL, XP, DISTANCE -> false; // DISTANCE defaults to "all"
+            case PLAY_TIME, LEVEL, XP, DISTANCE, DAY_COUNT, BREED, TAME -> false; // DISTANCE defaults to "all"
             default -> true;
         };
     }

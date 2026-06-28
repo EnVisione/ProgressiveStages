@@ -334,7 +334,19 @@ public final class StageFileParser {
         if (target.isEmpty() && type == TriggerConditionType.DISTANCE) {
             target = "all"; // default movement kind
         }
-        return new TriggerCondition(type, target, count);
+        // v2.4: kill_with also names the held item.
+        String with = "";
+        if (type == TriggerConditionType.KILL_WITH) {
+            Object w = c.get("with");
+            if (w == null) w = c.get("held_item");
+            if (w == null) w = c.get("item");
+            if (w instanceof String s) with = s.trim();
+            if (with.isEmpty()) {
+                LOGGER.warn("[ProgressiveStages] kill_with condition is missing its 'with' item — skipped");
+                return null;
+            }
+        }
+        return new TriggerCondition(type, target, count, with);
     }
 
     /** Read the type-appropriate target key, with generous fallbacks. */
@@ -348,7 +360,12 @@ public final class StageFileParser {
             case ADVANCEMENT                                 -> new String[]{"advancement", "id", "target"};
             case DIMENSION                                   -> new String[]{"dimension", "id", "target"};
             case BIOME                                       -> new String[]{"biome", "id", "target"};
-            case PLAY_TIME, LEVEL, XP                        -> new String[]{};
+            case EFFECT                                      -> new String[]{"effect", "id", "target"};
+            case WEATHER                                     -> new String[]{"weather", "id", "target"};
+            case ENTER_STRUCTURE                             -> new String[]{"structure", "id", "target"};
+            case KILL_WITH                                   -> new String[]{"entity", "mob", "target", "id"};
+            case TAME                                        -> new String[]{"entity", "animal", "target", "id"};
+            case PLAY_TIME, LEVEL, XP, DAY_COUNT, BREED      -> new String[]{};
         };
         for (String k : keys) {
             Object v = c.get(k);
