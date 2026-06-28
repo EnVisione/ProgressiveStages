@@ -47,6 +47,16 @@ public class StageDefinition {
     private final Boolean obscureIcon;
     private final Boolean showTooltip;
     private final Boolean showDescriptionOnTooltip;
+    // v2.4: presentation/organization metadata + new sections.
+    private final boolean hidden;
+    private final String color;        // "" or a hex/&-code for GUI tinting
+    private final String category;     // "" or a group label
+    private final String scope;        // "team" (default) or "server"
+    private final long durationMillis; // -1 = permanent; otherwise real-time lifespan after grant
+    private final List<StageAttribute> attributes;
+    private final RevokeRule revoke;
+    private final StageCost cost;      // null = not purchasable
+    private final UnlockEffects unlock;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -77,6 +87,17 @@ public class StageDefinition {
         this.obscureIcon = builder.obscureIcon;
         this.showTooltip = builder.showTooltip;
         this.showDescriptionOnTooltip = builder.showDescriptionOnTooltip;
+        this.hidden = builder.hidden;
+        this.color = builder.color != null ? builder.color : "";
+        this.category = builder.category != null ? builder.category : "";
+        this.scope = builder.scope != null ? builder.scope : "team";
+        this.durationMillis = builder.durationMillis;
+        this.attributes = builder.attributes != null
+            ? Collections.unmodifiableList(new ArrayList<>(builder.attributes))
+            : Collections.emptyList();
+        this.revoke = builder.revoke != null ? builder.revoke : RevokeRule.NONE;
+        this.cost = builder.cost;
+        this.unlock = builder.unlock != null ? builder.unlock : UnlockEffects.NONE;
     }
 
     public StageId getId() {
@@ -203,6 +224,44 @@ public class StageDefinition {
         return showDescriptionOnTooltip;
     }
 
+    // ---- v2.4 ----
+
+    /** True if this stage should be hidden from the GUI tree / progression views. */
+    public boolean isHidden() { return hidden; }
+
+    /** Optional GUI tint (hex like {@code #55FF55} or an {@code &}-code), or "" for the default. */
+    public String getColor() { return color; }
+
+    /** Optional GUI group label, or "" for none. */
+    public String getCategory() { return category; }
+
+    /** Progression scope: {@code "team"} (default) or {@code "server"} (server-wide). */
+    public String getScope() { return scope; }
+
+    /** True if this stage is server-wide (shared by everyone), not per-team. */
+    public boolean isServerScope() { return "server".equalsIgnoreCase(scope); }
+
+    /** Real-time lifespan in milliseconds after grant, or {@code -1} for a permanent stage. */
+    public long getDurationMillis() { return durationMillis; }
+
+    /** True if this is a temporary stage that auto-expires after {@link #getDurationMillis()}. */
+    public boolean isTemporary() { return durationMillis > 0; }
+
+    /** Attribute modifiers applied while this stage is owned (empty if none). */
+    public List<StageAttribute> getAttributes() { return attributes; }
+
+    /** Revocation rules ({@code [revoke]}); {@link RevokeRule#NONE} if none declared. */
+    public RevokeRule getRevoke() { return revoke; }
+
+    /** Purchase cost ({@code [cost]}); {@code null} if the stage is not purchasable. */
+    public StageCost getCost() { return cost; }
+
+    /** True if this stage can be bought from the GUI (declared a {@code [cost]} section). */
+    public boolean isPurchasable() { return cost != null; }
+
+    /** Unlock presentation ({@code [unlock]}); {@link UnlockEffects#NONE} if none declared. */
+    public UnlockEffects getUnlock() { return unlock; }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -233,6 +292,15 @@ public class StageDefinition {
         private Boolean obscureIcon = null;
         private Boolean showTooltip = null;
         private Boolean showDescriptionOnTooltip = null;
+        private boolean hidden = false;
+        private String color = "";
+        private String category = "";
+        private String scope = "team";
+        private long durationMillis = -1L;
+        private List<StageAttribute> attributes = new ArrayList<>();
+        private RevokeRule revoke = RevokeRule.NONE;
+        private StageCost cost = null;
+        private UnlockEffects unlock = UnlockEffects.NONE;
 
         private Builder(StageId id) {
             this.id = id;
@@ -361,6 +429,17 @@ public class StageDefinition {
             this.showDescriptionOnTooltip = v;
             return this;
         }
+
+        // ---- v2.4 ----
+        public Builder hidden(boolean v) { this.hidden = v; return this; }
+        public Builder color(String v) { this.color = v != null ? v : ""; return this; }
+        public Builder category(String v) { this.category = v != null ? v : ""; return this; }
+        public Builder scope(String v) { this.scope = v != null ? v : "team"; return this; }
+        public Builder durationMillis(long v) { this.durationMillis = v; return this; }
+        public Builder attributes(List<StageAttribute> v) { this.attributes = v != null ? v : new ArrayList<>(); return this; }
+        public Builder revoke(RevokeRule v) { this.revoke = v != null ? v : RevokeRule.NONE; return this; }
+        public Builder cost(StageCost v) { this.cost = v; return this; }
+        public Builder unlock(UnlockEffects v) { this.unlock = v != null ? v : UnlockEffects.NONE; return this; }
 
         public StageDefinition build() {
             return new StageDefinition(this);

@@ -266,9 +266,12 @@ public class StageManager {
         // Add the target stage
         toRevoke.add(stageId);
 
-        // Only add dependents if linear progression is enabled
-        // (Stages that depend on this one should also be revoked)
-        if (StageConfig.isLinearProgression()) {
+        // Cascade to dependents when linear progression is on globally, OR the stage opts in via
+        // its per-stage revoke_cascade flag (v2.4). Either way, stages that depend on this one go too.
+        boolean cascade = StageConfig.isLinearProgression()
+            || StageOrder.getInstance().getStageDefinition(stageId)
+                .map(d -> d.getRevoke().cascade()).orElse(false);
+        if (cascade) {
             Set<StageId> dependents = StageOrder.getInstance().getAllDependents(stageId);
             toRevoke.addAll(dependents);
         }
@@ -366,6 +369,8 @@ public class StageManager {
             UUID playerTeamId = TeamProvider.getInstance().getTeamId(player);
             if (playerTeamId.equals(teamId)) {
                 NetworkHandler.sendStageSync(player, stages);
+                // v2.4: re-apply [attribute] modifiers for this member after the team's stages changed.
+                com.enviouse.progressivestages.server.enforcement.StageAttributeApplier.reconcile(player);
             }
         }
     }
@@ -453,6 +458,9 @@ public class StageManager {
 
         // Fire bulk event for login - FTB Quests will do one recheck
         fireBulkChangedEvent(player, StagesBulkChangedEvent.Reason.LOGIN);
+
+        // v2.4: apply this player's team's [attribute] modifiers (transient — re-applied each login).
+        com.enviouse.progressivestages.server.enforcement.StageAttributeApplier.reconcile(player);
     }
 
     /**

@@ -58,6 +58,17 @@ public enum StageCause {
     TRIGGER,
 
     /**
+     * Stage granted because the player bought it from the in-game tree GUI (v2.4 skill-tree mode).
+     */
+    PURCHASE,
+
+    /**
+     * Stage revoked by a {@code [revoke]} rule or {@code duration} expiry — death, XP dropping below
+     * the maintained threshold, or a temporary stage running out (v2.4 regression).
+     */
+    REGRESSION,
+
+    /**
      * Stage changed due to team propagation
      */
     TEAM_SYNC,

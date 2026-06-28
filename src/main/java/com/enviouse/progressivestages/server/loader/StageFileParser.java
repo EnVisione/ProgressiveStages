@@ -3,7 +3,11 @@ package com.enviouse.progressivestages.server.loader;
 import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.toml.TomlParser;
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.config.RevokeRule;
+import com.enviouse.progressivestages.common.config.StageAttribute;
+import com.enviouse.progressivestages.common.config.StageCost;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.config.UnlockEffects;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
@@ -124,7 +128,134 @@ public final class StageFileParser {
         builder.triggers(parseTriggers(config));
         applyDisplaySection(config, builder);
 
+        // v2.4: [stage] presentation/scope metadata + new sections.
+        builder.hidden(readBool(stageSection, "hidden"));
+        String color = stageSection.get("color");
+        if (color != null) builder.color(color);
+        String category = stageSection.get("category");
+        if (category != null) builder.category(category);
+        String scope = stageSection.get("scope");
+        if (scope != null) builder.scope(scope);
+        builder.durationMillis(parseDuration(stageSection.get("duration")));
+        builder.attributes(parseAttributes(config));
+        builder.revoke(parseRevoke(config));
+        builder.cost(parseCost(config));
+        builder.unlock(parseUnlock(config));
+
         return ParseResult.success(builder.build());
+    }
+
+    // -------------------- v2.4 sections --------------------
+
+    /** Parse a real-time duration like {@code "30m"} / {@code "2h"} / {@code "1d"} / {@code "90s"} to millis (-1 = permanent). */
+    private static long parseDuration(Object raw) {
+        if (!(raw instanceof String s)) return -1L;
+        s = s.trim().toLowerCase();
+        if (s.isEmpty()) return -1L;
+        long mult = 60_000L; // default unit = minutes
+        char last = s.charAt(s.length() - 1);
+        String num = s;
+        if (!Character.isDigit(last)) {
+            num = s.substring(0, s.length() - 1);
+            mult = switch (last) {
+                case 's' -> 1_000L;
+                case 'm' -> 60_000L;
+                case 'h' -> 3_600_000L;
+                case 'd' -> 86_400_000L;
+                default -> 60_000L;
+            };
+        }
+        try {
+            double v = Double.parseDouble(num.trim());
+            return v <= 0 ? -1L : (long) (v * mult);
+        } catch (NumberFormatException e) {
+            LOGGER.warn("[ProgressiveStages] Invalid [stage].duration '{}' — ignoring", s);
+            return -1L;
+        }
+    }
+
+    private static List<StageAttribute> parseAttributes(Config config) {
+        Object raw = config.get("attribute");
+        if (raw == null) raw = config.get("attributes");
+        List<StageAttribute> out = new ArrayList<>();
+        if (raw instanceof List<?> list) {
+            for (Object o : list) if (o instanceof Config c) { StageAttribute a = parseAttribute(c); if (a != null) out.add(a); }
+        } else if (raw instanceof Config single) {
+            StageAttribute a = parseAttribute(single);
+            if (a != null) out.add(a);
+        }
+        return out;
+    }
+
+    private static StageAttribute parseAttribute(Config c) {
+        String idStr = c.get("id");
+        if (idStr == null) idStr = c.get("attribute");
+        if (idStr == null) idStr = c.get("name");
+        if (idStr == null || idStr.trim().isEmpty()) return null;
+        ResourceLocation id = ResourceLocation.tryParse(idStr.trim());
+        if (id == null) { LOGGER.warn("[ProgressiveStages] Invalid [attribute] id '{}'", idStr); return null; }
+        double amount = readDouble(c, "amount", 0.0);
+        return new StageAttribute(id, StageAttribute.parseOperation(c.get("operation")), amount);
+    }
+
+    private static RevokeRule parseRevoke(Config config) {
+        Config sec = config.get("revoke");
+        if (sec == null) return RevokeRule.NONE;
+        boolean onDeath = readBool(sec, "on_death");
+        long xpBelow = -1L;
+        Object xb = sec.get("xp_below");
+        if (xb instanceof Number n) xpBelow = n.longValue();
+        boolean cascade = readBool(sec, "cascade");
+        return new RevokeRule(onDeath, xpBelow, cascade);
+    }
+
+    private static StageCost parseCost(Config config) {
+        Config sec = config.get("cost");
+        if (sec == null) return null; // not purchasable
+        int xpLevels = (int) readLong(sec, "xp_levels", 0L);
+        boolean bypass = readBool(sec, "bypass_requirements");
+        List<StageCost.ItemCost> items = new ArrayList<>();
+        for (String raw : stringList(sec, "items")) {
+            StageCost.ItemCost ic = parseItemCost(raw);
+            if (ic != null) items.add(ic);
+        }
+        return new StageCost(Math.max(0, xpLevels), items, bypass);
+    }
+
+    /** Parse {@code "minecraft:diamond:5"} (id + count) or {@code "minecraft:diamond"} (count 1). */
+    private static StageCost.ItemCost parseItemCost(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return null;
+        String s = raw.trim();
+        int count = 1;
+        int lastColon = s.lastIndexOf(':');
+        if (lastColon > 0 && lastColon < s.length() - 1) {
+            String tail = s.substring(lastColon + 1);
+            if (tail.chars().allMatch(Character::isDigit)) {
+                try { count = Math.max(1, Integer.parseInt(tail)); s = s.substring(0, lastColon); } catch (NumberFormatException ignored) {}
+            }
+        }
+        ResourceLocation id = ResourceLocation.tryParse(s);
+        return id == null ? null : new StageCost.ItemCost(id, count);
+    }
+
+    private static UnlockEffects parseUnlock(Config config) {
+        Config sec = config.get("unlock");
+        if (sec == null) return UnlockEffects.NONE;
+        return new UnlockEffects(
+            sec.getOrElse("toast", ""),
+            sec.getOrElse("title", ""),
+            sec.getOrElse("subtitle", ""),
+            sec.getOrElse("sound", ""),
+            sec.getOrElse("particle", ""),
+            readBool(sec, "progress_nudges"),
+            readBool(sec, "hud_bar"));
+    }
+
+    private static double readDouble(Config c, String key, double def) {
+        Object v = c.get(key);
+        if (v instanceof Number n) return n.doubleValue();
+        if (v instanceof String s) { try { return Double.parseDouble(s.trim()); } catch (NumberFormatException ignored) {} }
+        return def;
     }
 
     // -------------------- [[triggers]] (v2.3 per-stage auto-grant) --------------------

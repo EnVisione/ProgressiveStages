@@ -71,6 +71,8 @@ public class ServerEventHandler {
         // v2.3: per-stage [[triggers]] auto-grant engine (replaces the old global triggers.toml).
         // Registered once; its rule data is (re)built by StageFileLoader on load/reload.
         NeoForge.EVENT_BUS.register(StageTriggerEvaluator.class);
+        // v2.4: [revoke] rules + temporary-stage expiry (regression).
+        NeoForge.EVENT_BUS.register(StageRegressionHandler.class);
 
         // Initialize FTB Teams integration (soft dependency)
         // Uses reflection to avoid loading FTBTeamsIntegration class (which imports FTB Teams API)
