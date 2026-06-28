@@ -38,6 +38,10 @@ public class StageTreeScreen extends Screen {
 
     private int left, top, right, bottom, dividerX, contentTop;
     private int listScroll, detailScroll, listMax, detailMax, detailContentH;
+    // v2.4 purchase button rect (skill-tree mode)
+    private int buyX, buyY, buyW, buyH;
+    private boolean buyEnabled;
+    private StageId buyStage;
 
     private final List<Node> nodes = new ArrayList<>();
     private int selected = -1;
@@ -199,10 +203,12 @@ public class StageTreeScreen extends Screen {
         Node node = nodes.get(selected);
         StageId id = node.id();
         int x0 = dividerX + PAD, x1 = right - PAD;
-        int areaTop = contentTop, areaBottom = bottom - PAD;
-        int paneW = x1 - x0;
-
         ClientTriggerProgress.StageData data = ClientTriggerProgress.get(id);
+        // Reserve a strip at the bottom for the purchase button (skill-tree mode) so content never
+        // renders under it.
+        boolean showBuy = data.purchasable() && !node.owned();
+        int areaTop = contentTop, areaBottom = bottom - PAD - (showBuy ? 22 : 0);
+        int paneW = x1 - x0;
 
         g.enableScissor(dividerX + 1, areaTop, right, areaBottom);
         int dy = areaTop + PAD - detailScroll;
@@ -332,6 +338,23 @@ public class StageTreeScreen extends Screen {
             g.fill(right - 3, thumbY, right - 1, thumbY + thumbH, 0xFF777777);
         }
 
+        // Purchase button (fixed strip at the bottom of the detail pane; skill-tree mode)
+        buyEnabled = false;
+        buyStage = null;
+        if (showBuy) {
+            buyX = x0; buyY = bottom - PAD - 16; buyW = x1 - x0; buyH = 16;
+            buyStage = id;
+            boolean can = data.canPurchase();
+            buyEnabled = can;
+            boolean hover = can && mouseX >= buyX && mouseX <= buyX + buyW && mouseY >= buyY && mouseY <= buyY + buyH;
+            g.fill(buyX, buyY, buyX + buyW, buyY + buyH, can ? (hover ? 0xFF3E8C46 : 0xFF2E6B33) : 0xFF3A2A2A);
+            g.fill(buyX, buyY, buyX + buyW, buyY + 1, can ? 0xFF55E066 : 0xFF7A5A5A);
+            String label = (can ? "Unlock — " : "Need: ") + data.costSummary();
+            int tw = this.font.width(label);
+            g.drawString(this.font, label, buyX + Math.max(2, (buyW - tw) / 2), buyY + 4,
+                can ? 0xFFFFFFFF : 0xFFB0B0B0, false);
+        }
+
         // Item tooltip (outside scissor so it can overflow the pane)
         if (hoverStack != null) {
             g.renderTooltip(this.font, hoverStack, mouseX, mouseY);
@@ -358,6 +381,12 @@ public class StageTreeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // v2.4: purchase button
+        if (button == 0 && buyEnabled && buyStage != null
+                && mouseX >= buyX && mouseX <= buyX + buyW && mouseY >= buyY && mouseY <= buyY + buyH) {
+            ClientTriggerProgress.requestPurchase(buyStage);
+            return true;
+        }
         if (button == 0 && mouseX >= left && mouseX < dividerX && mouseY >= contentTop && mouseY < bottom) {
             int idx = (int) ((mouseY - (contentTop + PAD) + listScroll) / ROW_H);
             if (idx >= 0 && idx < nodes.size()) {

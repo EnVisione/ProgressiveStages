@@ -40,8 +40,9 @@ public final class ClientTriggerProgress {
         }
     }
 
-    public record StageData(List<Rule> rules, List<ResourceLocation> unlockSample, int unlockTotal) {
-        public static final StageData EMPTY = new StageData(List.of(), List.of(), 0);
+    public record StageData(List<Rule> rules, List<ResourceLocation> unlockSample, int unlockTotal,
+                            boolean purchasable, int costXp, String costSummary, boolean canPurchase) {
+        public static final StageData EMPTY = new StageData(List.of(), List.of(), 0, false, 0, "", false);
 
         public boolean hasTriggers() { return !rules.isEmpty(); }
 
@@ -77,8 +78,17 @@ public final class ClientTriggerProgress {
                 }
                 rules.add(new Rule(rl.mode(), rl.description(), rl.satisfied(), conds));
             }
-            DATA.put(id, new StageData(rules, List.copyOf(sp.unlockSample()), sp.unlockTotal()));
+            NetworkHandler.CostInfo cost = sp.cost();
+            DATA.put(id, new StageData(rules, List.copyOf(sp.unlockSample()), sp.unlockTotal(),
+                cost.purchasable(), cost.costXp(), cost.summary(), cost.canPurchase()));
         }
+    }
+
+    /** v2.4: ask the server to buy a purchasable stage. */
+    public static void requestPurchase(StageId stageId) {
+        if (Minecraft.getInstance().player == null) return;
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+            new NetworkHandler.RequestPurchasePayload(stageId.getResourceLocation()));
     }
 
     public static StageData get(StageId stageId) {

@@ -142,6 +142,14 @@ public final class StageTriggerEvaluator {
     public static Set<StageId> stagesWithTriggers() { return RULES.keySet(); }
     public static List<TriggerRule> rulesFor(StageId id) { return RULES.getOrDefault(id, List.of()); }
 
+    /** v2.4: true if the stage has no trigger rules, or at least one of its rules is satisfied. */
+    public static boolean triggersSatisfied(ServerPlayer player, StageId stageId) {
+        List<TriggerRule> rules = RULES.get(stageId);
+        if (rules == null || rules.isEmpty()) return true;
+        for (TriggerRule rule : rules) if (ruleSatisfied(player, stageId, rule)) return true;
+        return false;
+    }
+
     // ============================ events ============================
 
     @SubscribeEvent

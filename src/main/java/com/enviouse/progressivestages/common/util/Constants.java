@@ -31,6 +31,8 @@ public final class Constants {
     // v2.3: stage-tree GUI — C2S request for data + open, S2C data + open
     public static final ResourceLocation REQUEST_STAGE_GUI_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "request_stage_gui");
     public static final ResourceLocation STAGE_GUI_DATA_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "stage_gui_data");
+    // v2.4: skill-tree purchase request (C2S)
+    public static final ResourceLocation REQUEST_PURCHASE_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "request_purchase");
 
     // Stage file directory name (inside config folder)
     public static final String STAGE_FILES_DIRECTORY = "ProgressiveStages";

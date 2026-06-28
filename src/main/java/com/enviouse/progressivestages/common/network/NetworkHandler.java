@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.common.network;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
+import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.enviouse.progressivestages.client.ClientStageCache;
@@ -121,6 +122,13 @@ public class NetworkHandler {
             RequestStageGuiPayload.STREAM_CODEC,
             NetworkHandler::handleRequestStageGuiServer
         );
+
+        // v2.4: skill-tree purchase request (client -> server)
+        registrar.playToServer(
+            RequestPurchasePayload.TYPE,
+            RequestPurchasePayload.STREAM_CODEC,
+            NetworkHandler::handlePurchaseServer
+        );
     }
 
     /**
@@ -163,9 +171,94 @@ public class NetworkHandler {
                 stageId.getResourceLocation(),
                 ruleLines,
                 unlockSample.getOrDefault(stageId, List.of()),
-                unlockTotal.getOrDefault(stageId, 0)));
+                unlockTotal.getOrDefault(stageId, 0),
+                computeCostInfo(player, stageId)));
         }
         PacketDistributor.sendToPlayer(player, new StageGuiDataPayload(out));
+    }
+
+    // ============ v2.4 skill-tree purchase ============
+
+    private static CostInfo computeCostInfo(ServerPlayer player, StageId stageId) {
+        var defOpt = StageOrder.getInstance().getStageDefinition(stageId);
+        if (defOpt.isEmpty() || !defOpt.get().isPurchasable()) return CostInfo.NONE;
+        com.enviouse.progressivestages.common.config.StageCost cost = defOpt.get().getCost();
+        StringBuilder sb = new StringBuilder();
+        if (cost.xpLevels() > 0) sb.append(cost.xpLevels()).append(" lvl");
+        for (var ic : cost.items()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(ic.count()).append("x ").append(ic.item().getPath());
+        }
+        if (sb.length() == 0) sb.append("free");
+        return new CostInfo(true, cost.xpLevels(), sb.toString(), canPurchase(player, defOpt.get()));
+    }
+
+    /** Authoritative purchase check: purchasable, not owned, prereq stages met, triggers met (unless bypass), affordable. */
+    private static boolean canPurchase(ServerPlayer player, StageDefinition def) {
+        if (!def.isPurchasable()) return false;
+        StageManager sm = StageManager.getInstance();
+        if (sm.hasStage(player, def.getId())) return false;
+        if (!sm.getMissingDependencies(player, def.getId()).isEmpty()) return false;
+        com.enviouse.progressivestages.common.config.StageCost cost = def.getCost();
+        if (!cost.bypassRequirements()
+                && !com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.triggersSatisfied(player, def.getId())) {
+            return false;
+        }
+        if (player.experienceLevel < cost.xpLevels()) return false;
+        for (var ic : cost.items()) {
+            if (countItem(player, ic.item()) < ic.count()) return false;
+        }
+        return true;
+    }
+
+    private static int countItem(ServerPlayer player, ResourceLocation itemId) {
+        Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
+        if (item == null) return 0;
+        int n = 0;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            var s = inv.getItem(i);
+            if (!s.isEmpty() && s.is(item)) n += s.getCount();
+        }
+        return n;
+    }
+
+    private static void handlePurchaseServer(RequestPurchasePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer player)) return;
+            StageId stageId = StageId.fromResourceLocation(payload.stageId());
+            StageDefinition def = StageOrder.getInstance().getStageDefinition(stageId).orElse(null);
+            if (def == null || !canPurchase(player, def)) {
+                // Re-sync so the client reflects the true (unchanged) state.
+                sendStageGuiData(player);
+                return;
+            }
+            com.enviouse.progressivestages.common.config.StageCost cost = def.getCost();
+            // Consume cost.
+            if (cost.xpLevels() > 0) player.giveExperienceLevels(-cost.xpLevels());
+            for (var ic : cost.items()) consumeItem(player, ic.item(), ic.count());
+            // Grant (bypass dependency auto-grant since prereqs are already satisfied).
+            StageManager.getInstance().grantStageWithCause(player, stageId,
+                com.enviouse.progressivestages.common.api.StageCause.PURCHASE);
+            // Refresh the GUI snapshot.
+            sendStageGuiData(player);
+        });
+    }
+
+    private static void consumeItem(ServerPlayer player, ResourceLocation itemId, int count) {
+        Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(itemId).orElse(null);
+        if (item == null) return;
+        int remaining = count;
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize() && remaining > 0; i++) {
+            var s = inv.getItem(i);
+            if (!s.isEmpty() && s.is(item)) {
+                int take = Math.min(remaining, s.getCount());
+                s.shrink(take);
+                remaining -= take;
+            }
+        }
+        inv.setChanged();
     }
 
     private static String conditionLabel(com.enviouse.progressivestages.common.trigger.TriggerCondition c) {
@@ -668,17 +761,30 @@ public class NetworkHandler {
         );
     }
 
+    /** v2.4: a purchasable stage's cost summary + whether the player can buy it right now. */
+    public record CostInfo(boolean purchasable, int costXp, String summary, boolean canPurchase) {
+        public static final CostInfo NONE = new CostInfo(false, 0, "", false);
+        public static final StreamCodec<FriendlyByteBuf, CostInfo> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.BOOL, CostInfo::purchasable,
+            ByteBufCodecs.VAR_INT, CostInfo::costXp,
+            ByteBufCodecs.STRING_UTF8, CostInfo::summary,
+            ByteBufCodecs.BOOL, CostInfo::canPurchase,
+            CostInfo::new
+        );
+    }
+
     /**
-     * Per-stage GUI data: trigger-rule progress plus a preview of the items this stage unlocks
-     * (a capped sample for icon rendering + the true total count).
+     * Per-stage GUI data: trigger-rule progress, a preview of the items this stage unlocks
+     * (a capped sample for icon rendering + the true total count), and purchase info.
      */
     public record StageProgress(ResourceLocation stageId, List<RuleLine> rules,
-                                List<ResourceLocation> unlockSample, int unlockTotal) {
+                                List<ResourceLocation> unlockSample, int unlockTotal, CostInfo cost) {
         public static final StreamCodec<FriendlyByteBuf, StageProgress> STREAM_CODEC = StreamCodec.composite(
             ResourceLocation.STREAM_CODEC, StageProgress::stageId,
             RuleLine.STREAM_CODEC.apply(ByteBufCodecs.list()), StageProgress::rules,
             ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()), StageProgress::unlockSample,
             ByteBufCodecs.VAR_INT, StageProgress::unlockTotal,
+            CostInfo.STREAM_CODEC, StageProgress::cost,
             StageProgress::new
         );
     }
@@ -706,6 +812,21 @@ public class NetworkHandler {
 
         public static final StreamCodec<FriendlyByteBuf, RequestStageGuiPayload> STREAM_CODEC =
             StreamCodec.unit(INSTANCE);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    /** Client -> server: buy a purchasable stage from the GUI (v2.4 skill-tree mode). */
+    public record RequestPurchasePayload(ResourceLocation stageId) implements CustomPacketPayload {
+        public static final Type<RequestPurchasePayload> TYPE = new Type<>(Constants.REQUEST_PURCHASE_PACKET);
+
+        public static final StreamCodec<FriendlyByteBuf, RequestPurchasePayload> STREAM_CODEC = StreamCodec.composite(
+            ResourceLocation.STREAM_CODEC, RequestPurchasePayload::stageId,
+            RequestPurchasePayload::new
+        );
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
