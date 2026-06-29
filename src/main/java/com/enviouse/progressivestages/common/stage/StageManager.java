@@ -410,9 +410,13 @@ public class StageManager {
     private void sendUnlockMessages(UUID teamId, List<StageId> newlyGranted) {
         if (server == null) return;
 
+        // Server-scoped grants are stored under SERVER_TEAM — a sentinel no real player team matches —
+        // so they must reach every online player rather than only members of the (synthetic) team.
+        boolean serverScoped = SERVER_TEAM.equals(teamId);
+
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             UUID playerTeamId = TeamProvider.getInstance().getTeamId(player);
-            if (playerTeamId.equals(teamId)) {
+            if (serverScoped || playerTeamId.equals(teamId)) {
                 for (StageId stageId : newlyGranted) {
                     Optional<StageDefinition> defOpt = StageOrder.getInstance().getStageDefinition(stageId);
                     if (defOpt.isPresent()) {

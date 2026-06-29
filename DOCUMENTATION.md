@@ -1,6 +1,6 @@
-# ProgressiveStages 2.0 — Complete Documentation
+# ProgressiveStages 2.4 — Complete Documentation
 
-> ProgressiveStages **2.0** for NeoForge 1.21.1, Java 21.  
+> ProgressiveStages **2.4** for NeoForge 1.21.1, Java 21.  
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -38,6 +38,12 @@
    - [4.21 `[enforcement]` — per-stage exemptions + toggle overrides](#421-enforcement--per-stage-exemptions--toggle-overrides)
    - [4.22 `[display]` — per-stage tooltip + icon overrides](#422-display--per-stage-tooltip--icon-overrides)
    - [4.23 `[[triggers]]` — automatic stage grants](#423-triggers--automatic-stage-grants)
+   - [4.24 `[attribute]` — attribute modifiers while a stage is owned](#424-attribute--attribute-modifiers-while-a-stage-is-owned) — **New in 2.4**
+   - [4.25 `[revoke]` + temporary stages — regression](#425-revoke--temporary-stages--regression) — **New in 2.4**
+   - [4.26 `[cost]` — skill-tree purchasable stages](#426-cost--skill-tree-purchasable-stages) — **New in 2.4**
+   - [4.27 `[unlock]` — unlock "juice"](#427-unlock--unlock-juice) — **New in 2.4**
+   - [4.28 `[abilities]` — ability gating](#428-abilities--ability-gating) — **New in 2.4**
+   - [4.29 `[stage]` new metadata — hidden / color / category / scope](#429-stage-new-metadata--hidden--color--category--scope) — **New in 2.4**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -1224,6 +1230,202 @@ count = 10
 This single-condition shorthand grants the stage once the player has mined 10
 diamond ore.
 
+### 4.24 `[attribute]` — attribute modifiers while a stage is owned
+
+**New in 2.4.** A stage can grant **attribute modifiers** that apply for as long
+as the player's team **owns** the stage. Unlike the `locked` categories above —
+which take things *away* until a stage is earned — `[attribute]` is a *reward*:
+earning the stage buffs the player.
+
+`[attribute]` is an **array of tables** (`[[attribute]]`), one entry per
+modifier:
+
+```toml
+# +10 maximum health while this stage is owned
+[[attribute]]
+id        = "minecraft:generic.max_health"
+operation = "add"
+amount    = 10
+
+# +20% movement speed (multiplicative on the base value)
+[[attribute]]
+id        = "minecraft:generic.movement_speed"
+operation = "multiply_base"
+amount    = 0.2
+```
+
+| Field | Required? | Notes |
+|-------|-----------|-------|
+| `id` | Yes | Any **vanilla OR modded** attribute id — e.g. `minecraft:generic.max_health`, `minecraft:generic.scale`, `minecraft:generic.movement_speed`, `minecraft:generic.attack_damage`, or a modded attribute. |
+| `operation` | Optional | `add` (flat, default), `multiply_base` (× the base value), or `multiply_total` (× the running total after `add` + `multiply_base`). |
+| `amount` | Yes | The modifier value (number). For `add`, a flat amount; for the multiply operations, a fraction (e.g. `0.2` = +20%). |
+
+**How it's applied.** Modifiers are added when the stage is granted (or on login
+for stages already owned) and removed when the stage is revoked. They are
+implemented as **transient** modifiers (not persisted on the entity), and the
+mod **reconciles** the full set against the player's owned stages on each
+grant / revoke / login so the live attributes always match the owned-stage set.
+
+**Max-health caveat.** If a modifier that raised a player's max health is removed
+(stage revoked) and the player's current health now exceeds the new maximum,
+current health is **clamped down** to the new max. Raising max health does not
+auto-heal; it just lifts the ceiling.
+
+### 4.25 `[revoke]` + temporary stages — regression
+
+**New in 2.4.** Stages can be **lost** as well as gained. Two independent
+mechanisms produce a **regression** (a revoke reported as
+`StageCause.REGRESSION` — see §15.3): the `[revoke]` table and a stage
+`duration`.
+
+#### `[revoke]` — conditional loss
+
+```toml
+[revoke]
+on_death  = true     # lose this stage when the player dies
+xp_below  = 5000     # XP-MAINTAINED: hold the stage only while total XP ≥ 5000
+cascade   = true     # when revoked, also revoke stages that depend on this one
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `on_death` | bool | When **true**, the stage is revoked the moment the player dies. |
+| `xp_below` | int | **XP-maintained stage.** The player keeps the stage only while their **total experience ≥ this number**. Spend XP (enchanting, anvils) and drop below the threshold, and the stage is **revoked until re-earned**. A live, ongoing check — not a one-time gate. |
+| `cascade` | bool | When **true**, revoking this stage also revokes every stage that **depends on** it (recursively). When **false** (default), the revoke is **isolated** — dependents keep their stages even though a prerequisite was lost. This is a per-stage choice between *isolated* and *cascading* regression. |
+
+#### `[stage].duration` — temporary stages
+
+```toml
+[stage]
+id       = "berserker_rush"
+duration = "30m"     # this stage auto-expires 30 real-minutes after it is granted
+```
+
+Setting `duration` makes a **temporary** stage that **auto-expires** after that
+much **real time**. The countdown is wall-clock and **keeps running while the
+player is OFFLINE** — log out with 5 minutes left and the stage is gone when you
+return an hour later.
+
+**Duration units:** `s` (seconds), `m` (minutes), `h` (hours), `d` (days) —
+e.g. `90s`, `30m`, `2h`, `1d`. A **bare number** is interpreted as **minutes**
+(`duration = 30` ≡ `"30m"`).
+
+Expiry is a regression like any other: it reports `StageCause.REGRESSION`, and
+if the stage's `[revoke].cascade = true`, expiring it also cascades to
+dependents.
+
+### 4.26 `[cost]` — skill-tree purchasable stages
+
+**New in 2.4.** A `[cost]` table turns a stage into a **purchasable node** that
+players can **buy** directly from the in-game Stage Tree GUI (the skill tree —
+open it with `/stage gui` or the "Open Progression Tree" keybind, see §5.6).
+
+```toml
+[cost]
+xp_levels           = 10                                  # experience LEVELS consumed
+items               = ["minecraft:diamond:5", "minecraft:emerald:3"]
+bypass_requirements = false
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `xp_levels` | int | Experience **levels** consumed on purchase. |
+| `items` | list | `"item:count"` strings (e.g. `"minecraft:diamond:5"`). The listed items are consumed from the player's inventory on purchase. |
+| `bypass_requirements` | bool | See below. Default `false`. |
+
+**`bypass_requirements`:**
+
+- `false` (default) — the GUI's **Unlock** button only appears once the stage's
+  prerequisites **and** its `[[triggers]]` are all met. Paying the cost is the
+  **final confirmation** of an already-earned stage.
+- `true` — paying the cost unlocks the stage **immediately even if the
+  `[[triggers]]` aren't met**. Prerequisite **stages** (`[stage].dependency`)
+  are **still required** — `bypass_requirements` only bypasses the triggers, not
+  the dependency graph.
+
+**Validation.** The purchase flow is **fully server-validated**: the server
+re-checks dependencies, requirements, and that the player actually has the XP /
+items before consuming anything. A tampered or desynced client **cannot**
+double-spend or bypass the gate. The GUI shows an **Unlock** button; clicking it
+runs the validated purchase and, on success, grants the stage with
+`StageCause.PURCHASE` (see §15.3).
+
+### 4.27 `[unlock]` — unlock "juice"
+
+**New in 2.4.** The `[unlock]` table adds **presentation polish** ("juice") that
+fires when the stage is unlocked. **Every field is optional**, and an absent /
+empty / `false` field simply does nothing.
+
+```toml
+[unlock]
+toast          = "Diamond Age reached!"          # advancement-style toast
+title          = "&bDiamond Age"                  # on-screen title
+subtitle       = "You have ascended"              # on-screen subtitle
+sound          = "minecraft:ui.toast.challenge_complete"
+particle       = "minecraft:totem_of_undying"
+progress_nudges = true                            # chat hints at 50% / 75% / 90%
+hud_bar        = true                             # blue progress bar above the XP bar
+```
+
+| Field | Type | Effect on unlock |
+|-------|------|------------------|
+| `toast` | string | Shows an **advancement-style toast** with this text. |
+| `title` | string | On-screen **title** text (supports `&`-codes). |
+| `subtitle` | string | On-screen **subtitle** text (pairs with `title`). |
+| `sound` | string | Plays this **sound id** at the moment of unlock. |
+| `particle` | string | Sprays this **particle id** on unlock. |
+| `progress_nudges` | bool | When `true`, sends **one-time chat hints** at **50% / 75% / 90%** of the stage's trigger progress, nudging the player toward the unlock. |
+| `hud_bar` | bool | When `true` **and** this stage is the player's current goal, shows a custom **BLUE "progress to next stage" bar** rendered **above the vanilla XP bar**. |
+
+> Do **not** confuse `[unlock]` (singular — unlock juice, 2.4) with `[unlocks]`
+> (plural — per-stage gating carve-outs, §4.20). They are different tables.
+
+### 4.28 `[abilities]` — ability gating
+
+**New in 2.4.** `[abilities]` gates **player movement / action abilities** behind
+owning a stage.
+
+```toml
+[abilities]
+locked = ["elytra"]    # no elytra gliding until this stage is owned
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `locked` | list | Ability identifiers blocked until the player owns the stage. |
+
+Currently the meaningful entry is **`elytra`**: while the gating stage is
+missing, elytra **gliding** is blocked — the player is **dropped out of flight
+each tick** if they try to glide.
+
+> **Guidance.** Most other movement / stat abilities are better expressed through
+> `[attribute]` (§4.24 — e.g. movement speed, step height, jump strength via the
+> relevant attributes) or through KubeJS (§11). `[abilities]` is for the handful
+> of toggle-style abilities — like elytra flight — that aren't attributes.
+
+### 4.29 `[stage]` new metadata — hidden / color / category / scope
+
+**New in 2.4.** The `[stage]` table (§4.2) gained several optional metadata keys,
+mostly for the Stage Tree GUI and for server-wide stages:
+
+```toml
+[stage]
+id       = "secret_ending"
+hidden   = true            # hide this stage from the GUI tree
+color    = "#55FF55"       # GUI tint (hex) or an &-code
+category = "Endgame"       # group label in the GUI
+scope    = "server"        # SERVER-WIDE stage (default "team")
+duration = "2h"            # temporary stage (see §4.25)
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `hidden` | bool | When `true`, the stage is **hidden from the Stage Tree GUI**. It still functions (locks, triggers, grants) — it's just not drawn in the tree. |
+| `color` | string | A GUI **tint** for the stage node — a hex string (`"#55FF55"`) or an `&`-color code. |
+| `category` | string | A **group label** used to bucket stages in the GUI. |
+| `scope` | string | `"team"` (default) or `"server"`. A **`"server"`-scoped stage is SERVER-WIDE**: the **first team** to satisfy it unlocks it for the **whole server** (everyone, including future joiners). Use for global milestones ("someone has beaten the dragon → the End gate opens for all"). |
+| `duration` | string | Temporary-stage lifetime — see §4.25. |
+
 ---
 
 ## 5. Triggers — The Per-Stage `[[triggers]]` System
@@ -1322,6 +1524,39 @@ omitted).
 | `advancement` | `advancement` = `<id>` | Advancement earned | persisted (vanilla) |
 | `dimension` | `dimension` = `<id>` | Dimension entered at least once | one-shot |
 | `biome` | `biome` = `<id\|tag>` | Biome visited at least once | one-shot |
+| `effect` | `effect` = `<id>` | **New in 2.4.** Currently has a status effect (e.g. `effect = "minecraft:strength"`) | state |
+| `breed` | `entity` = `<id\|tag>` | **New in 2.4.** Animals bred | yes |
+| `day_count` | `count` = `<N>` | **New in 2.4.** Reached world day N | state |
+| `weather` | `weather` = `"rain"\|"thunder"\|"clear"` | **New in 2.4.** Experienced this weather (persisted one-shot) | one-shot |
+| `enter_structure` | `structure` = `<id>` | **New in 2.4.** Entered this structure at least once (persisted one-shot) | one-shot |
+| `tame` | `entity` = `<id\|tag>` (optional) | **New in 2.4.** Animals tamed | yes (mod counter) |
+| `kill_with` | `entity` = `<id>`, `with`/`item` = `<id>` | **New in 2.4.** Killed `entity` while holding `with` | yes (mod counter) |
+
+**New in 2.4 condition details:**
+
+- **`effect`** — a **live state** check: satisfied while the player *currently
+  has* the named status effect, e.g. `effect = "minecraft:strength"`. Like
+  `level` / `xp` it can flip back to unsatisfied when the effect wears off, until
+  the whole rule fires.
+- **`breed`** — counts animals **bred**. Subject `entity` accepts `id`/tag form;
+  `count` defaults to 1.
+- **`day_count`** — satisfied once the world day number reaches `count = N`.
+- **`weather`** — a persisted one-shot: once the player has **experienced** the
+  named weather (`"rain"`, `"thunder"`, or `"clear"`) it stays satisfied.
+- **`enter_structure`** — a persisted one-shot: satisfied once the player has
+  entered the named structure (`structure = "minecraft:village_plains"`, etc.).
+- **`tame`** — counts animals **tamed**. Optional `entity` narrows it to a
+  specific type / tag; omit it to count any tame.
+- **`kill_with`** — counts kills of `entity` performed **while holding** the
+  `with` item (alias `item`). Example: `entity = "minecraft:ender_dragon"`,
+  `with = "minecraft:diamond_sword"`, `count = 1`.
+
+> **Counter source note.** `tame` and `kill_with` use **mod-tracked counters**
+> (the mod increments them itself), so unlike the §5.3 retroactive types they
+> are **not** derived from vanilla statistics and only count events that happen
+> after the trigger exists. `breed` and the other counters read live state /
+> vanilla stats as noted above; `effect` / `day_count` are live state and
+> `weather` / `enter_structure` are persisted one-shots.
 
 **`distance` movement kinds:** `walk`, `sprint`, `crouch`, `swim`, `fall`,
 `climb`, `fly`, `walk_under_water`, `walk_on_water`, `minecart`, `boat`, `pig`,
@@ -1510,6 +1745,16 @@ Selecting a stage in the left pane fills the right pane with its detail.
   breakdown** (current vs. required for each rule/condition); and
 - an **icon-grid preview of the items this stage UNLOCKS**, with a **total
   count**.
+
+**Skill-tree Unlock button — New in 2.4.** When a stage declares a `[cost]`
+table (§4.26), its detail pane shows an **Unlock** button: the GUI doubles as a
+**skill tree** where players *buy* stages. The button appears according to the
+stage's `[cost].bypass_requirements` setting, and clicking it runs a
+**server-validated purchase** (consuming the `xp_levels` / `items`) that grants
+the stage with `StageCause.PURCHASE`. The viewer is otherwise read-only; the
+Unlock button is the **only** way it mutates stages, and only for `[cost]`
+stages. There is **no new command** for purchasing — it happens inside
+`/stage gui`.
 
 Implementation pointers:
 
@@ -1881,27 +2126,50 @@ Teams installation just degrades to solo mode without a class-loading error.
 
 ## 11. KubeJS Integration
 
-When KubeJS is installed, ProgressiveStages stages are first-class KubeJS
-stages — KubeJS scripts can read, add, and remove them via the normal
-`player.stages` API.
+When KubeJS is installed, ProgressiveStages stages are **first-class KubeJS
+stages**. KubeJS scripts read, add, and remove them through the **normal
+`player.stages` API** — no PS-specific bindings to learn:
 
 ```javascript
 // server_scripts/stages.js
 PlayerEvents.loggedIn(event => {
-    if (event.player.stages.has("diamond_age")) {
-        event.player.tell("Welcome back, Diamond-bearer.")
+    if (event.player.stages.has("iron_age")) {
+        event.player.tell("Welcome back, Iron-bearer.")
     }
 })
 
+// Add / remove a PS stage from a script (e.g. as a quest/event reward)
+PlayerEvents.tick(event => {
+    let player = event.player
+    player.stages.add("diamond_age")      // grants the PS stage
+    player.stages.remove("stone_age")     // revokes the PS stage
+})
+```
+
+PS stages also fire KubeJS's **standard stage events** on every grant / revoke,
+so you can react to them with the usual `PlayerEvents.stageAdded` /
+`PlayerEvents.stageRemoved`:
+
+```javascript
 PlayerEvents.stageAdded("diamond_age", event => {
     event.player.tell("You earned the diamond stage!")
     event.player.give("minecraft:diamond_pickaxe")
 })
+
+PlayerEvents.stageRemoved("diamond_age", event => {
+    event.player.tell("The diamond stage slipped away…")
+})
 ```
 
-The compat bridge fires KubeJS's standard `STAGE_ADDED` / `STAGE_REMOVED`
-events on every grant/revoke. Implementation:
+The compat bridge fires KubeJS's `STAGE_ADDED` / `STAGE_REMOVED` events on every
+grant/revoke. Implementation:
 [`KubeJSStagesCompat`](src/main/java/com/enviouse/progressivestages/compat/kubejs/KubeJSStagesCompat.java).
+
+**Java event bus, too.** Independent of KubeJS, every grant/revoke also fires the
+Java [`StageChangeEvent`](src/main/java/com/enviouse/progressivestages/common/api/StageChangeEvent.java)
+on the NeoForge event bus, carrying a `StageCause` (`COMMAND`, `TRIGGER`,
+`PURCHASE`, `REGRESSION`, …) so other mods can react with full provenance — see
+§15.4.
 
 A common pattern: use KubeJS to define a recipe with a unique recipe ID, then
 gate that recipe ID in a stage's `[recipes].locked_ids` list — gives KubeJS
@@ -2028,12 +2296,17 @@ methods:
 The enum tracks the source of a stage change for events and logging:
 
 `COMMAND`, **`TRIGGER`** (the per-stage `[[triggers]]` system — 2.1),
-`ADVANCEMENT`, `ITEM_PICKUP`, `INVENTORY_CHECK`, `QUEST_REWARD`,
-`DIMENSION_ENTRY`, `BOSS_KILL`, `MULTI_TRIGGER` (legacy), `TEAM_SYNC`, `FTB`,
-`AUTO`, `STARTING_STAGE`, `API`, `UNKNOWN`.
+**`PURCHASE`** (skill-tree `[cost]` buy — 2.4), **`REGRESSION`** (a `[revoke]`
+or temporary-stage `duration` loss — 2.4), `ADVANCEMENT`, `ITEM_PICKUP`,
+`INVENTORY_CHECK`, `QUEST_REWARD`, `DIMENSION_ENTRY`, `BOSS_KILL`,
+`MULTI_TRIGGER` (legacy), `TEAM_SYNC`, `FTB`, `AUTO`, `STARTING_STAGE`, `API`,
+`UNKNOWN`.
 
 (The legacy `*_TRIGGER`/`*_ENTRY` causes are retained for binary compatibility;
-all 2.1 auto-grants from `[[triggers]]` report `StageCause.TRIGGER`.)
+all 2.1 auto-grants from `[[triggers]]` report `StageCause.TRIGGER`. **New in
+2.4:** purchases via the skill-tree `[cost]` GUI report `StageCause.PURCHASE`,
+and every revoke from `[revoke]` / temporary-stage expiry reports
+`StageCause.REGRESSION`.)
 
 ### 15.4 Events
 

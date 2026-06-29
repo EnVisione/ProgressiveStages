@@ -260,7 +260,13 @@ public final class StageTriggerEvaluator {
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            lastPoll.remove(player.getUUID());
+            UUID uuid = player.getUUID();
+            lastPoll.remove(uuid);
+            // Clear per-player HUD/nudge tracking so a fresh push happens on relog (and we don't leak
+            // map entries for players who never come back).
+            lastGoalSent.remove(uuid);
+            String prefix = uuid + "|";
+            sentNudges.keySet().removeIf(k -> k.startsWith(prefix));
         }
     }
 

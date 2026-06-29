@@ -40,10 +40,14 @@ public final class StageRegressionHandler {
         StageDefinition def = StageOrder.getInstance().getStageDefinition(event.getStageId()).orElse(null);
         if (def == null) return;
         StageRegressionData data = StageRegressionData.get(player.server);
+        // Server-scoped stages live under SERVER_TEAM, so their grant time must be keyed there too —
+        // otherwise each team that sees the stage (via the SERVER_TEAM union) would record its own
+        // clock and the stage would expire at a different wall-clock time per team.
+        UUID key = def.isServerScope() ? StageManager.SERVER_TEAM : event.getTeamId();
         if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.GRANTED) {
-            if (def.isTemporary()) data.markGranted(event.getTeamId(), event.getStageId(), System.currentTimeMillis());
+            if (def.isTemporary()) data.markGranted(key, event.getStageId(), System.currentTimeMillis());
         } else if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.REVOKED) {
-            data.clear(event.getTeamId(), event.getStageId());
+            data.clear(key, event.getStageId());
         }
     }
 
@@ -95,12 +99,14 @@ public final class StageRegressionHandler {
             StageDefinition def = StageOrder.getInstance().getStageDefinition(id).orElse(null);
             if (def == null) continue;
 
-            // Temporary stage expiry (real wall-clock, runs while offline).
+            // Temporary stage expiry (real wall-clock, runs while offline). Server-scoped stages
+            // are keyed under SERVER_TEAM so every team shares one synchronized expiry clock.
             if (def.isTemporary()) {
-                long grantTime = data.getGrantTime(teamId, id);
+                UUID grantKey = def.isServerScope() ? StageManager.SERVER_TEAM : teamId;
+                long grantTime = data.getGrantTime(grantKey, id);
                 if (grantTime <= 0) {
                     // No record (e.g. granted before this feature, or by command) — start the clock now.
-                    data.markGranted(teamId, id, now);
+                    data.markGranted(grantKey, id, now);
                 } else if (now - grantTime >= def.getDurationMillis()) {
                     StageManager.getInstance().revokeStageWithCause(player, id, StageCause.REGRESSION);
                     continue;

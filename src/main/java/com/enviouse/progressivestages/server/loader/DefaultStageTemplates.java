@@ -167,7 +167,8 @@ public final class DefaultStageTemplates {
             #  22.  [enforcement]        — per-stage exemptions to global enforcement
             #  23.  [[triggers]]         — AUTO-GRANT this stage when conditions are met (NEW v2.3)
             #  24.  [display]            — per-stage tooltip / unknown-item rendering (NEW v2.3)
-            #  25.  TROUBLESHOOTING      — "why isn't my lock working?"
+            #  25.  v2.4 ADDITIONS       — [attribute]/[revoke]/[cost]/[unlock]/[abilities]/scope/duration
+            #  26.  TROUBLESHOOTING      — "why isn't my lock working?"
             # ============================================================================
 
 
@@ -1150,7 +1151,67 @@ public final class DefaultStageTemplates {
 
 
             # ============================================================================
-            # 25. TROUBLESHOOTING — "WHY ISN'T MY LOCK WORKING?"
+            # 25. v2.4 ADDITIONS — attributes, regression, skill-tree, juice, abilities
+            # ============================================================================
+            # All of the sections below are OPTIONAL. Examples are commented out.
+            #
+            # --- [stage] extra keys (put these inside the [stage] table above) ----------
+            #   hidden   = true            # hide this stage from the /stage gui tree
+            #   color    = "#55FF55"       # GUI tint (hex or &-code)
+            #   category = "Combat"        # group label in the GUI
+            #   scope    = "server"        # SERVER-WIDE: first team to satisfy unlocks it for everyone
+            #   duration = "30m"           # TEMPORARY: auto-expires 30 real minutes after grant
+            #                              # (runs while offline; units s/m/h/d, bare number = minutes)
+            #
+            # --- [[attribute]] — modify player attributes while this stage is owned ------
+            # Any vanilla or modded attribute id; operation = add | multiply_base | multiply_total.
+            # [[attribute]]
+            # id = "minecraft:generic.max_health"
+            # operation = "add"
+            # amount = 10.0
+            # [[attribute]]
+            # id = "minecraft:generic.movement_speed"
+            # operation = "multiply_total"
+            # amount = 0.2
+            #
+            # --- [revoke] — take the stage back away (regression) -----------------------
+            # [revoke]
+            # on_death = true        # lose the stage when you die
+            # xp_below = 600         # keep it only while total XP >= 600 (spend below -> revoked)
+            # cascade  = true        # also revoke stages that depend on this one
+            #
+            # --- [cost] — make this stage PURCHASABLE from the /stage gui (skill tree) ---
+            # [cost]
+            # xp_levels = 30
+            # items = ["minecraft:diamond:5", "minecraft:emerald:3"]
+            # bypass_requirements = false   # true = pay to skip the [[triggers]] grind
+            #
+            # --- [unlock] — optional unlock "juice" (any empty field = off) -------------
+            # [unlock]
+            # toast    = "You reached the Diamond Age!"
+            # title    = "&b&lDiamond Age"
+            # subtitle = "&7A new era begins"
+            # sound    = "minecraft:ui.toast.challenge_complete"
+            # particle = "minecraft:totem_of_undying"
+            # progress_nudges = true   # one-time 50/75/90% chat hints
+            # hud_bar = true           # blue progress bar above the XP bar while this is your next goal
+            #
+            # --- [abilities] — gate abilities until this stage is owned ------------------
+            # [abilities]
+            # locked = ["elytra"]      # can't glide until you have this stage
+            #
+            # --- NEW [[triggers]] condition types (see section 23 for the full schema) ---
+            #   effect           effect="minecraft:strength"          (currently has the effect)
+            #   breed            count=10                              (animals bred)
+            #   day_count        count=7                               (reached world day 7)
+            #   weather          weather="thunder"                    (rain/thunder/clear; experienced)
+            #   enter_structure  structure="minecraft:village_plains" (entered the structure)
+            #   tame             count=5  [entity="minecraft:wolf"]    (animals tamed)
+            #   kill_with        entity="minecraft:ender_dragon" with="minecraft:diamond_sword" count=1
+
+
+            # ============================================================================
+            # 26. TROUBLESHOOTING — "WHY ISN'T MY LOCK WORKING?"
             # ============================================================================
             #
             # "Items in my locked list aren't locked."

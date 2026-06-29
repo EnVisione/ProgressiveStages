@@ -10,6 +10,19 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ---
 
+## What's new in 2.4
+
+- **`[attribute]` stage buffs** — a stage can grant attribute modifiers (`[[attribute]]` with `id` / `operation` / `amount`) that apply while the team **owns** the stage. Any vanilla or modded attribute (`minecraft:generic.max_health`, `generic.scale`, `generic.movement_speed`, …), `add` / `multiply_base` / `multiply_total` operations. Applied on grant/login, removed on revoke (transient, reconciled); current health clamps down if max health drops.
+- **`[revoke]` + temporary stages (regression)** — stages can now be *lost*. `[revoke]` supports `on_death = true`, `xp_below = N` (XP-maintained — hold the stage only while total XP ≥ N), and `cascade = true` (also revoke dependents). `[stage].duration = "30m"` makes a temporary stage that auto-expires after that much **real** time (counting down even while offline; units `s`/`m`/`h`/`d`, bare number = minutes). Both report `StageCause.REGRESSION`.
+- **`[cost]` skill-tree stages** — a `[cost]` table (`xp_levels`, `items = ["minecraft:diamond:5", …]`, `bypass_requirements`) makes a stage **purchasable** from an Unlock button in the in-game tree GUI (`/stage gui`). Purchases are fully server-validated (no double-spend / bypass) and report `StageCause.PURCHASE`. `bypass_requirements = true` skips the `[[triggers]]` (but never the prerequisite stages).
+- **New `[[triggers]]` condition types** — `effect` (currently has a status effect), `breed`, `day_count` (reached world day N), `weather` (`rain`/`thunder`/`clear`, one-shot), `enter_structure` (one-shot), `tame`, and `kill_with` (kill `entity` while holding `with`). `tame` / `kill_with` use mod-tracked counters; the rest read vanilla stats or live state.
+- **`[unlock]` unlock juice** — optional `toast`, `title` + `subtitle`, `sound`, `particle`, `progress_nudges` (chat hints at 50/75/90%), and `hud_bar` (a blue "progress to next stage" bar above the XP bar). Every field is optional; absent = off. (Note: singular `[unlock]` ≠ plural `[unlocks]` carve-outs.)
+- **`[abilities]` gating** — `[abilities].locked = ["elytra"]` blocks elytra gliding until the stage is owned (dropped out of flight each tick). Other movement abilities are better done via `[attribute]` or KubeJS.
+- **New `[stage]` metadata** — `hidden = true` (hide from the GUI tree), `color = "#55FF55"` (GUI tint / `&`-code), `category = "…"` (group label), and `scope = "server"` (a **server-wide** stage — the first team to satisfy it unlocks it for everyone; default `"team"`).
+- **First-class KubeJS stages** — PS stages work through the normal `player.stages.has(...)` / `.add(...)` / `.remove(...)` API and fire `PlayerEvents.stageAdded` / `stageRemoved`. The Java `StageChangeEvent` (NeoForge bus) now carries `PURCHASE` / `REGRESSION` causes alongside `COMMAND` / `TRIGGER` / etc.
+
+---
+
 ## What's new in 2.3
 
 - **Per-stage `[[triggers]]`** — auto-grant triggers now live inside each stage's TOML (the global `triggers.toml` is gone). Each `[[triggers]]` block is one OR-ed rule of `all_of` / `any_of` conditions over kills, mining, crafting, pickups, item use/drop/breaking, distance travelled, raw statistics, play time, level/XP, inventory holdings, advancements, dimensions, and biomes. Counter conditions read vanilla statistics, so they're retroactive and need no extra save files.
@@ -113,6 +126,12 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[structures]` | `locked_entry` + `[structures.rules]` (`prevent_block_break`, `prevent_block_place`, `prevent_explosions`, `disable_mob_spawning`) | Block entry into specific generated structures |
 | `[enforcement]` | `allowed_use`, `allowed_pickup`, `allowed_hotbar`, `allowed_mouse_pickup`, `allowed_inventory` | Per-stage exception lists for in-inventory enforcement |
 | `[enforcement]` (overrides) | `block_item_use`, `block_item_pickup`, `block_item_inventory`, `block_block_placement`, `block_block_interaction`, `block_dimension_travel`, `block_entity_attack`, `block_screen_open`, `block_crop_growth`, `block_pet_interact` | **New in 2.3.** Per-stage override of the same-named global enforcement toggle, applied only to this stage's gated resources (omit = inherit global). Most-restrictive-wins across multi-stage gates. |
+| `[abilities]` | `locked` | **New in 2.4.** Block movement/action abilities (e.g. `["elytra"]` — no gliding) until the stage is owned |
+| `[[attribute]]` | `id`, `operation`, `amount` | **New in 2.4.** *Reward* — grant attribute modifiers (any vanilla/modded attribute; `add`/`multiply_base`/`multiply_total`) while the team **owns** the stage |
+| `[revoke]` | `on_death`, `xp_below`, `cascade` | **New in 2.4.** Regression — lose the stage on death, while total XP < N, and optionally cascade the revoke to dependents |
+| `[cost]` | `xp_levels`, `items`, `bypass_requirements` | **New in 2.4.** Make the stage **purchasable** from the in-game tree GUI (Unlock button); server-validated |
+| `[unlock]` | `toast`, `title`/`subtitle`, `sound`, `particle`, `progress_nudges`, `hud_bar` | **New in 2.4.** Unlock "juice" — toast/title/sound/particle on unlock, progress hints, and a blue progress bar above the XP bar (all optional) |
+| `[stage]` metadata | `hidden`, `color`, `category`, `scope`, `duration` | **New in 2.4.** Hide from GUI tree, GUI tint, group label, `scope = "server"` (server-wide stage), temporary `duration` (auto-expires after real time) |
 | (root) | `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
 
 Two whitelist mechanisms exist:
@@ -218,7 +237,7 @@ mode = "all_of"
   entity = "minecraft:ender_dragon"
 ```
 
-Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance` (blocks travelled, by movement kind or `all`), `stat` (any vanilla custom statistic), `play_time` (minutes), `level`, `xp`, `has_item`, `advancement`, `dimension`, `biome`. Subjects accept `#tag`/`tag:` form; `count` defaults to 1. The counter types read vanilla statistics, so they're **retroactive** and survive restarts with no extra save files; `dimension`/`biome` "visited" one-shots are persisted per player (reset with `/progressivestages trigger reset <player> <stage>`). Progress is per-player and the first team member to satisfy a rule unlocks the stage for the whole team. Poll cadence is `enforcement.trigger_poll_interval` ticks (relevant events also force an immediate re-check).
+Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance` (blocks travelled, by movement kind or `all`), `stat` (any vanilla custom statistic), `play_time` (minutes), `level`, `xp`, `has_item`, `advancement`, `dimension`, `biome`, and **new in 2.4** `effect` (currently has a status effect), `breed`, `day_count` (reached world day N), `weather` (`rain`/`thunder`/`clear`, one-shot), `enter_structure` (one-shot), `tame`, `kill_with` (kill an entity while holding a given item). Subjects accept `#tag`/`tag:` form; `count` defaults to 1. (`tame`/`kill_with` use mod-tracked counters rather than vanilla stats.) The counter types read vanilla statistics, so they're **retroactive** and survive restarts with no extra save files; `dimension`/`biome` "visited" one-shots are persisted per player (reset with `/progressivestages trigger reset <player> <stage>`). Progress is per-player and the first team member to satisfy a rule unlocks the stage for the whole team. Poll cadence is `enforcement.trigger_poll_interval` ticks (relevant events also force an immediate re-check).
 
 **Triggers respect dependencies:** a stage is not auto-granted by its triggers until every `[stage].dependency` prerequisite is owned. Counters keep accruing while a prerequisite is missing, so the next poll after the last prerequisite is granted completes the unlock. Omit a stage's `dependency` to let its triggers fire freely, regardless of progression.
 
@@ -252,7 +271,7 @@ show_description_on_tooltip = true    # append [stage].description to the toolti
 | **Curios** | `CurioCanEquipEvent` gate; per-slot stage locks via `[curios].locked_slots` |
 | **Lootr** | `ILootrFilterProvider` filters stage-locked loot from per-player chest snapshots |
 | **Mekanism** | Entity-join + block-break hooks honor stage gates; gases/pigments hidden in EMI via class-module detection |
-| **KubeJS** | `hasStage` / `requireStage` / `grantStage` script bindings |
+| **KubeJS** | First-class stages — `player.stages.has/add/remove(...)` plus `PlayerEvents.stageAdded` / `stageRemoved`; Java `StageChangeEvent` (NeoForge bus) carries the `StageCause` |
 | **NaturesCompass** | Filters dimension/structure search results so locked dimensions don't appear |
 | **Visual Workbench** | Reflective shim — locks targeting `minecraft:crafting_table` apply through VW-replaced workbenches |
 
@@ -362,6 +381,16 @@ compat/
 ---
 
 ## Changelog
+
+### v2.4
+- **`[attribute]` stage buffs** — `[[attribute]]` entries (`id` / `operation` / `amount`) grant attribute modifiers while the team owns the stage; any vanilla or modded attribute, `add` / `multiply_base` / `multiply_total`. Applied on grant/login, removed on revoke (transient + reconciled); current health clamps down if max health drops.
+- **`[revoke]` + temporary stages (regression)** — `[revoke]` with `on_death`, `xp_below = N` (XP-maintained), `cascade` (revoke dependents). `[stage].duration = "30m"` makes a temporary stage that auto-expires after that much real time, counting down while offline (units `s`/`m`/`h`/`d`; bare number = minutes). Both report `StageCause.REGRESSION`.
+- **`[cost]` skill-tree purchases** — `[cost]` (`xp_levels`, `items`, `bypass_requirements`) makes a stage purchasable from an Unlock button in `/stage gui`; fully server-validated; reports `StageCause.PURCHASE`.
+- **New `[[triggers]]` condition types** — `effect`, `breed`, `day_count`, `weather` (one-shot), `enter_structure` (one-shot), `tame`, `kill_with`. `tame` / `kill_with` use mod-tracked counters.
+- **`[unlock]` unlock juice** — optional `toast`, `title`/`subtitle`, `sound`, `particle`, `progress_nudges` (50/75/90% chat hints), `hud_bar` (blue progress bar above the XP bar).
+- **`[abilities]` gating** — `[abilities].locked = ["elytra"]` blocks elytra gliding until the stage is owned.
+- **New `[stage]` metadata** — `hidden`, `color`, `category`, and `scope = "server"` (server-wide stage; first team to satisfy unlocks it for everyone).
+- **First-class KubeJS stages** — `player.stages.has/add/remove(...)` + `PlayerEvents.stageAdded` / `stageRemoved`; Java `StageChangeEvent` causes extended with `PURCHASE` / `REGRESSION`.
 
 ### v2.3
 - **Per-stage `[[triggers]]`** — auto-grant triggers moved into each stage's TOML; global `triggers.toml` removed. OR-ed rules of `all_of` / `any_of` conditions over kills, mining, crafting, pickups, use/drop/break, distance, raw stats, play time, level/XP, inventory, advancements, dimensions, and biomes. Counter conditions are retroactive (read vanilla statistics).
