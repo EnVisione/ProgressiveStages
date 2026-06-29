@@ -1,5 +1,6 @@
 package com.enviouse.progressivestages.client.gui;
 
+import com.enviouse.progressivestages.client.ClientLockCache;
 import com.enviouse.progressivestages.client.ClientStageCache;
 import com.enviouse.progressivestages.client.ClientTriggerProgress;
 import com.enviouse.progressivestages.common.api.StageId;
@@ -46,6 +47,16 @@ public class StageTreeScreen extends Screen {
     private final List<Node> nodes = new ArrayList<>();
     private int selected = -1;
 
+    // v3.0: search + filtering
+    private net.minecraft.client.gui.components.EditBox searchBox;
+    private String filter = "";
+    private final Set<StageId> filterItemMatches = new HashSet<>();
+    private boolean hideOwned = false;
+    private int hideX, hideY, hideW, hideH;
+    // v3.0: cached "gates which mods" breakdown for the selected stage
+    private StageId modBreakdownFor;
+    private List<String> modBreakdown = List.of();
+
     private record Node(StageId id, int depth, boolean owned, boolean available) {}
 
     public StageTreeScreen() {
@@ -65,15 +76,52 @@ public class StageTreeScreen extends Screen {
         this.top = (this.height - h) / 2;
         this.right = left + w;
         this.bottom = top + h;
-        this.contentTop = top + 18;
+        this.contentTop = top + 34; // leave a row for the search box
         this.dividerX = left + Math.max(150, (int) (w * 0.40));
 
+        // v3.0: search box (filters the stage list by name OR by a locked item id) + hide-owned toggle.
+        this.hideW = 52; this.hideH = 14; this.hideY = top + 18;
+        this.hideX = dividerX - PAD - hideW;
+        int sbW = Math.max(40, hideX - (left + PAD) - 4);
+        this.searchBox = new net.minecraft.client.gui.components.EditBox(
+            this.font, left + PAD, top + 18, sbW, 14, Component.literal("search"));
+        this.searchBox.setHint(Component.literal("Search stages / items…"));
+        this.searchBox.setMaxLength(64);
+        this.searchBox.setValue(filter);
+        this.searchBox.setResponder(s -> {
+            filter = s == null ? "" : s.trim().toLowerCase(java.util.Locale.ROOT);
+            recomputeFilter();
+            rebuildNodes();
+            clampListScroll();
+        });
+        addRenderableWidget(this.searchBox);
+
+        recomputeFilter();
         rebuildNodes();
         if (selected < 0 || selected >= nodes.size()) selected = defaultSelection();
+        clampListScroll();
+    }
 
+    private void clampListScroll() {
         int contentH = nodes.size() * ROW_H;
         this.listMax = Math.max(0, contentH - (bottom - PAD - (contentTop + PAD)));
-        this.listScroll = Math.min(listScroll, listMax);
+        this.listScroll = Math.max(0, Math.min(listScroll, listMax));
+    }
+
+    /** Build the set of stages that lock an item whose id contains the current search term. */
+    private void recomputeFilter() {
+        filterItemMatches.clear();
+        if (filter.isEmpty()) return;
+        for (var e : ClientLockCache.getAllItemLocks().entrySet()) {
+            if (e.getKey().toString().contains(filter)) filterItemMatches.add(e.getValue());
+        }
+    }
+
+    private boolean stageMatchesFilter(StageId id) {
+        if (filter.isEmpty()) return true;
+        return ClientStageCache.getDisplayName(id).toLowerCase(java.util.Locale.ROOT).contains(filter)
+            || id.toString().toLowerCase(java.util.Locale.ROOT).contains(filter)
+            || filterItemMatches.contains(id);
     }
 
     private void rebuildNodes() {
@@ -83,6 +131,23 @@ public class StageTreeScreen extends Screen {
         Set<StageId> all = new HashSet<>();
         for (StageId id : ClientStageCache.getAllStageDefinitionIds()) {
             if (!ClientStageCache.isHidden(id)) all.add(id);
+        }
+
+        // v3.0: when searching or hiding owned, show a FLAT filtered list (the tree shape only makes
+        // sense for the full set). Owned stages are dropped when hideOwned is on.
+        if (!filter.isEmpty() || hideOwned) {
+            List<StageId> matched = new ArrayList<>();
+            for (StageId id : all) {
+                if (hideOwned && ClientStageCache.hasStage(id)) continue;
+                if (!stageMatchesFilter(id)) continue;
+                matched.add(id);
+            }
+            matched.sort(Comparator.comparing(ClientStageCache::getDisplayName, String.CASE_INSENSITIVE_ORDER));
+            for (StageId id : matched) {
+                boolean owned = ClientStageCache.hasStage(id);
+                nodes.add(new Node(id, 0, owned, !owned && depsSatisfied(id)));
+            }
+            return;
         }
 
         // Build the DAG as parent → children (a stage's children are the stages that list it as a
@@ -133,6 +198,22 @@ public class StageTreeScreen extends Screen {
         return true;
     }
 
+    /** v3.0: cache which mods the selected stage gates (by namespace), from the synced item-lock map. */
+    private void ensureModBreakdown(StageId id) {
+        if (id.equals(modBreakdownFor)) return;
+        modBreakdownFor = id;
+        java.util.Map<String, Integer> byMod = new java.util.HashMap<>();
+        for (var e : ClientLockCache.getAllItemLocks().entrySet()) {
+            if (e.getValue().equals(id)) byMod.merge(e.getKey().getNamespace(), 1, Integer::sum);
+        }
+        List<String> out = new ArrayList<>();
+        byMod.entrySet().stream()
+            .sorted((a, b) -> b.getValue() - a.getValue())
+            .limit(6)
+            .forEach(en -> out.add(en.getKey() + " ×" + en.getValue()));
+        modBreakdown = out;
+    }
+
     /** Stages that declare {@code id} as a (direct) dependency — the forward branches from this stage. */
     private List<StageId> dependentsOf(StageId id) {
         List<StageId> out = new ArrayList<>();
@@ -153,11 +234,26 @@ public class StageTreeScreen extends Screen {
         g.fill(left, contentTop - 1, right, contentTop, 0xFF2A2A30);
         g.fill(dividerX, contentTop, dividerX + 1, bottom, 0xFF2A2A30);
 
-        int owned = (int) nodes.stream().filter(Node::owned).count();
+        // True totals (not the filtered node count) for the header.
+        int totalOwned = 0, totalStages = 0;
+        for (StageId id : ClientStageCache.getAllStageDefinitionIds()) {
+            if (ClientStageCache.isHidden(id)) continue;
+            totalStages++;
+            if (ClientStageCache.hasStage(id)) totalOwned++;
+        }
         g.drawString(this.font, Component.translatable("gui.progressivestages.tree.title")
             .copy().withStyle(ChatFormatting.WHITE), left + PAD, top + 5, 0xFFFFFFFF);
-        Component count = Component.literal(owned + " / " + nodes.size() + " unlocked").withStyle(ChatFormatting.GRAY);
+        Component count = Component.literal(totalOwned + " / " + totalStages + " unlocked").withStyle(ChatFormatting.GRAY);
         g.drawString(this.font, count, right - PAD - this.font.width(count), top + 5, 0xFFFFFFFF);
+
+        // v3.0: search box + hide-owned toggle.
+        this.searchBox.render(g, mouseX, mouseY, partialTick);
+        boolean hHover = mouseX >= hideX && mouseX < hideX + hideW && mouseY >= hideY && mouseY < hideY + hideH;
+        g.fill(hideX, hideY, hideX + hideW, hideY + hideH, hideOwned ? 0xFF2E6B33 : (hHover ? 0xFF3A3A42 : 0xFF26262C));
+        g.fill(hideX, hideY, hideX + hideW, hideY + 1, hideOwned ? 0xFF55E066 : 0xFF44444A);
+        String hLabel = (hideOwned ? "☐" : "☑") + " owned";
+        g.drawString(this.font, hLabel, hideX + Math.max(2, (hideW - this.font.width(hLabel)) / 2), hideY + 3,
+            hideOwned ? 0xFF9AE6A6 : 0xFFB8B8C0, false);
 
         if (nodes.isEmpty()) {
             g.drawCenteredString(this.font, Component.translatable("gui.progressivestages.tree.empty"),
@@ -246,6 +342,19 @@ public class StageTreeScreen extends Screen {
         if (desc != null && !desc.isEmpty()) {
             for (FormattedCharSequence line : this.font.split(TextUtil.parseColorCodes("&7" + desc), paneW)) {
                 g.drawString(this.font, line, x0, dy, 0xFFFFFFFF);
+                dy += 10;
+            }
+            dy += 3;
+        }
+
+        // v3.0: which mods this stage gates (derived from the synced item-lock map, grouped by namespace).
+        ensureModBreakdown(id);
+        if (!modBreakdown.isEmpty()) {
+            g.drawString(this.font, Component.literal("Gates mods:").withStyle(ChatFormatting.GRAY), x0, dy, 0xFFFFFFFF);
+            dy += 11;
+            for (FormattedCharSequence line : this.font.split(
+                    TextUtil.parseColorCodes("&8" + String.join("  &7•&8 ", modBreakdown)), paneW)) {
+                g.drawString(this.font, line, x0 + 4, dy, 0xFFFFFFFF);
                 dy += 10;
             }
             dy += 3;
@@ -408,6 +517,14 @@ public class StageTreeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // v3.0: hide-owned toggle
+        if (button == 0 && mouseX >= hideX && mouseX < hideX + hideW && mouseY >= hideY && mouseY < hideY + hideH) {
+            hideOwned = !hideOwned;
+            rebuildNodes();
+            if (selected >= nodes.size()) selected = nodes.isEmpty() ? -1 : 0;
+            clampListScroll();
+            return true;
+        }
         // v2.4: purchase button
         if (button == 0 && buyEnabled && buyStage != null
                 && mouseX >= buyX && mouseX <= buyX + buyW && mouseY >= buyY && mouseY <= buyY + buyH) {
