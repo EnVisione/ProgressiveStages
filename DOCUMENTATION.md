@@ -1,6 +1,6 @@
-# ProgressiveStages 2.5 — Complete Documentation
+# ProgressiveStages 3.0 — Complete Documentation
 
-> ProgressiveStages **2.5** for NeoForge 1.21.1, Java 21.  
+> ProgressiveStages **3.0** for NeoForge 1.21.1, Java 21.  
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -43,11 +43,13 @@
    - [4.23 `[[triggers]]` — automatic stage grants](#423-triggers--automatic-stage-grants)
    - [4.24 `[attribute]` — attribute modifiers while a stage is owned](#424-attribute--attribute-modifiers-while-a-stage-is-owned) — **New in 2.4**
    - [4.25 `[revoke]` + temporary stages — regression](#425-revoke--temporary-stages--regression) — **New in 2.4**
-   - [4.26 `[cost]` — skill-tree purchasable stages](#426-cost--skill-tree-purchasable-stages) — **New in 2.4**
+   - [4.26 `[cost]` — skill-tree purchasable stages](#426-cost--skill-tree-purchasable-stages) — **New in 2.4** *(cooldown / refund **New in 3.0**)*
    - [4.27 `[unlock]` — unlock "juice"](#427-unlock--unlock-juice) — **New in 2.4**
-   - [4.28 `[abilities]` — ability gating](#428-abilities--ability-gating) — **New in 2.4**
-   - [4.29 `[stage]` new metadata — hidden / color / category / scope](#429-stage-new-metadata--hidden--color--category--scope) — **New in 2.4** *(hidden / color / category now live in the GUI — see 2.5 note)*
+   - [4.28 `[abilities]` — ability gating](#428-abilities--ability-gating) — **New in 2.4** *(sprint / swim / crawl / climb **New in 3.0**)*
+   - [4.29 `[stage]` new metadata — hidden / color / category / scope / tags](#429-stage-new-metadata--hidden--color--category--scope--tags) — **New in 2.4** *(hidden / color / category live in the GUI in 2.5; `tags` **New in 3.0**)*
    - [4.30 Datapack-loaded stages](#430-datapack-loaded-stages) — **New in 2.5**
+   - [4.31 `[rewards]` — items / effects / commands / teleport / xp on grant](#431-rewards--items--effects--commands--teleport--xp-on-grant) — **New in 3.0**
+   - [4.32 `[display].encrypt_blocks` — encrypted-block visual](#432-displayencrypt_blocks--encrypted-block-visual) — **New in 3.0**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -1289,6 +1291,7 @@ items present to a player who hasn't unlocked the stage.
 | `obscure_icon` | bool | `enforcement.obscure_locked_item_icons` (default `false`) | **New in 2.3.** Also replace the item ICON with a `?` placeholder in the player's inventory — the item becomes fully unidentifiable, not just its name. |
 | `show_tooltip` | bool | `emi.show_tooltip` | Whether to show the lock / required-stage tooltip lines for this stage's items. |
 | `show_description_on_tooltip` | bool | `emi.show_stage_description_on_tooltip` (default `false`) | **New in 2.3.** Append this stage's `[stage].description` to a locked item's tooltip, rendered through the `messages.tooltip_stage_description` template. |
+| `encrypt_blocks` / `encrypt_as` | bool / string | *(no global; per-stage)* | **New in 3.0.** Masquerade this stage's exact-id locked **blocks** in the world as a placeholder block until owned — see §4.32. |
 
 **Worked example.** "Make endgame items completely mysterious until unlocked,
 and tease the stage's description in the tooltip":
@@ -1418,6 +1421,8 @@ open it with `/stage gui` or the "Open Progression Tree" keybind, see §5.6).
 xp_levels           = 10                                  # experience LEVELS consumed
 items               = ["minecraft:diamond:5", "minecraft:emerald:3"]
 bypass_requirements = false
+cooldown            = "5m"                                # New in 3.0 — min time between purchases
+refund_percent      = 50                                  # New in 3.0 — % of cost returned on revoke
 ```
 
 | Field | Type | Meaning |
@@ -1425,6 +1430,21 @@ bypass_requirements = false
 | `xp_levels` | int | Experience **levels** consumed on purchase. |
 | `items` | list | `"item:count"` strings (e.g. `"minecraft:diamond:5"`). The listed items are consumed from the player's inventory on purchase. |
 | `bypass_requirements` | bool | See below. Default `false`. |
+| `cooldown` / `cooldown_seconds` | string / int | **New in 3.0.** Per-player **rate limit** between skill-tree purchases. Use either `cooldown_seconds = 300` or a friendly `cooldown = "5m"` (units `s`/`m`/`h`/`d`, bare number = minutes). `0` (default) = no cooldown. |
+| `refund_percent` | int | **New in 3.0.** Percentage (`0`–`100`) of this purchased stage's **item / XP cost** returned to the player when the stage is later **revoked**. `0` (default) = no refund. |
+
+**`cooldown` (New in 3.0).** A **per-player** minimum interval between
+skill-tree purchases, enforced **server-side**. While the cooldown is active the
+purchase is rejected and the player is told how many seconds remain. Set it as
+`cooldown_seconds = <int>` or with a friendly `cooldown = "5m"` (the string form
+wins when both are present). The cooldown timer is **in-memory / transient** (it
+resets on server restart) and is shared across all purchasable stages for that
+player.
+
+**`refund_percent` (New in 3.0).** When a stage that was **purchased** via its
+`[cost]` is later **revoked** (by command, regression, cascade, etc.), this
+percentage of its `items` + `xp_levels` cost is **returned** to the player. Only
+applies to stages whose `[cost]` set a non-zero `refund_percent`.
 
 **`bypass_requirements`:**
 
@@ -1480,27 +1500,40 @@ owning a stage.
 
 ```toml
 [abilities]
-locked = ["elytra"]    # no elytra gliding until this stage is owned
+locked = ["elytra", "sprint", "swim", "climb"]   # all blocked until this stage is owned
 ```
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `locked` | list | Ability identifiers blocked until the player owns the stage. |
 
-Currently the meaningful entry is **`elytra`**: while the gating stage is
-missing, elytra **gliding** is blocked — the player is **dropped out of flight
-each tick** if they try to glide.
+Each tick, a player who is **missing at least one stage that gates an ability**
+is dropped out of that action. The recognised entries are:
+
+| Ability | Effect while the gating stage is missing |
+|---------|------------------------------------------|
+| `elytra` | Elytra **gliding** is blocked — the player is dropped out of flight each tick. |
+| `sprint` | **New in 3.0.** Sprinting is **cancelled** each tick. |
+| `swim` | **New in 3.0.** The **swimming** pose is cancelled. |
+| `crawl` | **New in 3.0.** The crawl/swim pose is cancelled (same mechanism as `swim`). |
+| `climb` | **New in 3.0.** **Climbing up** ladders/vines is blocked — any upward velocity on a climbable is clamped to ≤ 0 (the player can still hold position / descend). |
+
+> Creative-mode players bypass ability gating when `allow_creative_bypass` is on
+> (the same global toggle that exempts other locks). Unknown ability names simply
+> do nothing.
 
 > **Guidance.** Most other movement / stat abilities are better expressed through
 > `[attribute]` (§4.24 — e.g. movement speed, step height, jump strength via the
 > relevant attributes) or through KubeJS (§11). `[abilities]` is for the handful
-> of toggle-style abilities — like elytra flight — that aren't attributes.
+> of toggle-style abilities — like elytra flight, sprinting, swimming, and
+> climbing — that aren't attributes.
 
-### 4.29 `[stage]` new metadata — hidden / color / category / scope
+### 4.29 `[stage]` new metadata — hidden / color / category / scope / tags
 
 **New in 2.4** (with the GUI behaviour of `hidden` / `color` / `category` fully
-**activated in 2.5**). The `[stage]` table (§4.2) gained several optional metadata
-keys, mostly for the Stage Tree GUI and for server-wide stages:
+**activated in 2.5**; **`tags` New in 3.0**). The `[stage]` table (§4.2) gained
+several optional metadata keys, mostly for the Stage Tree GUI, for server-wide
+stages, and (3.0) for **bulk tag operations**:
 
 ```toml
 [stage]
@@ -1510,6 +1543,7 @@ color    = "#55FF55"       # GUI tint (hex) or an &-code
 category = "Endgame"       # group label in the GUI
 scope    = "server"        # SERVER-WIDE stage (default "team")
 duration = "2h"            # temporary stage (see §4.25)
+tags     = ["combat", "tier2"]   # New in 3.0 — labels for /stage tag ... (§7.1)
 ```
 
 | Field | Type | Meaning |
@@ -1519,6 +1553,7 @@ duration = "2h"            # temporary stage (see §4.25)
 | `category` | string | A **group label**, shown as a `[category]` tag in the detail-pane header. |
 | `scope` | string | `"team"` (default) or `"server"`. A **`"server"`-scoped stage is SERVER-WIDE**: the **first team** to satisfy it unlocks it for the **whole server** (everyone, including future joiners). Use for global milestones ("someone has beaten the dragon → the End gate opens for all"). |
 | `duration` | string | Temporary-stage lifetime — see §4.25. |
+| `tags` | list | **New in 3.0.** Free-form **labels** for this stage (lower-cased on load). They group stages for the bulk `/stage tag grant\|revoke\|list <tag>` commands (§7.1) — e.g. tag every combat-tier stage `"combat"` and grant them all at once. Tags have **no** gating effect on their own; they're purely an authoring/admin convenience. |
 
 > **Activated in 2.5.** Prior to 2.5, `hidden` / `color` / `category` were
 > **parsed but inert**. As of 2.5 they take effect in the Stage Tree GUI exactly
@@ -1557,6 +1592,97 @@ The implementation is
 [`DatapackStageLoader`](src/main/java/com/enviouse/progressivestages/server/loader/DatapackStageLoader.java)
 (a `SimplePreparableReloadListener`), which hands its parsed map to
 `StageFileLoader.setDatapackStages(...)` for the config-wins merge.
+
+### 4.31 `[rewards]` — items / effects / commands / teleport / xp on grant
+
+> **New in 3.0.**
+
+`[rewards]` is the natural companion to `[cost]` (§4.26): where `[cost]` is what
+a stage **takes** to unlock, `[rewards]` is what the stage **hands out the moment
+it is granted**. It fires **once per actual grant** (from the same grant path as
+the `[unlock]` juice), so it does **not** re-fire on every login or sync. Every
+field is optional — an empty / absent `[rewards]` does nothing.
+
+```toml
+[rewards]
+items     = ["minecraft:diamond:5", "minecraft:netherite_scrap"]
+effects   = ["minecraft:strength:60:1"]            # id : seconds : amplifier
+commands  = ["give {player} minecraft:cake 1", "say {player} ascended!"]
+teleport  = "minecraft:the_nether 0 70 0"          # "[dim] x y z" — dim optional
+xp_levels = 5
+xp_points = 100
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `items` | list | `"item:count"` strings (same syntax as `[cost].items`). Each item stack is **added to the player's inventory**; anything that doesn't fit is **dropped** at their feet. |
+| `effects` | list | Status effects to apply, each as `"<effect_id>:<seconds>:<amplifier>"`. `amplifier` is 0-based (`0` = level I, `1` = level II). The seconds and amplifier are optional trailing numbers — `"minecraft:strength"` → 30 s, level I; `"minecraft:strength:60"` → 60 s, level I; `"minecraft:strength:60:1"` → 60 s, level II. |
+| `commands` | list | Server commands run **as the player** at **permission level 2** with output suppressed. `{player}` is substituted with the player's name. A command that fails is logged and skipped (the rest still run). |
+| `command` | string | Singular convenience alias — a single command added to the `commands` list. |
+| `teleport` | string | `"[dimension] x y z"` — teleports the player. The dimension id is **optional**: with four whitespace-separated tokens the first is the target dimension; with three tokens the player stays in their current dimension. Malformed coordinates are ignored (no teleport). |
+| `xp_levels` | int | Experience **levels** granted. |
+| `xp_points` | int | Experience **points** granted. |
+
+> **Cause.** Rewards fire on **every** real grant regardless of cause —
+> command, trigger, purchase, quest reward, etc. — but **only once** per grant
+> (a revoke-then-regrant fires them again). Implementation:
+> [`StageRewards`](src/main/java/com/enviouse/progressivestages/common/config/StageRewards.java)
+> +
+> [`StageRewardApplier`](src/main/java/com/enviouse/progressivestages/server/enforcement/StageRewardApplier.java).
+
+### 4.32 `[display].encrypt_blocks` — encrypted-block visual
+
+> **New in 3.0.**
+
+The `[display]` table (§4.22) gained a per-stage **encrypted-block** toggle. When
+`encrypt_blocks = true`, this stage's **exact-id locked blocks** (the `id:` entries
+under `[blocks].locked`) are **masqueraded** in the world as a placeholder block —
+`encrypt_as` (default `minecraft:stone`) — until the player owns the stage. It's
+the "you can't even tell what's there" treatment for spoiler-sensitive blocks.
+
+```toml
+[display]
+encrypt_blocks = true               # mask this stage's locked blocks until owned
+encrypt_as     = "minecraft:stone"  # placeholder block (default minecraft:stone)
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `encrypt_blocks` | bool | When `true`, this stage's **exact-id** locked blocks render as `encrypt_as` (and break/drop like it) until the player owns the stage. Default `false`. Per-stage on/off. |
+| `encrypt_as` | string | The placeholder block id to masquerade as. Default `minecraft:stone`. |
+
+**How it works.** Encryption **reuses the entire ore-spoof pipeline**: for each
+exact-id (`id:`) entry in `[blocks].locked`, the mod synthesises an
+`[[ores.overrides]]`-style entry mapping `target → encrypt_as` (for both the
+displayed block **and** its drop) scoped to this stage. That means the same chunk
+rewrite, break-speed sync, and drop replacement that powers ore spoofing applies
+here — the masked block looks, mines, and drops as the placeholder until the gate
+opens. The spoof radius follows `[enforcement].ore_spoof_radius` (default 8 when
+unset). Only **exact-id** block locks are encrypted — `mod:` / `tag:` / `name:`
+block entries are not synthesised into overrides.
+
+> Implementation: [`LockRegistry`](src/main/java/com/enviouse/progressivestages/common/lock/LockRegistry.java)
+> (encrypt → ore-override synthesis) + the existing ore-spoof enforcers.
+
+### 4.33 Planned (not yet implemented in 3.0)
+
+The following finer-grained gates are a **planned follow-up** and are **not**
+available yet:
+
+- **Beacon-effect gating** — gating individual beacon effects (separate from the
+  beacon block / item itself).
+- **Brewing-potion gating** — gating the **brewing** of a specific potion.
+- **Enchant LEVEL-CAP gating** — capping an enchantment at a maximum level per
+  stage (rather than locking the whole enchant).
+
+**Today's equivalents.** Until those land:
+
+- **Whole-enchant gating** is done with `[enchants]` (§4.9) — a locked enchant is
+  hidden in the table, refused at the anvil, and stripped from inventory; there is
+  no per-level cap.
+- **Potions as ITEMS** are gated with `[items]` (§4.3) — lock the potion item id
+  (e.g. a specific `minecraft:potion` with NBT, or the broad potion items) rather
+  than the brewing step.
 
 ---
 
@@ -1665,6 +1791,12 @@ omitted).
 | `tame` | `entity` = `<id\|tag>` (optional) | **New in 2.4.** Animals tamed | yes (mod counter) |
 | `kill_with` | `entity` = `<id\|#tag>`, `with`/`item` = `<id>` | **New in 2.4** (`#tag` victim **New in 2.5**). Killed `entity` while holding `with` | yes (mod counter) |
 | `script` | `id` = `<conditionId>` | **New in 2.5.** Custom condition evaluated by a KubeJS-registered predicate (§11) | state |
+| `reach_y` | *(none)* — `count` = `<Y>` | **New in 3.0.** Satisfied while the player's current block-Y is **≥ `count`** (aliases `altitude`, `y_level`, `height`) | state |
+| `fish` | *(none)* | **New in 3.0.** Fish caught (`Stats.FISH_CAUGHT`) — retroactive (aliases `fishing`, `fish_caught`) | yes |
+| `sleep` | *(none)* | **New in 3.0.** Times slept in a bed (`Stats.SLEEP_IN_BED`) — retroactive (aliases `slept`, `sleep_in_bed`) | yes |
+| `ride` | *(none)* | **New in 3.0.** Blocks ridden on **any** vehicle (minecart/boat/pig/horse/strider distance stats, summed) — retroactive (aliases `riding`, `ride_distance`) | yes |
+| `biome_time` | `biome` = `<id\|#tag>` | **New in 3.0.** **Seconds** spent in the target biome / tag. `count` = seconds, or a friendly `duration = "5m"` | yes (mod counter, event-polled) |
+| `stage_held_for` | `stage` = `<stageId>` | **New in 3.0.** Held another stage for **≥ `count` seconds** (`count` = seconds, or `duration = "3d"`) | state (time since grant) |
 
 **New in 2.4 condition details:**
 
@@ -1706,11 +1838,47 @@ omitted).
   predicate — and the rest of the rule — is satisfied). If no script registered
   that id, it evaluates to `false`. Aliases: `js`, `kubejs`, `custom`.
 
-> **Counter source note.** `tame` and `kill_with` use **mod-tracked counters**
-> (the mod increments them itself), so unlike the §5.3 retroactive types they
-> are **not** derived from vanilla statistics and only count events that happen
-> after the trigger exists. `breed` and the other counters read live state /
-> vanilla stats as noted above; `effect` / `day_count` are live state and
+**New in 3.0 condition details:**
+
+- **`reach_y`** — a **live state** check on **altitude**: satisfied while the
+  player's current block-Y position is **≥ `count`**. It takes **no target**; set
+  the height with `count`. Example: `type = "reach_y", count = 200` fires while
+  the player is at or above Y 200. Like the other state checks it can flip back
+  to unsatisfied (descend below the threshold) until the whole rule fires.
+  Aliases: `altitude`, `y_level`, `height`.
+- **`fish`** — counts **fish caught**, read from the vanilla `FISH_CAUGHT`
+  statistic, so it is **retroactive** and restart-proof (no target). Aliases:
+  `fishing`, `fish_caught`.
+- **`sleep`** — counts **nights slept in a bed**, read from the vanilla
+  `SLEEP_IN_BED` statistic — **retroactive**, no target. Aliases: `slept`,
+  `sleep_in_bed`.
+- **`ride`** — counts **blocks ridden on any vehicle**: the sum of the vanilla
+  minecart / boat / pig / horse / strider distance statistics (converted from cm
+  to blocks). **Retroactive**, no target. Aliases: `riding`, `ride_distance`.
+- **`biome_time`** — accrues **seconds spent inside** the target `biome`
+  (`biome = "minecraft:desert"` or a `#tag` like `biome = "#minecraft:is_jungle"`).
+  Set the threshold either as raw seconds (`count = 300`) **or** with a friendly
+  `duration = "5m"` (the duration wins when present; units `s`/`m`/`h`/`d`, bare
+  number = minutes). Time is **event-polled** — accrued at the trigger poll
+  cadence while the player is in the biome (so it only counts from when the
+  trigger loads, like the other mod-tracked counters), and persisted by the mod.
+  Aliases: `time_in_biome`, `biome_seconds`.
+- **`stage_held_for`** — satisfied once the player's team has **owned the target
+  stage** (`stage = "iron_age"`) for **at least `count` seconds**. Set the
+  threshold as raw seconds (`count = 86400`) **or** with a friendly
+  `duration = "3d"`. This reads the **grant timestamp** the mod now records for
+  **every** stage (in `StageRegressionData`), measuring real elapsed time since
+  the grant; if the player's team doesn't own the target stage (or there is no
+  recorded grant time) it reports `0`. A natural way to chain "you've lived with
+  X for a while → unlock Y". Aliases: `held_stage`, `stage_age`, `owned_for`.
+
+> **Counter source note.** `tame`, `kill_with`, and (new in 3.0) `biome_time` use
+> **mod-tracked counters** (the mod increments them itself), so unlike the §5.3
+> retroactive types they are **not** derived from vanilla statistics and only count
+> events that happen after the trigger exists. `breed` and the other counters read
+> live state / vanilla stats as noted above; the new-in-3.0 `fish` / `sleep` /
+> `ride` counters **are** vanilla-stat-backed and therefore **retroactive**;
+> `reach_y` / `stage_held_for` (and `effect` / `day_count`) are live state and
 > `weather` / `enter_structure` are persisted one-shots.
 
 **`distance` movement kinds:** `walk`, `sprint`, `crouch`, `swim`, `fall`,
@@ -1726,10 +1894,13 @@ condition type covers what you want to count.
 
 **State vs. one-shot:**
 
-- `level` / `xp` / `has_item` are **momentary state** checks — they read the
-  player's *current* level, total XP, or inventory at poll time. A condition
-  that was satisfied can become unsatisfied again (e.g. the player spends a
-  level) right up until the whole rule fires and the stage is granted.
+- `level` / `xp` / `has_item` — and the new-in-3.0 `reach_y` (altitude) and
+  `stage_held_for` (seconds since the target stage was granted) — are
+  **momentary state** checks: they read the player's *current* level, total XP,
+  inventory, altitude, or stage-age at poll time. A condition that was satisfied
+  can become unsatisfied again (e.g. the player spends a level, or descends below
+  the `reach_y` threshold) right up until the whole rule fires and the stage is
+  granted.
 - `advancement` reads vanilla advancement progress (persisted by vanilla).
 - `dimension` / `biome` are **visited** one-shots — once visited, they stay
   satisfied. Their "visited" flag is persisted by the mod per player (see §5.5).
@@ -1743,7 +1914,8 @@ condition type covers what you want to count.
   `block = "tag:c:ores"` counts mining any ore.
 - **Retroactive counters.** The counter condition types
   (`kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance`,
-  `stat`, `play_time`) read Minecraft's vanilla **statistics**. That means:
+  `stat`, `play_time`, and the new-in-3.0 `fish` / `sleep` / `ride`) read
+  Minecraft's vanilla **statistics**. That means:
   - They are **retroactive** — add a trigger to a server with existing players
     and anyone already past the threshold is credited the instant the trigger
     loads.
@@ -2070,6 +2242,12 @@ unless otherwise noted.
 | `/stage progress next [player]` | Lists every stage the player can currently unlock (deps met, not yet granted) with the full `[[triggers]]` rule/condition breakdown for each one. Player defaults to the caller. |
 | `/stage progress all [player]` | Lists **every** stage the player doesn't yet have — including those still locked behind unmet dependencies — in registration order. Useful for pack-author audits and "show me the whole roadmap" queries. |
 | `/stage progress <stage> [player]` | `[[triggers]]` rule/condition breakdown for one specific stage. Player defaults to the caller. |
+| `/stage tag grant <players> <tag>` | **New in 3.0.** Grant **every stage tagged `<tag>`** to each selected player. **Bypasses dependencies** and **skips stages already owned** (only un-owned tagged stages are granted). Reports the change count across stages × players. |
+| `/stage tag revoke <players> <tag>` | **New in 3.0.** Revoke every stage tagged `<tag>` from each player (skips stages they don't have). |
+| `/stage tag list <tag>` | **New in 3.0.** List every stage that declares `<tag>` in its `[stage].tags`. Tab-completes from all declared tags. |
+| `/stage simulate [player]` | **New in 3.0.** **Dry-run** of what the player can unlock next: lists their **reachable-next** stages (deps met, not yet owned) sorted by completion %, and for each shows exactly which `[[triggers]]` conditions are still **short** (`current/threshold`, "need N more"). Then lists **dependency-blocked** stages with the prerequisites they're still missing. Player defaults to the caller. Read-only. |
+| `/stage new <id>` | **New in 3.0.** **Scaffold** a new stage TOML at `config/ProgressiveStages/<id>.toml` (a commented template with `[stage]`, `[items]`, a sample `[[triggers]]`, and pointers to the optional sections). Refuses to overwrite an existing file; run `/stage reload` after editing. |
+| `/stage export` | **New in 3.0.** Write a **markdown progression guide** (`progressivestages_guide.md` in the config folder) built from the stage graph — for each stage: description, **Requires** (deps), **Leads to** (dependents), **Unlock by** (`[[triggers]]` conditions), and whether it's purchasable. |
 
 > **Using `/stage progress`.** Three views, one rendering:
 >
@@ -2494,6 +2672,30 @@ Implementation: [`CuriosCompat`](src/main/java/com/enviouse/progressivestages/co
 - **Automation notes** — [`AutomationCompatNotes`](src/main/java/com/enviouse/progressivestages/compat/AutomationCompatNotes.java).
   Documentation of expected behavior for common automation mods (Create,
   Mekanism pipes, AE2, etc.).
+- **Jade / WTHIT — in-world lock overlay (New in 3.0).** When the player is
+  looking at a **locked block OR a locked mob/entity**, the
+  "what am I looking at" overlay appends a red **`🔒 Requires: <stage(s)>`** line
+  naming the stage(s) they still need.
+  - **Blocks** —
+    [`StageLockBlockProvider`](src/main/java/com/enviouse/progressivestages/compat/jade/StageLockBlockProvider.java)
+    reads the block's **item form** against the synced client item-lock cache
+    (the same data sent for EMI/JEI hiding).
+  - **Entities** —
+    [`StageLockEntityProvider`](src/main/java/com/enviouse/progressivestages/compat/jade/StageLockEntityProvider.java)
+    reads the **client entity-lock cache**. **Entity locks are now synced to the
+    client** for this (added to `LockSyncPayload.entityLocks`).
+  - Both honor **creative bypass** (the cache returns no gating stages while
+    bypassing) and only show stages the player **doesn't already own**. WTHIT
+    gets the same overlay via
+    [`StageLockWthitProvider`](src/main/java/com/enviouse/progressivestages/compat/wthit/StageLockWthitProvider.java).
+  - **Sourced from the Modrinth Maven, not bundled jars.** `build.gradle` adds a
+    **Modrinth** repository (`https://api.modrinth.com/maven`, `maven.modrinth`
+    group) plus a **CurseMaven** fallback, and pulls Jade and WTHIT as
+    `compileOnly` dev jars
+    (`compileOnly "maven.modrinth:jade:15.10.5+neoforge"`,
+    `compileOnly "maven.modrinth:wthit:neo-12.10.2"`). They are **compile-only**:
+    if neither mod is installed at runtime the `@WailaPlugin` classes are never
+    scanned, so the integration is simply inert.
 
 The full compat registry is
 [`ModCompatRegistry.initializeAll`](src/main/java/com/enviouse/progressivestages/compat/ModCompatRegistry.java),

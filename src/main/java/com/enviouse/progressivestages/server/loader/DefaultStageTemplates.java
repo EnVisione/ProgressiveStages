@@ -120,7 +120,9 @@ public final class DefaultStageTemplates {
     }
 
     public static String diamondAge() {
-        return """
+        // Built from several text blocks via a runtime join: a single literal would exceed the
+        // 64 KB class-file constant-pool limit, and "a" + "b" of constants would just fold back.
+        return String.join("", """
             # ============================================================================
             #
             #   ____                                    _           ____  _
@@ -170,6 +172,7 @@ public final class DefaultStageTemplates {
             #  25.  v2.4 ADDITIONS       — [attribute]/[revoke]/[cost]/[unlock]/[abilities]/scope/duration
             #  25b. v2.5 ADDITIONS       — [professions]/[advancements]/structure padding/new triggers/datapack/KubeJS
             #  26.  TROUBLESHOOTING      — "why isn't my lock working?"
+            #  27.  COMPLETE EXAMPLES    — every trigger type + [rewards]/[cost]/[abilities]/[display]/tags (v3.0)
             # ============================================================================
 
 
@@ -564,6 +567,7 @@ public final class DefaultStageTemplates {
             # [[mobs.replacements]]
             # target = "mod:alexsmobs"
             # replace_with = "id:minecraft:zombie"
+            """, """
 
 
             # ============================================================================
@@ -1002,6 +1006,7 @@ public final class DefaultStageTemplates {
             # block_item_inventory  = false
             # block_block_placement = true
             # block_dimension_travel = false
+            """, """
 
 
             # ============================================================================
@@ -1303,7 +1308,143 @@ public final class DefaultStageTemplates {
             #   this version. Fall back: add the items to [items] locked instead — Curios
             #   items are regular Items and ItemEnforcer still scrubs them from the main
             #   inventory.
+            """, """
+
+
             # ============================================================================
-            """;
+            # 27. COMPLETE FEATURE EXAMPLES (v3.0) — a detailed, copy-pasteable example of
+            #     EVERY feature. All commented out; uncomment + edit the bits you want.
+            # ============================================================================
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.1  EVERY TRIGGER CONDITION TYPE (reference — keys each go on their OWN line)
+            # ─────────────────────────────────────────────────────────────────────────
+            # First, the shape of a rule. The stage auto-grants when ANY rule passes; within
+            # a rule, mode = "all_of" (default) needs every condition, "any_of" needs one.
+            #
+            # [[triggers]]
+            # mode = "all_of"
+            # description = "Optional label shown in the GUI / /stage progress"
+            #   [[triggers.conditions]]
+            #   type = "kill"
+            #   entity = "minecraft:zombie"      # or a #tag, e.g. "#minecraft:skeletons"
+            #   count = 50
+            #   [[triggers.conditions]]
+            #   type = "reach_y"
+            #   count = 200
+            #
+            # Reference — type  ->  its key(s)  (count defaults to 1; count is the threshold):
+            #   kill             entity="minecraft:zombie" | "#tag"     count=N   (mobs killed)
+            #   mine             block="minecraft:diamond_ore" | "#tag" count=N   (blocks mined)
+            #   craft            item="minecraft:iron_pickaxe"          count=N   (items crafted)
+            #   pickup           item="minecraft:emerald"              count=N   (items picked up)
+            #   use              item="minecraft:ender_pearl"          count=N   (items used)
+            #   drop             item="minecraft:rotten_flesh"         count=N   (items dropped)
+            #   break_item       item="minecraft:iron_pickaxe"         count=N   (tools broken)
+            #   distance         movement="walk"|"sprint"|"all"|...    count=N   (blocks travelled)
+            #   play_time        (no target)                          count=N   (minutes played)
+            #   stat             stat="minecraft:jump"                count=N   (any custom stat)
+            #   level            (no target)                          count=N   (current XP level)
+            #   xp               (no target)                          count=N   (total XP points)
+            #   advancement      advancement="minecraft:nether/root"           (earned)
+            #   dimension        dimension="minecraft:the_nether"              (entered)
+            #   biome            biome="minecraft:desert" | "#tag"             (visited)
+            #   has_item         item="minecraft:diamond"             count=N   (held right now)
+            #   effect           effect="minecraft:strength"                   (currently has it)
+            #   breed            [entity="minecraft:cow" | "#tag"]    count=N   (entity optional; bare=all)
+            #   day_count        (no target)                          count=N   (reached world-day N)
+            #   world_time       (no target)                          count=N   (time-of-day tick; night ~13000)
+            #   weather          weather="thunder"|"rain"|"clear"               (experienced)
+            #   enter_structure  structure="minecraft:village_plains"          (entered)
+            #   tame             [entity="minecraft:wolf" | "#tag"]   count=N   (entity optional)
+            #   kill_with        entity="minecraft:ender_dragon" | "#tag"  with="minecraft:diamond_sword"  count=N
+            #   reach_y          (no target)                          count=N   (at altitude Y>=N)        [v3.0]
+            #   fish             (no target)                          count=N   (fish caught, retroactive)[v3.0]
+            #   sleep            (no target)                          count=N   (slept in a bed)          [v3.0]
+            #   ride             (no target)                          count=N   (blocks ridden, any mount)[v3.0]
+            #   biome_time       biome="minecraft:desert" | "#tag"    duration="10m" | count=<seconds>    [v3.0]
+            #   stage_held_for   stage="iron_age"                     duration="2d"  | count=<seconds>    [v3.0]
+            #   script           id="my_custom_check"                          (KubeJS predicate; see §11) [v3.0]
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.2  [rewards] — handed out the moment this stage is granted (v3.0)
+            # ─────────────────────────────────────────────────────────────────────────
+            # [rewards]
+            # items     = ["minecraft:diamond:5", "minecraft:netherite_scrap:2"]   # id:count
+            # effects   = ["minecraft:strength:120:1", "minecraft:regeneration:60:0"]  # id:seconds:amplifier
+            # commands  = ["give {player} minecraft:cake 1", "title {player} title {\\"text\\":\\"Diamond Age!\\"}"]
+            # teleport  = "minecraft:the_nether 0 70 0"     # "[dim] x y z" — dim optional
+            # xp_levels = 5
+            # xp_points = 100
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.3  [cost] — skill-tree purchase, with cooldown + refund (v3.0)
+            # ─────────────────────────────────────────────────────────────────────────
+            # [cost]
+            # xp_levels = 30
+            # items = ["minecraft:diamond:5", "minecraft:emerald:3"]
+            # bypass_requirements = false   # true = pay to skip the [[triggers]] grind
+            # cooldown = "5m"               # min time between this player's purchases (or cooldown_seconds=300)
+            # refund_percent = 50           # give back 50% of the cost if the stage is later revoked
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.4  [professions] — gate a villager's WHOLE trade GUI by profession (v2.5)
+            # ─────────────────────────────────────────────────────────────────────────
+            # A player without the stage can't trade with that villager at all. id:/mod:/name:.
+            # Wandering traders have no profession (use [trades] for those).
+            # [professions]
+            # locked = ["id:minecraft:weaponsmith", "id:minecraft:armorer", "name:*smith"]
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.5  [advancements] — HIDE advancements from the screen until owned (v2.5)
+            # ─────────────────────────────────────────────────────────────────────────
+            # Locked advancements vanish entirely (server-side) and reappear when the stage
+            # is gained. id:/mod:/name:.
+            # [advancements]
+            # locked = ["id:minecraft:nether/root", "mod:somemod", "name:*end*"]
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.6  [abilities] — gate movement abilities (v2.4 / v3.0)
+            # ─────────────────────────────────────────────────────────────────────────
+            # [abilities]
+            # locked = ["elytra", "sprint", "swim", "crawl", "climb"]   # any subset
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.7  [display] — per-stage presentation + encrypted-block visual (v2.3 / v3.0)
+            # ─────────────────────────────────────────────────────────────────────────
+            # [display]
+            # display_as_unknown_item = true    # mask locked item NAMES as "???"
+            # obscure_icon            = true     # replace locked item ICONS with "?"
+            # show_tooltip            = true     # show the lock/stage tooltip lines
+            # show_description_on_tooltip = true # append this stage's description to locked tooltips
+            # encrypt_blocks          = true     # v3.0: masquerade this stage's locked blocks...
+            # encrypt_as              = "minecraft:stone"   # ...as this block until the stage is owned
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.8  [structures] — entry gating with bounce-back + padding (v2.0 / v3.0)
+            # ─────────────────────────────────────────────────────────────────────────
+            # [structures]
+            # locked_entry = ["minecraft:ancient_city", "minecraft:end_city"]
+            # entry_padding = 4                 # v3.0: keep repelled players 4 blocks clear
+            #   [structures.rules]
+            #   prevent_block_break = true
+            #   prevent_block_place = true
+            #   prevent_explosions  = true
+            #   disable_mob_spawning = true
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.9  [stage] metadata + tags + scope + temporary (v2.4 / v3.0)
+            # ─────────────────────────────────────────────────────────────────────────
+            #   hidden   = false               # hide from the /stage gui tree
+            #   color    = "#55FFFF"           # #RRGGBB tint for the node name in the GUI
+            #   category = "Tech"              # group tag shown in the GUI detail
+            #   tags     = ["tier3", "tech"]   # v3.0: bulk ops — /stage tag grant @a tech
+            #   scope    = "server"            # server-wide: first team to earn unlocks it for all
+            #   duration = "2d"                # temporary: auto-expires 2 real days after grant
+            #
+            # See section 25 for [attribute] / [revoke] / [unlock] worked examples,
+            # and section 23 for the full [[triggers]] schema.
+            # ============================================================================
+            """);
     }
 }

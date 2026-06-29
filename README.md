@@ -10,6 +10,20 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ---
 
+## What's new in 3.0
+
+- **`[rewards]` on grant** — the companion to `[cost]`. `[rewards]` hands a stage's loot out **the moment it's granted**: `items = ["minecraft:diamond:5"]`, `effects = ["minecraft:strength:60:1"]` (`id:seconds:amplifier`), `commands = ["give {player} ..."]` (run as the player at permission 2; `{player}` substituted; singular `command` also accepted), `teleport = "[dim] x y z"` (dimension optional), `xp_levels`, `xp_points`. Fires exactly **once per real grant** (not on login/sync), for every cause.
+- **Six new `[[triggers]]` conditions** — `reach_y` (state: while current Y ≥ `count`; aliases `altitude`/`y_level`/`height`); `fish` (vanilla `FISH_CAUGHT`, retroactive); `sleep` (vanilla `SLEEP_IN_BED`, retroactive); `ride` (blocks ridden on any vehicle — minecart/boat/pig/horse/strider, retroactive); `biome_time` (seconds spent in a target biome/`#tag`; `count` = seconds or a friendly `duration = "5m"`); and `stage_held_for` (held another stage for ≥ `count` seconds; `count` seconds or `duration = "3d"` — grant times are now recorded for **every** stage).
+- **Stage tags + bulk ops** — tag stages with `[stage].tags = ["combat","tier2"]`, then `/stage tag grant <players> <tag>`, `/stage tag revoke <players> <tag>`, and `/stage tag list <tag>`. Grant **bypasses dependencies** and **skips stages already owned**.
+- **`[cost]` cooldown + refund** — `cooldown` (or `cooldown_seconds`; accepts `"5m"`) is a **per-player** rate limit between skill-tree purchases (server-enforced); `refund_percent` returns that % of a purchased stage's item/XP cost when the stage is later **revoked**.
+- **Ability gating expanded** — `[abilities].locked` now also gates `sprint`, `swim`, `crawl`, and `climb` (clamps upward motion on ladders/vines), in addition to `elytra`.
+- **Jade + WTHIT in-world overlay** — looking at a locked **block OR mob** shows a red `🔒 Requires: <stage>` line. Pulled from the **Modrinth Maven** (`compileOnly maven.modrinth:jade:...` / `...:wthit:...`, with a CurseMaven fallback) — not bundled jars, inert when the mods aren't installed. Entity locks are now synced to the client to power the mob overlay.
+- **`[display].encrypt_blocks`** — `encrypt_blocks = true` masquerades this stage's exact-id locked **blocks** as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline (chunk rewrite, break-speed, drop replacement). Per-stage on/off.
+- **Authoring / debug commands** — `/stage simulate [player]` (dry-run: reachable-next stages with % and which conditions are short, plus dep-blocked stages); `/stage new <id>` (scaffold a stage TOML); `/stage export` (write a markdown progression guide to the config folder).
+- **Not yet implemented (planned):** beacon-effect, brewing-potion, and enchant **level-cap** gating are a follow-up. Today, whole-enchant gating is via `[enchants]` and potion **items** via `[items]`.
+
+---
+
 ## What's new in 2.5
 
 - **`[professions]` lock category** — `[professions].locked = ["id:minecraft:weaponsmith", "mod:somemod", "name:cleric"]` gates **opening a villager's trade GUI by the villager's PROFESSION**. A player lacking the gating stage can't trade with that villager at all (vs. `[trades]`, which hides individual offers by result item). `id:` / `mod:` / `name:` matching (no tags). Wandering traders have no profession and are unaffected — use `[trades]` for those. Fully opt-in (no overhead when unused).
@@ -144,9 +158,12 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[abilities]` | `locked` | **New in 2.4.** Block movement/action abilities (e.g. `["elytra"]` — no gliding) until the stage is owned |
 | `[[attribute]]` | `id`, `operation`, `amount` | **New in 2.4.** *Reward* — grant attribute modifiers (any vanilla/modded attribute; `add`/`multiply_base`/`multiply_total`) while the team **owns** the stage |
 | `[revoke]` | `on_death`, `xp_below`, `cascade` | **New in 2.4.** Regression — lose the stage on death, while total XP < N, and optionally cascade the revoke to dependents |
-| `[cost]` | `xp_levels`, `items`, `bypass_requirements` | **New in 2.4.** Make the stage **purchasable** from the in-game tree GUI (Unlock button); server-validated |
+| `[cost]` | `xp_levels`, `items`, `bypass_requirements`, **`cooldown`/`cooldown_seconds`**, **`refund_percent`** | **New in 2.4** (`cooldown`/`refund_percent` **New in 3.0**). Make the stage **purchasable** from the in-game tree GUI (Unlock button); server-validated. `cooldown` = per-player rate limit between purchases (accepts `"5m"`); `refund_percent` = % of item/XP cost returned when a purchased stage is revoked |
+| `[rewards]` | `items`, `effects`, `commands`/`command`, `teleport`, `xp_levels`, `xp_points` | **New in 3.0.** *Reward* — items / status effects (`id:seconds:amplifier`) / commands (run as the player, `{player}` substituted) / teleport (`"[dim] x y z"`) / xp handed out **once** the moment the stage is granted (companion to `[cost]`) |
 | `[unlock]` | `toast`, `title`/`subtitle`, `sound`, `particle`, `progress_nudges`, `hud_bar` | **New in 2.4.** Unlock "juice" — toast/title/sound/particle on unlock, progress hints, and a blue progress bar above the XP bar (all optional) |
-| `[stage]` metadata | `hidden`, `color`, `category`, `scope`, `duration` | **New in 2.4** (`hidden`/`color`/`category` GUI behaviour **activated in 2.5**). Hide from the GUI tree, tint the stage name (`#RRGGBB`), group label/tag, `scope = "server"` (server-wide stage), temporary `duration` (auto-expires after real time) |
+| `[abilities]` (3.0) | `locked` += `sprint`, `swim`, `crawl`, `climb` | **New in 3.0.** `[abilities].locked` now also gates `sprint` / `swim` / `crawl` / `climb` (upward motion on ladders/vines clamped) in addition to `elytra` |
+| `[display]` (3.0) | `encrypt_blocks`, `encrypt_as` | **New in 3.0.** `encrypt_blocks = true` masquerades this stage's exact-id locked **blocks** as `encrypt_as` (default `minecraft:stone`) until owned, via the ore-spoof pipeline. Per-stage on/off |
+| `[stage]` metadata | `hidden`, `color`, `category`, `scope`, `duration`, **`tags`** | **New in 2.4** (`hidden`/`color`/`category` GUI behaviour **activated in 2.5**; `tags` **New in 3.0**). Hide from the GUI tree, tint the stage name (`#RRGGBB`), group label/tag, `scope = "server"` (server-wide stage), temporary `duration` (auto-expires after real time), and `tags = ["combat","tier2"]` (labels for `/stage tag ...` bulk ops — no gating effect) |
 | (root) | `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
 
 Two whitelist mechanisms exist:
@@ -252,7 +269,7 @@ mode = "all_of"
   entity = "minecraft:ender_dragon"
 ```
 
-Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance` (blocks travelled, by movement kind or `all`), `stat` (any vanilla custom statistic), `play_time` (minutes), `level`, `xp`, `has_item`, `advancement`, `dimension`, `biome`, and **new in 2.4** `effect` (currently has a status effect), `breed`, `day_count` (reached world day N), `weather` (`rain`/`thunder`/`clear`, one-shot), `enter_structure` (one-shot), `tame`, `kill_with` (kill an entity while holding a given item), and **new in 2.5** `world_time` (time-of-day tick `0..23999`, e.g. at night) and `script` (a custom KubeJS-registered predicate, referenced by `type="script", id="<conditionId>"`). Subjects accept `#tag`/`tag:` form; `count` defaults to 1. (`tame`/`kill_with` use mod-tracked counters rather than vanilla stats.) **New in 2.5:** `breed` takes an optional species/tag target (no target = all bred animals, retroactive; with a target = that species/tag, event-counted), and `kill_with` accepts a `#tag` victim (summed over the tag's members). The counter types read vanilla statistics, so they're **retroactive** and survive restarts with no extra save files; `dimension`/`biome` "visited" one-shots are persisted per player (reset with `/progressivestages trigger reset <player> <stage>`). Progress is per-player and the first team member to satisfy a rule unlocks the stage for the whole team. Poll cadence is `enforcement.trigger_poll_interval` ticks (relevant events also force an immediate re-check).
+Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance` (blocks travelled, by movement kind or `all`), `stat` (any vanilla custom statistic), `play_time` (minutes), `level`, `xp`, `has_item`, `advancement`, `dimension`, `biome`, and **new in 2.4** `effect` (currently has a status effect), `breed`, `day_count` (reached world day N), `weather` (`rain`/`thunder`/`clear`, one-shot), `enter_structure` (one-shot), `tame`, `kill_with` (kill an entity while holding a given item), **new in 2.5** `world_time` (time-of-day tick `0..23999`, e.g. at night) and `script` (a custom KubeJS-registered predicate, referenced by `type="script", id="<conditionId>"`), and **new in 3.0** `reach_y` (state — while current Y ≥ `count`), `fish` / `sleep` / `ride` (vanilla-stat counters — fish caught, beds slept in, blocks ridden on any vehicle — all **retroactive**), `biome_time` (seconds in a target biome/`#tag`; `count` seconds or `duration = "5m"`), and `stage_held_for` (held another stage for ≥ `count` seconds; `count` seconds or `duration = "3d"`). Subjects accept `#tag`/`tag:` form; `count` defaults to 1. (`tame`/`kill_with`/`biome_time` use mod-tracked counters rather than vanilla stats.) **New in 2.5:** `breed` takes an optional species/tag target (no target = all bred animals, retroactive; with a target = that species/tag, event-counted), and `kill_with` accepts a `#tag` victim (summed over the tag's members). The vanilla-stat counter types read Minecraft's statistics, so they're **retroactive** and survive restarts with no extra save files; `dimension`/`biome` "visited" one-shots are persisted per player (reset with `/progressivestages trigger reset <player> <stage>`). Progress is per-player and the first team member to satisfy a rule unlocks the stage for the whole team. Poll cadence is `enforcement.trigger_poll_interval` ticks (relevant events also force an immediate re-check).
 
 **Triggers respect dependencies:** a stage is not auto-granted by its triggers until every `[stage].dependency` prerequisite is owned. Counters keep accruing while a prerequisite is missing, so the next poll after the last prerequisite is granted completes the unlock. Omit a stage's `dependency` to let its triggers fire freely, regardless of progression.
 
@@ -289,6 +306,7 @@ show_description_on_tooltip = true    # append [stage].description to the toolti
 | **KubeJS** | **New in 2.5:** a global `ProgressiveStages` object with `onGranted`/`onRevoked` callbacks (fire on every engine grant/revoke), `condition('id', player => bool)` for custom `script:` trigger conditions, and `has`/`grant`/`revoke`/`list`/`percent` helpers. Also first-class `player.stages.has/add/remove(...)`; Java `StageChangeEvent` (NeoForge bus) carries the `StageCause`. (KubeJS 7.x has no native stage events on engine grants — use `onGranted`/`onRevoked`.) |
 | **NaturesCompass** | Filters dimension/structure search results so locked dimensions don't appear |
 | **Visual Workbench** | Reflective shim — locks targeting `minecraft:crafting_table` apply through VW-replaced workbenches |
+| **Jade / WTHIT** | **New in 3.0:** looking at a locked **block or mob** appends a red `🔒 Requires: <stage>` line to the overlay (blocks via the item-lock cache, entities via a new client entity-lock sync; both honor creative bypass). Sourced from the **Modrinth Maven** as `compileOnly` dev jars (CurseMaven fallback), inert when neither mod is installed |
 
 All integrations are reflection-loaded; absent mods are silently skipped. Each can be disabled via the `[integration]` config section.
 
@@ -306,6 +324,11 @@ All integrations are reflection-loaded; absent mods are silently skipped. Each c
 | `/stage tree` | OP | Print the stage dependency tree |
 | `/stage gui` | OP | Open the in-game Stage Tree / Progression viewer (any player can open it via the keybind) |
 | `/stage progress [next\|all\|<stage>] [player]` | OP | Show live `[[triggers]]` rule/condition progress toward stages |
+| `/stage tag grant\|revoke <players> <tag>` | OP | **New in 3.0.** Grant/revoke every stage tagged `<tag>` (from `[stage].tags`) to the selected players. Grant bypasses dependencies and skips already-owned stages |
+| `/stage tag list <tag>` | OP | **New in 3.0.** List every stage that declares `<tag>` |
+| `/stage simulate [player]` | OP | **New in 3.0.** Dry-run: reachable-next stages with % + which conditions are still short, then dependency-blocked stages and what they're missing |
+| `/stage new <id>` | OP | **New in 3.0.** Scaffold a commented stage TOML at `config/ProgressiveStages/<id>.toml` (won't overwrite) |
+| `/stage export` | OP | **New in 3.0.** Write a markdown progression guide (`progressivestages_guide.md`) built from the stage graph to the config folder |
 | `/stage validate` | OP | Validate every stage TOML file (registry existence, dependency cycles, malformed entries). **Deepened in 2.5:** full multi-node dependency cycles, transitively-unreachable stages, dead trigger targets (unresolved exact-id entity/block/item/effect or `kill_with` item), and profession ids. |
 | `/stage reload` | OP | Reload stage configs (incl. each stage's `[[triggers]]`) from disk |
 | `/progressivestages triggers list [player]` | OP | List every stage that declares `[[triggers]]`; with a player, show their live per-condition progress |
@@ -396,6 +419,17 @@ compat/
 ---
 
 ## Changelog
+
+### v3.0
+- **`[rewards]` on grant** — companion to `[cost]`: `items`, `effects` (`id:seconds:amplifier`), `commands`/`command` (run as the player at permission 2, `{player}` substituted), `teleport` (`"[dim] x y z"`), `xp_levels`, `xp_points`. Fires once per real grant (not on login/sync), for every cause.
+- **Six new `[[triggers]]` conditions** — `reach_y` (state: Y ≥ `count`), `fish` / `sleep` / `ride` (vanilla-stat counters, retroactive), `biome_time` (seconds in a biome/`#tag`; `count` seconds or `duration = "5m"`), `stage_held_for` (held a stage ≥ `count` seconds; `count` seconds or `duration = "3d"` — grant times now recorded for every stage).
+- **Stage tags + bulk ops** — `[stage].tags = ["combat","tier2"]` + `/stage tag grant|revoke <players> <tag>` and `/stage tag list <tag>`. Grant bypasses dependencies and skips already-owned stages.
+- **`[cost]` cooldown + refund** — `cooldown` / `cooldown_seconds` (per-player rate limit between purchases; accepts `"5m"`) and `refund_percent` (% of item/XP cost returned when a purchased stage is revoked).
+- **Ability gating expanded** — `[abilities].locked` now also gates `sprint`, `swim`, `crawl`, and `climb` (clamps upward motion on ladders/vines), in addition to `elytra`.
+- **Jade + WTHIT overlay** — looking at a locked block or mob shows `🔒 Requires: <stage>`. Sourced from the Modrinth Maven as `compileOnly` dev jars (CurseMaven fallback), inert when uninstalled. Entity locks are now synced to the client for the mob overlay.
+- **`[display].encrypt_blocks`** — masquerades this stage's exact-id locked blocks as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline. Per-stage on/off.
+- **Authoring/debug commands** — `/stage simulate [player]` (dry-run reachable-next stages + short conditions + dep-blocked stages), `/stage new <id>` (scaffold a stage TOML), `/stage export` (markdown progression guide).
+- **Planned (not yet implemented):** beacon-effect, brewing-potion, and enchant level-cap gating. Today: whole-enchant gating via `[enchants]`, potion items via `[items]`.
 
 ### v2.5
 - **`[professions]` lock category** — gate opening a villager's trade GUI by the villager's PROFESSION (`id:`/`mod:`/`name:`; no tags). Wandering traders unaffected (use `[trades]`). Opt-in (no overhead when unused).
