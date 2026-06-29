@@ -57,6 +57,7 @@ public class StageDefinition {
     private final RevokeRule revoke;
     private final StageCost cost;      // null = not purchasable
     private final UnlockEffects unlock;
+    private final java.util.Set<String> lockedAbilities; // e.g. "elytra" — blocked until this stage is owned
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -98,6 +99,8 @@ public class StageDefinition {
         this.revoke = builder.revoke != null ? builder.revoke : RevokeRule.NONE;
         this.cost = builder.cost;
         this.unlock = builder.unlock != null ? builder.unlock : UnlockEffects.NONE;
+        this.lockedAbilities = builder.lockedAbilities != null
+            ? java.util.Set.copyOf(builder.lockedAbilities) : java.util.Set.of();
     }
 
     public StageId getId() {
@@ -262,6 +265,9 @@ public class StageDefinition {
     /** Unlock presentation ({@code [unlock]}); {@link UnlockEffects#NONE} if none declared. */
     public UnlockEffects getUnlock() { return unlock; }
 
+    /** Abilities this stage gates (blocked until owned), e.g. {@code "elytra"}. Lower-case. */
+    public java.util.Set<String> getLockedAbilities() { return lockedAbilities; }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -301,6 +307,7 @@ public class StageDefinition {
         private RevokeRule revoke = RevokeRule.NONE;
         private StageCost cost = null;
         private UnlockEffects unlock = UnlockEffects.NONE;
+        private java.util.Set<String> lockedAbilities = java.util.Set.of();
 
         private Builder(StageId id) {
             this.id = id;
@@ -440,6 +447,7 @@ public class StageDefinition {
         public Builder revoke(RevokeRule v) { this.revoke = v != null ? v : RevokeRule.NONE; return this; }
         public Builder cost(StageCost v) { this.cost = v; return this; }
         public Builder unlock(UnlockEffects v) { this.unlock = v != null ? v : UnlockEffects.NONE; return this; }
+        public Builder lockedAbilities(java.util.Set<String> v) { this.lockedAbilities = v != null ? v : java.util.Set.of(); return this; }
 
         public StageDefinition build() {
             return new StageDefinition(this);

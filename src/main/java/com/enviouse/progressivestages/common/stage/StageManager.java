@@ -35,6 +35,14 @@ public class StageManager {
     private static StageManager INSTANCE;
     private MinecraftServer server;
 
+    /** v2.4: synthetic "team" that holds server-wide ({@code scope = "server"}) stages shared by everyone. */
+    public static final UUID SERVER_TEAM = new UUID(0L, 0L);
+
+    private static boolean isServerScoped(StageId stageId) {
+        return StageOrder.getInstance().getStageDefinition(stageId)
+            .map(StageDefinition::isServerScope).orElse(false);
+    }
+
     public static StageManager getInstance() {
         if (INSTANCE == null) {
             INSTANCE = new StageManager();
@@ -74,7 +82,9 @@ public class StageManager {
      * Check if a team has a specific stage
      */
     public boolean hasStage(UUID teamId, StageId stageId) {
-        return getTeamStageData().hasStage(teamId, stageId);
+        TeamStageData data = getTeamStageData();
+        // v2.4: server-wide stages live under SERVER_TEAM and count for every team.
+        return data.hasStage(teamId, stageId) || data.hasStage(SERVER_TEAM, stageId);
     }
 
     /**
@@ -119,15 +129,17 @@ public class StageManager {
             }
         }
 
-        List<StageId> newlyGranted = grantStageToTeamInternal(teamId, stageId, false);
+        // v2.4: server-scoped stages are stored under SERVER_TEAM and synced to everyone.
+        boolean serverScoped = isServerScoped(stageId);
+        UUID storeTeam = serverScoped ? SERVER_TEAM : teamId;
+        List<StageId> newlyGranted = grantStageToTeamInternal(storeTeam, stageId, false);
 
         // Fire events for each newly granted stage
         for (StageId granted : newlyGranted) {
             fireStageChangeEvent(player, teamId, granted, StageChangeType.GRANTED, cause);
         }
 
-        // Sync to all team members
-        syncToTeamMembers(teamId);
+        if (serverScoped) syncAllPlayers(); else syncToTeamMembers(teamId);
     }
 
     /**
@@ -191,8 +203,8 @@ public class StageManager {
      * @return List of missing dependency stage IDs (empty if no missing deps)
      */
     public List<StageId> getMissingDependencies(ServerPlayer player, StageId stageId) {
-        UUID teamId = TeamProvider.getInstance().getTeamId(player);
-        Set<StageId> currentStages = getTeamStageData().getStages(teamId);
+        // Use the effective set (includes server-wide stages) so they satisfy dependencies.
+        Set<StageId> currentStages = getStages(player);
         return StageOrder.getInstance().getMissingDependencies(currentStages, stageId);
     }
 
@@ -232,15 +244,16 @@ public class StageManager {
      */
     public void revokeStageWithCause(ServerPlayer player, StageId stageId, StageCause cause) {
         UUID teamId = TeamProvider.getInstance().getTeamId(player);
-        List<StageId> revoked = revokeStageFromTeamInternal(teamId, stageId);
+        boolean serverScoped = isServerScoped(stageId);
+        UUID storeTeam = serverScoped ? SERVER_TEAM : teamId;
+        List<StageId> revoked = revokeStageFromTeamInternal(storeTeam, stageId);
 
         // Fire events for each revoked stage
         for (StageId revokedStage : revoked) {
             fireStageChangeEvent(player, teamId, revokedStage, StageChangeType.REVOKED, cause);
         }
 
-        // Sync to all team members
-        syncToTeamMembers(teamId);
+        if (serverScoped) syncAllPlayers(); else syncToTeamMembers(teamId);
     }
 
     /**
@@ -300,7 +313,14 @@ public class StageManager {
      * Get all stages for a team
      */
     public Set<StageId> getStages(UUID teamId) {
-        return getTeamStageData().getStages(teamId);
+        TeamStageData data = getTeamStageData();
+        Set<StageId> server = data.getStages(SERVER_TEAM);
+        Set<StageId> team = data.getStages(teamId);
+        if (server.isEmpty() || teamId.equals(SERVER_TEAM)) return team; // fast path / server view
+        // v2.4: union server-wide stages into every team's effective stage set.
+        Set<StageId> union = new LinkedHashSet<>(team);
+        union.addAll(server);
+        return Collections.unmodifiableSet(union);
     }
 
     /**
@@ -372,6 +392,15 @@ public class StageManager {
                 // v2.4: re-apply [attribute] modifiers for this member after the team's stages changed.
                 com.enviouse.progressivestages.server.enforcement.StageAttributeApplier.reconcile(player);
             }
+        }
+    }
+
+    /** v2.4: sync + attribute-reconcile EVERY online player (used when a server-wide stage changes). */
+    private void syncAllPlayers() {
+        if (server == null) return;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            NetworkHandler.sendStageSync(player, getStages(player));
+            com.enviouse.progressivestages.server.enforcement.StageAttributeApplier.reconcile(player);
         }
     }
 

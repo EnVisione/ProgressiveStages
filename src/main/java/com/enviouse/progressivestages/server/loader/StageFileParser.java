@@ -141,6 +141,7 @@ public final class StageFileParser {
         builder.revoke(parseRevoke(config));
         builder.cost(parseCost(config));
         builder.unlock(parseUnlock(config));
+        builder.lockedAbilities(parseAbilities(config));
 
         return ParseResult.success(builder.build());
     }
@@ -236,6 +237,16 @@ public final class StageFileParser {
         }
         ResourceLocation id = ResourceLocation.tryParse(s);
         return id == null ? null : new StageCost.ItemCost(id, count);
+    }
+
+    private static java.util.Set<String> parseAbilities(Config config) {
+        Config sec = config.get("abilities");
+        if (sec == null) return java.util.Set.of();
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        for (String s : stringList(sec, "locked")) {
+            if (s != null && !s.trim().isEmpty()) out.add(s.trim().toLowerCase());
+        }
+        return out;
     }
 
     private static UnlockEffects parseUnlock(Config config) {

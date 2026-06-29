@@ -73,6 +73,8 @@ public class ServerEventHandler {
         NeoForge.EVENT_BUS.register(StageTriggerEvaluator.class);
         // v2.4: [revoke] rules + temporary-stage expiry (regression).
         NeoForge.EVENT_BUS.register(StageRegressionHandler.class);
+        // v2.4: [abilities] gating (elytra).
+        NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.class);
 
         // Initialize FTB Teams integration (soft dependency)
         // Uses reflection to avoid loading FTBTeamsIntegration class (which imports FTB Teams API)
