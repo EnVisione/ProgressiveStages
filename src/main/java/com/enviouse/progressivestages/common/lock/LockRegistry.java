@@ -237,6 +237,29 @@ public final class LockRegistry {
             }
         }
 
+        // v3.0: encrypted-block visual — synthesize ore-spoof overrides for this stage's exact-id
+        // locked blocks so they render as the placeholder block until the player owns the stage.
+        // Reuses the whole ore-spoof pipeline (chunk rewrite, break-speed sync, drop replacement).
+        if (stage.isEncryptBlocks()) {
+            ResourceLocation placeholderId = ResourceLocation.tryParse(stage.getEncryptAs());
+            if (placeholderId == null) placeholderId = ResourceLocation.withDefaultNamespace("stone");
+            int radius = locks.oreSpoofRadius() > 0 ? locks.oreSpoofRadius() : 8;
+            boolean anyEncrypted = false;
+            for (PrefixEntry e : locks.blocks().locked()) {
+                if (e.kind() != PrefixEntry.Kind.ID || e.id() == null) continue;
+                net.minecraft.world.level.block.Block tgt = BuiltInRegistries.BLOCK.get(e.id());
+                if (tgt == null || tgt == net.minecraft.world.level.block.Blocks.AIR) continue;
+                OreOverrideEntry entry = new OreOverrideEntry(e.id(), placeholderId, placeholderId, id);
+                oreOverrides.add(entry);
+                oreOverrideByTarget.computeIfAbsent(tgt, k -> new java.util.ArrayList<>()).add(entry);
+                anyEncrypted = true;
+            }
+            if (anyEncrypted) {
+                stageOreSpoofRadius.merge(id, radius, Math::max);
+                if (radius > maxOreSpoofRadius) maxOreSpoofRadius = radius;
+            }
+        }
+
         structures = structures.merge(locks.structures(), id);
 
         for (String slot : locks.curioLockedSlots()) {

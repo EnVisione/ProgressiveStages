@@ -521,6 +521,10 @@ public final class StageFileParser {
         builder.obscureIcon(readOptionalBool(sec, "obscure_icon"));
         builder.showTooltip(readOptionalBool(sec, "show_tooltip"));
         builder.showDescriptionOnTooltip(readOptionalBool(sec, "show_description_on_tooltip"));
+        // v3.0: encrypted-block visual — masquerade this stage's locked blocks until owned.
+        builder.encryptBlocks(readBool(sec, "encrypt_blocks"));
+        String encryptAs = sec.get("encrypt_as");
+        if (encryptAs != null && !encryptAs.isBlank()) builder.encryptAs(encryptAs.trim());
     }
 
     /** Returns the boolean if explicitly present, else {@code null} (inherit global default). */

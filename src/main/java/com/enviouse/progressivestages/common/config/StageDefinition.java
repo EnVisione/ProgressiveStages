@@ -47,6 +47,9 @@ public class StageDefinition {
     private final Boolean obscureIcon;
     private final Boolean showTooltip;
     private final Boolean showDescriptionOnTooltip;
+    // v3.0: encrypted-block visual — masquerade this stage's locked blocks until owned.
+    private final boolean encryptBlocks;
+    private final String encryptAs; // placeholder block id (default minecraft:stone)
     // v2.4: presentation/organization metadata + new sections.
     private final boolean hidden;
     private final String color;        // "" or a hex/&-code for GUI tinting
@@ -90,6 +93,9 @@ public class StageDefinition {
         this.obscureIcon = builder.obscureIcon;
         this.showTooltip = builder.showTooltip;
         this.showDescriptionOnTooltip = builder.showDescriptionOnTooltip;
+        this.encryptBlocks = builder.encryptBlocks;
+        this.encryptAs = builder.encryptAs != null && !builder.encryptAs.isEmpty()
+            ? builder.encryptAs : "minecraft:stone";
         this.hidden = builder.hidden;
         this.color = builder.color != null ? builder.color : "";
         this.category = builder.category != null ? builder.category : "";
@@ -232,6 +238,12 @@ public class StageDefinition {
         return showDescriptionOnTooltip;
     }
 
+    /** v3.0: true if this stage's locked blocks should be visually masqueraded until owned. */
+    public boolean isEncryptBlocks() { return encryptBlocks; }
+
+    /** v3.0: the placeholder block id locked blocks render as while encrypted (default minecraft:stone). */
+    public String getEncryptAs() { return encryptAs; }
+
     // ---- v2.4 ----
 
     /** True if this stage should be hidden from the GUI tree / progression views. */
@@ -309,6 +321,8 @@ public class StageDefinition {
         private Boolean obscureIcon = null;
         private Boolean showTooltip = null;
         private Boolean showDescriptionOnTooltip = null;
+        private boolean encryptBlocks = false;
+        private String encryptAs = "minecraft:stone";
         private boolean hidden = false;
         private String color = "";
         private String category = "";
@@ -449,6 +463,9 @@ public class StageDefinition {
             this.showDescriptionOnTooltip = v;
             return this;
         }
+
+        public Builder encryptBlocks(boolean v) { this.encryptBlocks = v; return this; }
+        public Builder encryptAs(String v) { this.encryptAs = v; return this; }
 
         // ---- v2.4 ----
         public Builder hidden(boolean v) { this.hidden = v; return this; }
