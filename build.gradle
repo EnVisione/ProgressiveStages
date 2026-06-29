@@ -10,6 +10,18 @@ group = mod_group_id
 
 repositories {
     mavenLocal()
+    // v3.0: pull optional mod APIs from Maven instead of bundling jars in libs/.
+    // Modrinth Maven hosts the Jade dev jar; CurseMaven is a fallback for CF-only mods.
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content { includeGroup "maven.modrinth" }
+    }
+    maven {
+        name = "CurseMaven"
+        url = "https://cursemaven.com"
+        content { includeGroup "curse.maven" }
+    }
 }
 
 base {
@@ -120,6 +132,11 @@ dependencies {
     // roll including Lootr's per-player rolls). This dep is here so the docs can reference
     // Lootr's tags (`tag:lootr:chests`) in the default template confidently.
     compileOnly files("libs/lootr-neoforge-1.21.1-1.11.37.118.jar")
+
+    // Jade (optional) — pulled from the Modrinth Maven, NOT libs/. Powers the in-world
+    // "🔒 Requires <stage>" overlay (compat/jade). compileOnly: if Jade isn't installed at
+    // runtime, Jade never scans our @WailaPlugin, so the plugin class is simply never loaded.
+    compileOnly "maven.modrinth:jade:15.10.5+neoforge"
 
     // TOML parser for stage files
     implementation 'com.electronwill.night-config:toml:3.6.7'
