@@ -6,6 +6,8 @@
 > every command, every integration, every troubleshooting tip. If a section of
 > this document conflicts with what the mod actually does, the *code* is the
 > authority and this document is a bug.
+>
+> **Support & community:** [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires these in too — `displayURL` (Discord) and `issueTrackerURL` (GitHub issues) in `neoforge.mods.toml`.
 
 ---
 
@@ -50,6 +52,7 @@
    - [4.30 Datapack-loaded stages](#430-datapack-loaded-stages) — **New in 2.5**
    - [4.31 `[rewards]` — items / effects / commands / teleport / xp on grant](#431-rewards--items--effects--commands--teleport--xp-on-grant) — **New in 3.0**
    - [4.32 `[display].encrypt_blocks` — encrypted-block visual](#432-displayencrypt_blocks--encrypted-block-visual) — **New in 3.0**
+   - [4.33 `[enchants].max_levels`, `[beacon]`, `[brewing]` — finer-grained gates](#433-enchantsmax_levels-beacon-brewing--finer-grained-gates) — **New in 3.0**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -594,6 +597,10 @@ player's gear is gated:
   locked entries. Catches loot drops, fishing, dungeon chests, etc.
 - **Curios slots** — if Curios is installed, items inside curio slots also
   get scrubbed (see §13).
+
+**Level cap instead of a full lock — New in 3.0.** To cap an enchantment at a
+maximum level (rather than hiding it entirely) until a stage is owned, use
+`[enchants].max_levels` — see §4.33.
 
 The implementation is
 [`EnchantEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/EnchantEnforcer.java).
@@ -1672,25 +1679,90 @@ block entries are not synthesised into overrides.
 > Implementation: [`LockRegistry`](src/main/java/com/enviouse/progressivestages/common/lock/LockRegistry.java)
 > (encrypt → ore-override synthesis) + the existing ore-spoof enforcers.
 
-### 4.33 Planned (not yet implemented in 3.0)
+### 4.33 `[enchants].max_levels`, `[beacon]`, `[brewing]` — finer-grained gates
 
-The following finer-grained gates are a **planned follow-up** and are **not**
-available yet:
+> **New in 3.0.** Previously listed here as "planned" — **all three now ship.**
 
-- **Beacon-effect gating** — gating individual beacon effects (separate from the
-  beacon block / item itself).
-- **Brewing-potion gating** — gating the **brewing** of a specific potion.
-- **Enchant LEVEL-CAP gating** — capping an enchantment at a maximum level per
-  stage (rather than locking the whole enchant).
+Three finer-grained gates that sit alongside the whole-resource categories
+above: cap an enchantment's level (rather than locking it outright), withhold an
+individual beacon effect, and gate pulling a specific brewed potion out of a
+brewing stand. Each is fully opt-in — there is **zero overhead** when no stage
+declares the section.
 
-**Today's equivalents.** Until those land:
+#### `[enchants].max_levels` — per-stage enchant level cap
 
-- **Whole-enchant gating** is done with `[enchants]` (§4.9) — a locked enchant is
-  hidden in the table, refused at the anvil, and stripped from inventory; there is
-  no per-level cap.
-- **Potions as ITEMS** are gated with `[items]` (§4.3) — lock the potion item id
-  (e.g. a specific `minecraft:potion` with NBT, or the broad potion items) rather
-  than the brewing step.
+The whole-enchant lock (`[enchants].locked`, §4.9) is unchanged. **New:**
+`max_levels` caps an enchantment at a maximum level until the gating stage is
+owned, instead of hiding it entirely.
+
+```toml
+[enchants]
+locked     = ["id:minecraft:mending"]                 # whole-enchant lock (§4.9)
+max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]
+```
+
+Each entry is `<enchant-id>:<level>` (the last `:`-segment is the integer cap;
+exact ids only — no prefixes, tags, or `mod:`). A player **missing** the gating
+stage has that enchantment clamped to the cap; once they own the stage, the cap
+no longer applies. The **effective cap** for an enchantment is the **MIN across
+every still-missing capping stage** — if two unowned stages cap `sharpness` at 3
+and 2, the player is held to 2.
+
+Enforcement happens in the **periodic inventory scan** (the same pass that strips
+whole-locked enchants, §4.9): any over-cap level is reduced to the cap, and a cap
+of `0` **removes** the enchant entirely. It applies to both live item
+enchantments and stored book enchantments. Creative-bypass players are exempt
+(`allow_creative_bypass`).
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `max_levels` | list | `["<enchant-id>:<level>", ...]` — cap each enchant at `<level>` until the gating stage is owned. Exact ids only. Effective cap = MIN across every missing capping stage; level `0` removes the enchant. |
+
+> Implementation: [`EnchantEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/EnchantEnforcer.java)
+> (`applyEnchantPolicy`), [`LockRegistry`](src/main/java/com/enviouse/progressivestages/common/lock/LockRegistry.java)
+> (`effectiveEnchantCap`), [`LockDefinition.EnchantCap`](src/main/java/com/enviouse/progressivestages/common/lock/LockDefinition.java),
+> [`StageFileParser`](src/main/java/com/enviouse/progressivestages/server/loader/StageFileParser.java)
+> (`parseEnchantCaps`).
+
+#### `[beacon].locked` — gate individual beacon effects
+
+```toml
+[beacon]
+locked = ["id:minecraft:strength", "id:minecraft:haste"]
+```
+
+`[beacon].locked` is a list of **MobEffect ids** (`id:` / `mod:` / `name:`
+matching; no tags). A beacon applies its chosen effect to every player in range;
+this gate means a player **missing** the gating stage simply **does not receive**
+that effect. **Other players in range are unaffected** — the beacon keeps working
+for everyone who owns the stage. The block, the beacon item, and the beacon's GUI
+are untouched; only the per-player effect application is gated.
+
+> Implementation: [`BeaconBlockEntityMixin`](src/main/java/com/enviouse/progressivestages/mixin/BeaconBlockEntityMixin.java)
+> (`@Redirect` on the per-player `addEffect`), [`LockRegistry.isBeaconEffectBlockedFor`](src/main/java/com/enviouse/progressivestages/common/lock/LockRegistry.java).
+
+#### `[brewing].locked` — gate taking a brewed potion
+
+```toml
+[brewing]
+locked = ["id:minecraft:strength", "id:minecraft:swiftness"]
+```
+
+`[brewing].locked` is a list of **Potion ids** (`id:` / `mod:` / `name:`; no
+tags). Rather than fighting the brewing-stand fuel/timer loop, this gate makes a
+player **missing** the gating stage **unable to TAKE** the brewed potion out of a
+brewing stand's potion slots: the potion still brews and **sits there** until the
+player unlocks it, at which point they can pull it normally.
+
+> **Limitation:** only the **player-facing pickup** from the stand's potion slots
+> is gated. Hopper / automation extraction is **not** gated (the underlying
+> potions are component-based, so automated transfer bypasses the slot
+> `mayPickup` check). Use a `[screens]` or block gate on the brewing stand itself
+> if you need to keep players out entirely.
+
+> Implementation: [`SlotBrewingPickupMixin`](src/main/java/com/enviouse/progressivestages/mixin/SlotBrewingPickupMixin.java)
+> (`Slot.mayPickup` on `BrewingStandBlockEntity` containers),
+> [`LockRegistry.isBrewingBlockedFor`](src/main/java/com/enviouse/progressivestages/common/lock/LockRegistry.java).
 
 ---
 
@@ -2070,10 +2142,26 @@ depth and **colour-coded by status**:
 
 Selecting a stage in the left pane fills the right pane with its detail.
 
+**Search + hide — New in 3.0.** Above the stage list sits a **search box** and an
+**"☑ owned" toggle**:
+
+- **Search box** — typing filters the list. It matches a stage by its **display
+  name OR id**, *and* by **any locked item id** the stage gates — so typing an
+  item (e.g. `create:wrench`) surfaces the stage(s) that gate it. When a search
+  term (or the hide-owned toggle) is active, the list switches from the indented
+  tree to a **flat filtered list** (the tree shape only makes sense for the full
+  set).
+- **"☑ owned" toggle** — click it to **hide already-unlocked stages** from the
+  list, so only stages you don't yet own remain.
+
 **Right pane — the selected stage's detail.** Shows, top to bottom:
 
 - the stage's **icon, display name, and status**;
 - its **description**;
+- a **"Gates mods:" breakdown — New in 3.0** — for the selected stage, the mods
+  whose items it locks, each with a count (e.g. `create ×42  •  mekanism ×18`),
+  sorted by lock count (top mods shown). Derived from the synced item-lock map,
+  grouped by namespace;
 - the **PREREQUISITES needed to advance** — the dependency checklist, each
   marked **✓** (owned) or **✗** (missing);
 - a **"% to unlock" progress bar** with the **live per-condition `[[triggers]]`
@@ -2358,8 +2446,22 @@ provider before this mod could register — useful diagnostic.
 ## 8. EMI / JEI Integration
 
 ProgressiveStages provides client-side recipe-viewer feedback for both EMI and
-JEI. Both plugins are loaded only when the corresponding mod is present; no
-hard dependency.
+JEI. Locked items and recipes are **hidden** from both viewers and **re-shown
+the moment the gating stage is unlocked** — in EMI **and** JEI alike.
+
+**Both EMI and JEI are fully OPTIONAL — neither is a hard dependency.** Both are
+declared `type = "optional"` in `neoforge.mods.toml`, and the EMI mixin config is
+`"required": false`, so the mod loads and runs identically whether or not either
+viewer is installed; plugins are loaded only when the corresponding mod is present.
+
+> **Fixed in 3.0:** the recipe-viewer **reload no longer crashes when EMI is
+> absent.** The reload path that pokes EMI to refresh its index now catches
+> `Throwable` (not just `Exception`) around the EMI plugin call — when EMI isn't
+> installed, class-loading `ProgressiveStagesEMIPlugin` (it implements EMI's
+> `EmiPlugin`) raises a `NoClassDefFoundError` (an `Error`, not an `Exception`),
+> which previously propagated and made EMI behave like a hard dependency. The
+> JEI side already guards `NoClassDefFoundError`. See
+> [`ClientLockCache`](src/main/java/com/enviouse/progressivestages/client/ClientLockCache.java).
 
 ### 8.1 Visual treatment
 

@@ -1418,6 +1418,23 @@ public final class DefaultStageTemplates {
             # locked = ["id:minecraft:nether/root", "mod:somemod", "name:*end*"]
             #
             # ─────────────────────────────────────────────────────────────────────────
+            # 27.5b  [enchants].max_levels / [beacon] / [brewing] — finer gates (v3.0)
+            # ─────────────────────────────────────────────────────────────────────────
+            # Cap an enchant at a level until the stage is owned (whole-enchant lock still uses
+            # [enchants].locked). Over-cap levels are reduced on the next inventory scan.
+            # [enchants]
+            # max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]   # id:maxLevel
+            #
+            # Beacon effects a player WITHOUT the stage simply doesn't receive (others unaffected).
+            # [beacon]
+            # locked = ["id:minecraft:strength", "id:minecraft:haste"]           # MobEffect ids
+            #
+            # Potions a player WITHOUT the stage can't take out of a brewing stand (it brews + sits
+            # there until unlocked; hopper/automation extraction isn't gated).
+            # [brewing]
+            # locked = ["id:minecraft:strength", "id:minecraft:swiftness"]       # Potion ids
+            #
+            # ─────────────────────────────────────────────────────────────────────────
             # 27.6  [abilities] — gate movement abilities (v2.4 / v3.0)
             # ─────────────────────────────────────────────────────────────────────────
             # [abilities]

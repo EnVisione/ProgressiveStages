@@ -24,7 +24,12 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 - **Jade + WTHIT in-world overlay** — looking at a locked **block OR mob** shows a red `🔒 Requires: <stage>` line. Pulled from the **Modrinth Maven** (`compileOnly maven.modrinth:jade:...` / `...:wthit:...`, with a CurseMaven fallback) — not bundled jars, inert when the mods aren't installed. Entity locks are now synced to the client to power the mob overlay.
 - **`[display].encrypt_blocks`** — `encrypt_blocks = true` masquerades this stage's exact-id locked **blocks** as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline (chunk rewrite, break-speed, drop replacement). Per-stage on/off.
 - **Authoring / debug commands** — `/stage simulate [player]` (dry-run: reachable-next stages with % and which conditions are short, plus dep-blocked stages); `/stage new <id>` (scaffold a stage TOML); `/stage export` (write a markdown progression guide to the config folder).
-- **Not yet implemented (planned):** beacon-effect, brewing-potion, and enchant **level-cap** gating are a follow-up. Today, whole-enchant gating is via `[enchants]` and potion **items** via `[items]`.
+- **Three finer-grained gates (now shipped — were "planned" in earlier 3.0 drafts):**
+  - **`[enchants].max_levels`** — `max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]` caps an enchantment at that level until the gating stage is owned (effective cap = MIN across every still-missing capping stage; level `0` removes it). Enforced in the periodic inventory scan. Whole-enchant locking via `[enchants].locked` is unchanged.
+  - **`[beacon].locked`** — `locked = ["id:minecraft:strength", "id:minecraft:haste"]` (MobEffect ids). A player missing the gating stage simply doesn't receive that beacon effect; other players in range are unaffected.
+  - **`[brewing].locked`** — `locked = ["id:minecraft:strength", "id:minecraft:swiftness"]` (Potion ids). A player missing the gating stage can't TAKE the brewed potion out of a brewing stand's slots (it brews and sits there until they unlock it). Player-facing pickup only — hopper/automation extraction isn't gated.
+- **Stage Tree GUI — search + hide** — a search box filters the stage list by stage name OR by a **locked item id** (type an item to find the stage(s) that gate it; results show as a flat list), an "☑ owned" toggle hides already-unlocked stages, and the detail pane shows a "Gates mods: create ×42, mekanism ×18" breakdown for the selected stage.
+- **EMI + JEI both optional (reload-crash fix)** — locked items/recipes are hidden and re-shown on unlock in EMI **and** JEI; both are `type = "optional"` (EMI mixins `required: false`) so neither is a hard dependency, and the recipe-viewer reload no longer crashes when EMI is absent (a `NoClassDefFoundError` class-load guard was fixed).
 
 ---
 
@@ -144,7 +149,7 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[dimensions]` | `locked` (exact ids only) | Cancel travel, eject players from locked dimensions |
 | `[entities]` | `locked`, `always_unlocked` | Block attacking and interacting with entity types |
 | `[recipes]` | `locked_ids`, `locked_items` | `locked_ids` blocks specific recipe IDs; `locked_items` blocks every recipe producing the output item |
-| `[enchants]` | `locked` | Hide enchants in enchanting table, refuse anvil application, strip from inventory |
+| `[enchants]` | `locked`, **`max_levels`** | Hide enchants in enchanting table, refuse anvil application, strip from inventory. **New in 3.0:** `max_levels = ["minecraft:sharpness:3", ...]` caps an enchant at that level (instead of locking it) until the gating stage is owned — effective cap = MIN across every missing capping stage, level `0` removes it; enforced in the inventory scan |
 | `[crops]` | `locked`, `always_unlocked` | Block planting, growth ticks, bonemeal application |
 | `[screens]` | `locked` | Block opening container / GUI blocks |
 | `[professions]` | `locked` | **New in 2.5.** Gate opening a villager's trade GUI by the villager's PROFESSION (`id:`/`mod:`/`name:`; no tags). Wandering traders unaffected (use `[trades]`). |
@@ -167,6 +172,8 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[unlock]` | `toast`, `title`/`subtitle`, `sound`, `particle`, `progress_nudges`, `hud_bar` | **New in 2.4.** Unlock "juice" — toast/title/sound/particle on unlock, progress hints, and a blue progress bar above the XP bar (all optional) |
 | `[abilities]` (3.0) | `locked` += `sprint`, `swim`, `climb` | **New in 3.0.** `[abilities].locked` now also gates `sprint` / `swim` / `climb` (upward motion on ladders/vines clamped) in addition to `elytra` (`crawl` on land isn't vanilla-enforceable) |
 | `[display]` (3.0) | `encrypt_blocks`, `encrypt_as` | **New in 3.0.** `encrypt_blocks = true` masquerades this stage's exact-id locked **blocks** as `encrypt_as` (default `minecraft:stone`) until owned, via the ore-spoof pipeline. Per-stage on/off |
+| `[beacon]` | `locked` | **New in 3.0.** `locked = ["id:minecraft:strength", ...]` (MobEffect ids; `id:`/`mod:`/`name:`). A player missing the gating stage doesn't receive that beacon effect; other players in range are unaffected |
+| `[brewing]` | `locked` | **New in 3.0.** `locked = ["id:minecraft:strength", ...]` (Potion ids; `id:`/`mod:`/`name:`). A player missing the gating stage can't TAKE the brewed potion out of a brewing stand's slots (player-facing pickup only — hopper/automation extraction isn't gated) |
 | `[stage]` metadata | `hidden`, `color`, `category`, `scope`, `duration`, **`tags`** | **New in 2.4** (`hidden`/`color`/`category` GUI behaviour **activated in 2.5**; `tags` **New in 3.0**). Hide from the GUI tree, tint the stage name (`#RRGGBB`), group label/tag, `scope = "server"` (server-wide stage), temporary `duration` (auto-expires after real time), and `tags = ["combat","tier2"]` (labels for `/stage tag ...` bulk ops — no gating effect) |
 | (root) | `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
 
@@ -299,8 +306,8 @@ show_description_on_tooltip = true    # append [stage].description to the toolti
 
 | Mod | Integration |
 |---|---|
-| **EMI** | Items + fluids + abstract ingredients hidden via `removeEmiStacks` predicate; class-module fallback for Mekanism gases/pigments |
-| **JEI** | Items + fluids (every `FluidStack` ingredient type, not just `NeoForgeTypes.FLUID_STACK`) hidden; two-pass refresh; reflective ingredient-filter rebuild; uid namespace regex scan; live `IIngredientListener` |
+| **EMI** | **Optional** (`type = "optional"`, mixins `required: false`). Items + fluids + abstract ingredients hidden via `removeEmiStacks` predicate; class-module fallback for Mekanism gases/pigments; re-shown on unlock. **3.0:** the recipe-viewer reload no longer crashes when EMI is absent (a `NoClassDefFoundError` class-load guard was fixed) |
+| **JEI** | **Optional** (`type = "optional"`, no hard dependency). Items + fluids (every `FluidStack` ingredient type, not just `NeoForgeTypes.FLUID_STACK`) hidden; two-pass refresh; reflective ingredient-filter rebuild; uid namespace regex scan; live `IIngredientListener`; re-shown on unlock |
 | **FTB Quests** | `Quest` / `Chapter` `required_stage` field gates both `isVisible` and `canStartTasks`; required-stage entry in the editor config UI |
 | **FTB Library** | `StageProvider` Proxy registration so FTB's native Stage Required, Stage Task, and Stage Reward all flow through ProgressiveStages |
 | **FTB Teams** | Default backend when `team_mode = "ftb_teams"`; optional `integration.ftbquests.team_mode` reflectively delegates FTB Quests stage reads to `TeamStagesHelper` |
@@ -433,7 +440,11 @@ compat/
 - **Jade + WTHIT overlay** — looking at a locked block or mob shows `🔒 Requires: <stage>`. Sourced from the Modrinth Maven as `compileOnly` dev jars (CurseMaven fallback), inert when uninstalled. Entity locks are now synced to the client for the mob overlay.
 - **`[display].encrypt_blocks`** — masquerades this stage's exact-id locked blocks as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline. Per-stage on/off.
 - **Authoring/debug commands** — `/stage simulate [player]` (dry-run reachable-next stages + short conditions + dep-blocked stages), `/stage new <id>` (scaffold a stage TOML), `/stage export` (markdown progression guide).
-- **Planned (not yet implemented):** beacon-effect, brewing-potion, and enchant level-cap gating. Today: whole-enchant gating via `[enchants]`, potion items via `[items]`.
+- **`[enchants].max_levels` enchant level cap** — `max_levels = ["minecraft:sharpness:3", ...]` caps an enchant at that level (instead of locking it) until the gating stage is owned; effective cap = MIN across every missing capping stage, level `0` removes it; enforced in the periodic inventory scan. `[enchants].locked` (whole-enchant) unchanged.
+- **`[beacon].locked` beacon-effect gating** — `["id:minecraft:strength", ...]` (MobEffect ids). A player missing the gating stage doesn't receive that beacon effect; other players in range are unaffected.
+- **`[brewing].locked` brewed-potion gating** — `["id:minecraft:strength", ...]` (Potion ids). A player missing the gating stage can't take the brewed potion out of a brewing stand's slots (player-facing pickup only; hopper/automation extraction isn't gated).
+- **Stage Tree GUI search + hide** — a search box filters by stage name OR by a locked item id (type an item to find the stage(s) that gate it; flat results), an "☑ owned" toggle hides already-unlocked stages, and the detail pane shows a "Gates mods: create ×42, mekanism ×18" breakdown.
+- **EMI + JEI both optional (reload-crash fix)** — locked items/recipes hidden and re-shown on unlock in EMI and JEI; both `type = "optional"` (EMI mixins `required: false`); the recipe-viewer reload no longer crashes when EMI is absent (a `NoClassDefFoundError` class-load guard was fixed).
 
 ### v2.5
 - **`[professions]` lock category** — gate opening a villager's trade GUI by the villager's PROFESSION (`id:`/`mod:`/`name:`; no tags). Wandering traders unaffected (use `[trades]`). Opt-in (no overhead when unused).
