@@ -587,6 +587,15 @@ public class ServerEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             var entityType = event.getTarget().getType();
 
+            // v2.5: villager profession gating — block opening the trade GUI of a gated profession.
+            if (event.getTarget() instanceof net.minecraft.world.entity.npc.Villager villager) {
+                if (!VillagerProfessionEnforcer.canTradeWith(player, villager)) {
+                    event.setCanceled(true);
+                    VillagerProfessionEnforcer.notifyLocked(player, villager);
+                    return;
+                }
+            }
+
             // Structure chest-locking applied to entities too: lootr minecarts, item frames
             // with loot, and other entity-based containers sitting inside a locked structure
             // must refuse interaction for players lacking the stage.

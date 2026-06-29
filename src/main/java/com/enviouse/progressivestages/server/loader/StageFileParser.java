@@ -461,6 +461,7 @@ public final class StageFileParser {
         b.screens(      parseCategory(config, "screens"));
         b.loot(         parseCategory(config, "loot"));
         b.trades(       parseCategory(config, "trades"));
+        b.professions(  parseCategory(config, "professions"));
         b.mobSpawns(    parseCategoryField(config, "mobs", "locked_spawns"));
 
         // pets: two named lists in the same table

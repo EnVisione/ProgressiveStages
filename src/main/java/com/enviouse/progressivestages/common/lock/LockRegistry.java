@@ -58,6 +58,8 @@ public final class LockRegistry {
     private final ResolvedCategory<Item>              screenItemCat   = new ResolvedCategory<>(Registries.ITEM);
     private final ResolvedCategory<Item>              lootCat         = new ResolvedCategory<>(Registries.ITEM);
     private final ResolvedCategory<Item>              tradeCat        = new ResolvedCategory<>(Registries.ITEM);
+    /** v2.5 villager professions — id-only (id:/mod:/name:); professions have no tags. */
+    private final ResolvedCategory<Object>            professionCat   = new ResolvedCategory<>(null);
     private final ResolvedCategory<EntityType<?>>     petTamingCat      = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petBreedingCat    = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petCommandingCat  = new ResolvedCategory<>(Registries.ENTITY_TYPE);
@@ -130,6 +132,7 @@ public final class LockRegistry {
     public void clear() {
         itemCat.clear(); blockCat.clear(); fluidCat.clear(); entityCat.clear(); spawnCat.clear();
         enchantCat.clear(); cropCat.clear(); screenCat.clear(); screenItemCat.clear(); lootCat.clear(); tradeCat.clear();
+        professionCat.clear();
         petTamingCat.clear(); petBreedingCat.clear(); petCommandingCat.clear();
         recipeIdCat.clear(); recipeOutputCat.clear();
         dimensionLocks.clear();
@@ -179,6 +182,7 @@ public final class LockRegistry {
         screenItemCat.register(locks.screens(), id);
         lootCat.register(locks.loot(), id);
         tradeCat.register(locks.trades(), id);
+        professionCat.register(locks.professions(), id);
         petTamingCat.register(locks.petsTaming(), id);
         petBreedingCat.register(locks.petsBreeding(), id);
         petCommandingCat.register(locks.petsCommanding(), id);
@@ -1028,6 +1032,24 @@ public final class LockRegistry {
     public Optional<StageId> primaryRestrictingStageForTrade(net.minecraft.server.level.ServerPlayer player, Item item) {
         if (player == null || item == null) return Optional.empty();
         return firstMissing(player, getRequiredStagesForTrade(item));
+    }
+
+    /** v2.5 [professions] — gating stages for a villager profession id (id-only matching). */
+    public Set<StageId> getRequiredStagesForProfession(ResourceLocation professionId) {
+        if (professionId == null) return Set.of();
+        return professionCat.findStagesIdOnly(professionId);
+    }
+
+    public boolean isProfessionBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation professionId) {
+        if (player == null || professionId == null) return false;
+        Set<StageId> gating = getRequiredStagesForProfession(professionId);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    public Optional<StageId> primaryRestrictingStageForProfession(net.minecraft.server.level.ServerPlayer player, ResourceLocation professionId) {
+        if (player == null || professionId == null) return Optional.empty();
+        return firstMissing(player, getRequiredStagesForProfession(professionId));
     }
 
     public Set<StageId> getRequiredStagesForPetTaming(EntityType<?> type) {

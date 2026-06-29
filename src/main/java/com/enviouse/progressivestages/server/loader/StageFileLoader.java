@@ -238,6 +238,8 @@ public class StageFileLoader {
         validateCategoryIds(locks.petsTaming(),   entityRegistry, "PetTaming",   invalidItems);
         validateCategoryIds(locks.petsBreeding(), entityRegistry, "PetBreeding", invalidItems);
         validateCategoryIds(locks.recipeOutputs(), itemRegistry, "RecipeOutput", invalidItems);
+        validateCategoryIds(locks.professions(),
+            net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION, "Profession", invalidItems);
 
         // v2.5: dead trigger targets — a [[triggers]] condition whose (non-tag) subject id doesn't
         // resolve to a real entity/block/item/effect. Data-driven targets (advancement/dimension/
