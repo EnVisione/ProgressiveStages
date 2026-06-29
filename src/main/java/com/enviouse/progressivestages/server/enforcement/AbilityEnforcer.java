@@ -22,9 +22,12 @@ import java.util.function.BooleanSupplier;
  * <ul>
  *   <li>{@code elytra} — stops gliding</li>
  *   <li>{@code sprint} — cancels sprinting</li>
- *   <li>{@code swim} / {@code crawl} — cancels the swim/crawl pose</li>
+ *   <li>{@code swim} — cancels the swimming pose</li>
  *   <li>{@code climb} — clamps upward motion on ladders/vines (can't climb up)</li>
  * </ul>
+ *
+ * <p>({@code crawl} on land isn't separately enforceable in vanilla — the prone pose doesn't set the
+ * swim flag and the player is physically wedged in a 1-block gap — so it's intentionally not gated.)
  *
  * <p>Other abilities are better expressed via {@code [attribute]} modifiers or KubeJS, so they
  * aren't force-cancelled here. Unknown ability names simply do nothing.
@@ -54,7 +57,6 @@ public final class AbilityEnforcer {
         cancelIfLacking("elytra", player, player::isFallFlying, player::stopFallFlying);
         cancelIfLacking("sprint", player, player::isSprinting, () -> player.setSprinting(false));
         cancelIfLacking("swim", player, player::isSwimming, () -> player.setSwimming(false));
-        cancelIfLacking("crawl", player, player::isSwimming, () -> player.setSwimming(false));
 
         // climb — clamp any upward velocity while on a ladder/vine the player can't yet climb.
         if (lacks("climb", player) && player.onClimbable()) {

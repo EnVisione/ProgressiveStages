@@ -130,12 +130,16 @@ public final class StageTriggerEvaluator {
         biomeTimeConds.clear();
         hudBarStages.clear();
         nudgeStages.clear();
+        // Dedup biome_time accrual by target: all conditions for the same biome share one counter,
+        // so it must advance ONCE per poll — accruing per-condition would multiply the rate by K.
+        java.util.Set<String> seenBiomeTargets = new java.util.HashSet<>();
         for (StageDefinition def : stages) {
             if (def.hasTriggers()) {
                 RULES.put(def.getId(), def.getTriggers());
                 for (TriggerRule rule : def.getTriggers()) {
                     for (TriggerCondition c : rule.conditions()) {
-                        if (c.type() == TriggerConditionType.BIOME_TIME) {
+                        if (c.type() == TriggerConditionType.BIOME_TIME
+                                && seenBiomeTargets.add(c.targetBody())) {
                             biomeTimeConds.add(c);
                         }
                         if (c.type() == TriggerConditionType.KILL_WITH) {

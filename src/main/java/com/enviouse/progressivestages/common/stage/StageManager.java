@@ -137,9 +137,28 @@ public class StageManager {
         // Fire events for each newly granted stage
         for (StageId granted : newlyGranted) {
             fireStageChangeEvent(player, teamId, granted, StageChangeType.GRANTED, cause);
+            applyRewardsOnce(player, granted);
         }
 
         if (serverScoped) syncAllPlayers(); else syncToTeamMembers(teamId);
+    }
+
+    /** v3.0: apply a newly-granted stage's [rewards] ONCE, to the player who earned/bought it. */
+    private void applyRewardsOnce(ServerPlayer player, StageId stageId) {
+        StageOrder.getInstance().getStageDefinition(stageId).ifPresent(d ->
+            com.enviouse.progressivestages.server.enforcement.StageRewardApplier.apply(player, d));
+    }
+
+    /**
+     * v3.0: record that {@code player}'s team actually PAID for a stage (called from the purchase
+     * handler), so {@code refund_percent} only refunds stages that were bought — not ones earned via
+     * trigger/command/quest, which would otherwise mint free items on every revoke/expiry.
+     */
+    public void markPurchased(ServerPlayer player, StageId stageId) {
+        if (player.server == null) return;
+        UUID storeTeam = isServerScoped(stageId) ? SERVER_TEAM : TeamProvider.getInstance().getTeamId(player);
+        com.enviouse.progressivestages.server.triggers.StagePurchaseData.get(player.server)
+            .markPaid(storeTeam, stageId);
     }
 
     /**
@@ -218,6 +237,7 @@ public class StageManager {
         // Fire events for each newly granted stage
         for (StageId granted : newlyGranted) {
             fireStageChangeEvent(player, teamId, granted, StageChangeType.GRANTED, cause);
+            applyRewardsOnce(player, granted);
         }
 
         // Sync to all team members
@@ -251,9 +271,14 @@ public class StageManager {
         // Fire events for each revoked stage
         for (StageId revokedStage : revoked) {
             fireStageChangeEvent(player, teamId, revokedStage, StageChangeType.REVOKED, cause);
-            // v3.0: refund part of a purchasable stage's cost to the player when it's revoked.
+            // v3.0: refund part of the cost ONLY for stages this team actually PURCHASED (consume the
+            // paid flag so it refunds at most once) — never for earned/granted stages.
             StageOrder.getInstance().getStageDefinition(revokedStage).ifPresent(d -> {
-                if (d.isPurchasable() && d.getCost().refundPercent() > 0) refundCost(player, d.getCost());
+                if (d.isPurchasable() && d.getCost().refundPercent() > 0 && player.server != null
+                        && com.enviouse.progressivestages.server.triggers.StagePurchaseData
+                            .get(player.server).consumePaid(storeTeam, revokedStage)) {
+                    refundCost(player, d.getCost());
+                }
             });
         }
 
@@ -454,10 +479,11 @@ public class StageManager {
                             Component message = TextUtil.parseColorCodes(msg);
                             player.sendSystemMessage(message);
                         });
-                        // v2.4: optional [unlock] toast/title/subtitle/sound/particles.
+                        // v2.4: optional [unlock] toast/title/subtitle/sound/particles. This is
+                        // per-member PRESENTATION (everyone on the team sees it). [rewards] are NOT
+                        // applied here — they'd duplicate per online member / per online player on a
+                        // server-scoped grant. They're applied once to the granting player instead.
                         com.enviouse.progressivestages.server.enforcement.UnlockEffectsApplier.apply(player, def);
-                        // v3.0: optional [rewards] — items/effects/commands/teleport/xp on unlock.
-                        com.enviouse.progressivestages.server.enforcement.StageRewardApplier.apply(player, def);
                     }
                 }
 

@@ -279,6 +279,8 @@ public class NetworkHandler {
             // Grant (bypass dependency auto-grant since prereqs are already satisfied).
             StageManager.getInstance().grantStageWithCause(player, stageId,
                 com.enviouse.progressivestages.common.api.StageCause.PURCHASE);
+            // v3.0: record the purchase so refund_percent only ever refunds what was actually paid for.
+            StageManager.getInstance().markPurchased(player, stageId);
             if (cost.cooldownSeconds() > 0) lastPurchase.put(player.getUUID(), System.currentTimeMillis());
             // Refresh the GUI snapshot.
             sendStageGuiData(player);

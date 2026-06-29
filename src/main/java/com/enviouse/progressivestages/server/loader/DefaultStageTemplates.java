@@ -187,7 +187,7 @@ public final class DefaultStageTemplates {
             [stage]
             # The stage ID. Should match the filename without ".toml". Lower-case,
             # no spaces. Must be unique across all stage files in the pack.
-            id = "thdiamond_age"
+            id = "diamond_age"
 
             # Human-readable name shown in the lock message, stage list, EMI tooltip, etc.
             # Supports &-codes for color/formatting when displayed.
@@ -1407,7 +1407,7 @@ public final class DefaultStageTemplates {
             # 27.6  [abilities] — gate movement abilities (v2.4 / v3.0)
             # ─────────────────────────────────────────────────────────────────────────
             # [abilities]
-            # locked = ["elytra", "sprint", "swim", "crawl", "climb"]   # any subset
+            # locked = ["elytra", "sprint", "swim", "climb"]   # any subset
             #
             # ─────────────────────────────────────────────────────────────────────────
             # 27.7  [display] — per-stage presentation + encrypted-block visual (v2.3 / v3.0)
