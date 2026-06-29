@@ -60,6 +60,10 @@ public final class LockRegistry {
     private final ResolvedCategory<Item>              tradeCat        = new ResolvedCategory<>(Registries.ITEM);
     /** v2.5 villager professions — id-only (id:/mod:/name:); professions have no tags. */
     private final ResolvedCategory<Object>            professionCat   = new ResolvedCategory<>(null);
+    /** v2.5 advancements — id-only; hidden from the advancements screen until the gating stage is owned. */
+    private final ResolvedCategory<Object>            advancementCat  = new ResolvedCategory<>(null);
+    /** Fast-path: true if any stage declares an advancement lock (gates the packet-filter mixin). */
+    private volatile boolean anyAdvancementLocks = false;
     private final ResolvedCategory<EntityType<?>>     petTamingCat      = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petBreedingCat    = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petCommandingCat  = new ResolvedCategory<>(Registries.ENTITY_TYPE);
@@ -133,6 +137,8 @@ public final class LockRegistry {
         itemCat.clear(); blockCat.clear(); fluidCat.clear(); entityCat.clear(); spawnCat.clear();
         enchantCat.clear(); cropCat.clear(); screenCat.clear(); screenItemCat.clear(); lootCat.clear(); tradeCat.clear();
         professionCat.clear();
+        advancementCat.clear();
+        anyAdvancementLocks = false;
         petTamingCat.clear(); petBreedingCat.clear(); petCommandingCat.clear();
         recipeIdCat.clear(); recipeOutputCat.clear();
         dimensionLocks.clear();
@@ -183,6 +189,8 @@ public final class LockRegistry {
         lootCat.register(locks.loot(), id);
         tradeCat.register(locks.trades(), id);
         professionCat.register(locks.professions(), id);
+        advancementCat.register(locks.advancements(), id);
+        if (!locks.advancements().isEmpty()) anyAdvancementLocks = true;
         petTamingCat.register(locks.petsTaming(), id);
         petBreedingCat.register(locks.petsBreeding(), id);
         petCommandingCat.register(locks.petsCommanding(), id);
@@ -1050,6 +1058,24 @@ public final class LockRegistry {
     public Optional<StageId> primaryRestrictingStageForProfession(net.minecraft.server.level.ServerPlayer player, ResourceLocation professionId) {
         if (player == null || professionId == null) return Optional.empty();
         return firstMissing(player, getRequiredStagesForProfession(professionId));
+    }
+
+    // ---- v2.5 [advancements] (hidden from the advancements screen) ----
+
+    /** Cheap fast-path: true if any stage gates an advancement. Gates the packet-filter mixin. */
+    public boolean hasAdvancementLocks() { return anyAdvancementLocks; }
+
+    public Set<StageId> getRequiredStagesForAdvancement(ResourceLocation advancementId) {
+        if (advancementId == null) return Set.of();
+        return advancementCat.findStagesIdOnly(advancementId);
+    }
+
+    /** True if this advancement should be hidden from {@code player} (gated and stage not owned). */
+    public boolean isAdvancementHiddenFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation advancementId) {
+        if (!anyAdvancementLocks || player == null || advancementId == null) return false;
+        Set<StageId> gating = getRequiredStagesForAdvancement(advancementId);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
     }
 
     public Set<StageId> getRequiredStagesForPetTaming(EntityType<?> type) {

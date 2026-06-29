@@ -391,6 +391,8 @@ public class StageManager {
                 NetworkHandler.sendStageSync(player, stages);
                 // v2.4: re-apply [attribute] modifiers for this member after the team's stages changed.
                 com.enviouse.progressivestages.server.enforcement.StageAttributeApplier.reconcile(player);
+                // v2.5: re-send advancements so newly (un)gated ones (dis)appear without a relog.
+                com.enviouse.progressivestages.server.enforcement.AdvancementHider.resyncIfNeeded(player);
             }
         }
     }
@@ -401,6 +403,7 @@ public class StageManager {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             NetworkHandler.sendStageSync(player, getStages(player));
             com.enviouse.progressivestages.server.enforcement.StageAttributeApplier.reconcile(player);
+            com.enviouse.progressivestages.server.enforcement.AdvancementHider.resyncIfNeeded(player);
         }
     }
 

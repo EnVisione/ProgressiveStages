@@ -21,6 +21,7 @@
     "ClientboundLevelChunkPacketDataMixin",
     "LevelChunkSectionAccessor",
     "ServerCommonPacketListenerImplMixin",
+    "ServerAdvancementHidingMixin",
     "ClientboundSectionBlocksUpdatePacketAccessor"
   ],
   "client": [
