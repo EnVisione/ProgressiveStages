@@ -78,7 +78,12 @@ public class StageTreeScreen extends Screen {
 
     private void rebuildNodes() {
         nodes.clear();
-        Set<StageId> all = ClientStageCache.getAllStageDefinitionIds();
+        // v2.5: stages with [stage].hidden = true are omitted from the tree entirely (their children
+        // re-root to the top level). Build the working set from the non-hidden definitions.
+        Set<StageId> all = new HashSet<>();
+        for (StageId id : ClientStageCache.getAllStageDefinitionIds()) {
+            if (!ClientStageCache.isHidden(id)) all.add(id);
+        }
 
         // Build the DAG as parent → children (a stage's children are the stages that list it as a
         // dependency). Render as a depth-first TREE so each branch is grouped under its parent —
@@ -182,11 +187,11 @@ public class StageTreeScreen extends Screen {
 
             int rowX = x0 + PAD + node.depth() * 10;
             g.renderItem(iconFor(node.id()), rowX, rowTop + 1);
-            ChatFormatting color = node.owned() ? ChatFormatting.GREEN
-                : node.available() ? ChatFormatting.YELLOW : ChatFormatting.GRAY;
+            int statusArgb = node.owned() ? 0xFF55E066 : node.available() ? 0xFFE8E04C : 0xFFAAAAAA;
+            int argb = stageColorOr(node.id(), statusArgb);
             String marker = node.owned() ? "✔ " : node.available() ? "➤ " : "🔒 ";
-            g.drawString(this.font, Component.literal(marker + ClientStageCache.getDisplayName(node.id())).withStyle(color),
-                rowX + 20, rowTop + 5, 0xFFFFFFFF);
+            g.drawString(this.font, marker + ClientStageCache.getDisplayName(node.id()),
+                rowX + 20, rowTop + 5, argb);
         }
         g.disableScissor();
 
@@ -216,12 +221,20 @@ public class StageTreeScreen extends Screen {
 
         // Header
         g.renderItem(iconFor(id), x0, dy);
-        ChatFormatting nameColor = node.owned() ? ChatFormatting.GREEN
-            : node.available() ? ChatFormatting.YELLOW : ChatFormatting.RED;
+        int statusArgb = node.owned() ? 0xFF55E066 : node.available() ? 0xFFFFE85C : 0xFFFF5555;
+        int nameArgb = stageColorOr(id, statusArgb);
         g.drawString(this.font, Component.literal(ClientStageCache.getDisplayName(id))
-            .withStyle(nameColor, ChatFormatting.BOLD), x0 + 20, dy + 1, 0xFFFFFFFF);
+            .withStyle(ChatFormatting.BOLD), x0 + 20, dy + 1, nameArgb);
         g.drawString(this.font, Component.literal(id.toString()).withStyle(ChatFormatting.DARK_GRAY),
             x0 + 20, dy + 11, 0xFFFFFFFF);
+        // v2.5: category tag, top-right of the header (no overlap with the left-aligned name/id).
+        String category = ClientStageCache.getCategory(id);
+        if (category != null && !category.isEmpty()) {
+            Component tag = Component.literal("[" + category + "]").withStyle(ChatFormatting.DARK_AQUA);
+            int tagX = Math.max(x0 + 20 + this.font.width(ClientStageCache.getDisplayName(id)) + 6,
+                x1 - this.font.width(tag));
+            g.drawString(this.font, tag, tagX, dy + 1, 0xFFFFFFFF);
+        }
         dy += 24;
 
         String statusKey = node.owned() ? "&aUnlocked" : node.available() ? "&eReady to unlock" : "&cLocked";
@@ -368,6 +381,20 @@ public class StageTreeScreen extends Screen {
         int fill = (int) ((w - 2) * Math.max(0f, Math.min(1f, frac)));
         int color = frac >= 1f ? 0xFF55E066 : 0xFF4FA3E0;
         if (fill > 0) g.fill(x + 1, y + 1, x + 1 + fill, y + h - 1, color);
+    }
+
+    /**
+     * v2.5: a stage's {@code [stage].color} as an ARGB int when it's a {@code #RRGGBB} hex, else the
+     * status fallback (so owned/available/locked colouring still applies when no custom colour is set).
+     */
+    private int stageColorOr(StageId id, int fallback) {
+        String c = ClientStageCache.getColor(id);
+        if (c == null || c.isEmpty()) return fallback;
+        if (c.startsWith("#") && c.length() == 7) {
+            try { return 0xFF000000 | Integer.parseInt(c.substring(1), 16); }
+            catch (NumberFormatException ignored) {}
+        }
+        return fallback;
     }
 
     private ItemStack iconFor(StageId id) {

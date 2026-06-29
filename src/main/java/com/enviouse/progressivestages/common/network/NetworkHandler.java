@@ -402,7 +402,10 @@ public class NetworkHandler {
                         com.enviouse.progressivestages.common.config.StageConfig.isShowTooltip()),
                     resolveFlag(def.getShowDescriptionOnTooltip(),
                         com.enviouse.progressivestages.common.config.StageConfig.isShowStageDescriptionOnTooltip()),
-                    def.hasTriggers()
+                    def.hasTriggers(),
+                    def.isHidden(),
+                    def.getColor(),
+                    def.getCategory()
                 ));
             });
         }
@@ -515,7 +518,10 @@ public class NetworkHandler {
                     entry.obscureIcon(),
                     entry.showTooltip(),
                     entry.showDescriptionOnTooltip(),
-                    entry.hasTriggers()
+                    entry.hasTriggers(),
+                    entry.hidden(),
+                    entry.color(),
+                    entry.category()
                 ));
             }
             ClientStageCache.setStageDefinitions(definitions);
@@ -632,7 +638,8 @@ public class NetworkHandler {
                                        List<ResourceLocation> dependencies, String description,
                                        String icon, boolean displayAsUnknownItem, boolean obscureIcon,
                                        boolean showTooltip, boolean showDescriptionOnTooltip,
-                                       boolean hasTriggers) {
+                                       boolean hasTriggers,
+                                       boolean hidden, String color, String category) {
 
         private static final StreamCodec<io.netty.buffer.ByteBuf, List<ResourceLocation>> DEPS_CODEC =
             ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list());
@@ -649,6 +656,10 @@ public class NetworkHandler {
                 buf.writeBoolean(e.showTooltip());
                 buf.writeBoolean(e.showDescriptionOnTooltip());
                 buf.writeBoolean(e.hasTriggers());
+                // v2.5: presentation metadata for the GUI tree.
+                buf.writeBoolean(e.hidden());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.color());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.category());
             },
             buf -> new StageDefinitionEntry(
                 ResourceLocation.STREAM_CODEC.decode(buf),
@@ -660,7 +671,10 @@ public class NetworkHandler {
                 buf.readBoolean(),
                 buf.readBoolean(),
                 buf.readBoolean(),
-                buf.readBoolean()
+                buf.readBoolean(),
+                buf.readBoolean(),
+                ByteBufCodecs.STRING_UTF8.decode(buf),
+                ByteBufCodecs.STRING_UTF8.decode(buf)
             )
         );
     }

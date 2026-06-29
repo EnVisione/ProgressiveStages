@@ -40,7 +40,26 @@ public class ClientStageCache {
                                       String description, Optional<ResourceLocation> icon,
                                       boolean displayAsUnknownItem, boolean obscureIcon,
                                       boolean showTooltip, boolean showDescriptionOnTooltip,
-                                      boolean hasTriggers) {
+                                      boolean hasTriggers,
+                                      boolean hidden, String color, String category) {
+    }
+
+    /** v2.5: true if the stage opted out of the GUI tree via {@code [stage].hidden = true}. */
+    public static boolean isHidden(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null && def.hidden();
+    }
+
+    /** v2.5: the stage's GUI tint (hex {@code #RRGGBB} or {@code &}-code), or "" for the default. */
+    public static String getColor(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.color() : "";
+    }
+
+    /** v2.5: the stage's GUI category/group label, or "" for none. */
+    public static String getCategory(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.category() : "";
     }
 
     /**
