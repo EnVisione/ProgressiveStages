@@ -168,6 +168,7 @@ public final class DefaultStageTemplates {
             #  23.  [[triggers]]         — AUTO-GRANT this stage when conditions are met (NEW v2.3)
             #  24.  [display]            — per-stage tooltip / unknown-item rendering (NEW v2.3)
             #  25.  v2.4 ADDITIONS       — [attribute]/[revoke]/[cost]/[unlock]/[abilities]/scope/duration
+            #  25b. v2.5 ADDITIONS       — [professions]/[advancements]/structure padding/new triggers/datapack/KubeJS
             #  26.  TROUBLESHOOTING      — "why isn't my lock working?"
             # ============================================================================
 
@@ -1208,6 +1209,48 @@ public final class DefaultStageTemplates {
             #   enter_structure  structure="minecraft:village_plains" (entered the structure)
             #   tame             count=5  [entity="minecraft:wolf"]    (animals tamed)
             #   kill_with        entity="minecraft:ender_dragon" with="minecraft:diamond_sword" count=1
+
+
+            # ============================================================================
+            # 25b. v2.5 ADDITIONS — profession/advancement gating, structure padding,
+            #                       new triggers, datapack stages, deep KubeJS
+            # ============================================================================
+            # All OPTIONAL. Examples commented out.
+            #
+            # --- [professions] — gate a villager's trade GUI by its PROFESSION -----------
+            # A player without the stage can't trade with that villager at all (wandering
+            # traders have no profession — use [trades] for those). id:/mod:/name: matching.
+            # [professions]
+            # locked = ["id:minecraft:weaponsmith", "id:minecraft:armorer"]
+            #
+            # --- [advancements] — HIDE advancements from the advancements screen ---------
+            # Locked advancements vanish entirely until the stage is owned (server-side —
+            # the client is never told they exist). They reappear when the stage is gained.
+            # [advancements]
+            # locked = ["id:minecraft:nether/root", "mod:somemod"]
+            #
+            # --- [structures] entry buffer (with the [structures] section in section 18) -
+            #   entry_padding = 4     # repelled players are placed 4 blocks clear of the box.
+            #                         # On entry you're bounced back to your last safe spot.
+            #
+            # --- NEW [[triggers]] condition types ---------------------------------------
+            #   world_time   count=13000                       (time-of-day tick 0..23999; night ~13000)
+            #   breed        count=5 [entity="minecraft:cow"]  (optional species/#tag; bare = all animals)
+            #   kill_with    entity="#minecraft:skeletons" with="minecraft:bow" count=10   (#tag victim ok)
+            #   script       id="my_condition"                 (custom — evaluated by a KubeJS predicate)
+            #
+            # --- Datapack stages ---------------------------------------------------------
+            # Stage .toml files can also ship inside a datapack at
+            #   data/<namespace>/progressivestages/stages/*.toml
+            # They load at world load + /reload. A config file with the same stage id WINS,
+            # so datapacks provide defaults a server can override locally.
+            #
+            # --- Deep KubeJS (server script example) ------------------------------------
+            #   ProgressiveStages.onGranted((player, stage) => player.tell('Unlocked ' + stage))
+            #   ProgressiveStages.onRevoked((player, stage) => player.tell('Lost ' + stage))
+            #   ProgressiveStages.condition('rich', player =>
+            #       player.getMainHandItem().id == 'minecraft:diamond')   // use: type="script", id="rich"
+            #   // also: ProgressiveStages.has / grant / revoke / list / percent(player, 'stage')
 
 
             # ============================================================================
