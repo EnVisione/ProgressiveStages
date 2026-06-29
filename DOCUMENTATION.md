@@ -45,7 +45,7 @@
    - [4.25 `[revoke]` + temporary stages — regression](#425-revoke--temporary-stages--regression) — **New in 2.4**
    - [4.26 `[cost]` — skill-tree purchasable stages](#426-cost--skill-tree-purchasable-stages) — **New in 2.4** *(cooldown / refund **New in 3.0**)*
    - [4.27 `[unlock]` — unlock "juice"](#427-unlock--unlock-juice) — **New in 2.4**
-   - [4.28 `[abilities]` — ability gating](#428-abilities--ability-gating) — **New in 2.4** *(sprint / swim / crawl / climb **New in 3.0**)*
+   - [4.28 `[abilities]` — ability gating](#428-abilities--ability-gating) — **New in 2.4** *(sprint / swim / climb **New in 3.0**)*
    - [4.29 `[stage]` new metadata — hidden / color / category / scope / tags](#429-stage-new-metadata--hidden--color--category--scope--tags) — **New in 2.4** *(hidden / color / category live in the GUI in 2.5; `tags` **New in 3.0**)*
    - [4.30 Datapack-loaded stages](#430-datapack-loaded-stages) — **New in 2.5**
    - [4.31 `[rewards]` — items / effects / commands / teleport / xp on grant](#431-rewards--items--effects--commands--teleport--xp-on-grant) — **New in 3.0**
@@ -1441,10 +1441,13 @@ wins when both are present). The cooldown timer is **in-memory / transient** (it
 resets on server restart) and is shared across all purchasable stages for that
 player.
 
-**`refund_percent` (New in 3.0).** When a stage that was **purchased** via its
-`[cost]` is later **revoked** (by command, regression, cascade, etc.), this
-percentage of its `items` + `xp_levels` cost is **returned** to the player. Only
-applies to stages whose `[cost]` set a non-zero `refund_percent`.
+**`refund_percent` (New in 3.0).** When a stage that was **actually purchased**
+via its `[cost]` is later **revoked** (by command, regression, cascade, etc.),
+this percentage of its `items` + `xp_levels` cost is **returned** to the player.
+The mod records each real purchase (persisted) and consumes that record on
+refund, so a stage **earned** via a trigger / command / quest reward — or a
+temporary purchasable stage that auto-expires — is **never** refunded (no free
+items), and each purchase is refunded at most once.
 
 **`bypass_requirements`:**
 
@@ -1514,9 +1517,12 @@ is dropped out of that action. The recognised entries are:
 |---------|------------------------------------------|
 | `elytra` | Elytra **gliding** is blocked — the player is dropped out of flight each tick. |
 | `sprint` | **New in 3.0.** Sprinting is **cancelled** each tick. |
-| `swim` | **New in 3.0.** The **swimming** pose is cancelled. |
-| `crawl` | **New in 3.0.** The crawl/swim pose is cancelled (same mechanism as `swim`). |
+| `swim` | **New in 3.0.** The **swimming** pose is cancelled (also covers fast-swim in water). |
 | `climb` | **New in 3.0.** **Climbing up** ladders/vines is blocked — any upward velocity on a climbable is clamped to ≤ 0 (the player can still hold position / descend). |
+
+> `crawl` on land isn't separately enforceable in vanilla (the prone pose doesn't
+> set the swim flag and the player is wedged in a 1-block gap), so it is **not** a
+> gated ability — listing it does nothing.
 
 > Creative-mode players bypass ability gating when `allow_creative_bypass` is on
 > (the same global toggle that exempts other locks). Unknown ability names simply
@@ -1599,9 +1605,11 @@ The implementation is
 
 `[rewards]` is the natural companion to `[cost]` (§4.26): where `[cost]` is what
 a stage **takes** to unlock, `[rewards]` is what the stage **hands out the moment
-it is granted**. It fires **once per actual grant** (from the same grant path as
-the `[unlock]` juice), so it does **not** re-fire on every login or sync. Every
-field is optional — an empty / absent `[rewards]` does nothing.
+it is granted**. It fires **once per actual grant**, applied to the **single
+player who earned / bought the stage** — not once per online team member, and not
+to every player on a server-scoped grant (that would duplicate items / commands /
+teleports). It does **not** re-fire on login or sync. Every field is optional —
+an empty / absent `[rewards]` does nothing.
 
 ```toml
 [rewards]
