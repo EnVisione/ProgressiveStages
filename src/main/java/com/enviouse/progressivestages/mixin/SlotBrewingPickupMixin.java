@@ -19,10 +19,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 
 /**
  * v3.0: brewing-potion gating via {@code [brewing].locked}. Rather than fighting the brewing-stand
- * fuel/timer loop, this gates the player's ability to TAKE a locked brewed potion out of the stand's
+ * fuel/timer loop, this gates the PLAYER's ability to TAKE a locked brewed potion out of the stand's
  * potion slots — the potion brews and sits there, but a player missing the gating stage can't pull it
  * until they unlock it. Identifies brewing slots by their {@link BrewingStandBlockEntity} container
- * (the package-private PotionSlot type can't be referenced directly). No-op when no brewing lock exists.
+ * (the package-private PotionSlot type can't be referenced directly). Hopper/automation extraction is
+ * closed separately by {@code BrewingStandBlockEntityMixin}. No-op when no brewing lock exists.
  */
 @Mixin(Slot.class)
 public abstract class SlotBrewingPickupMixin {

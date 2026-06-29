@@ -92,6 +92,8 @@ public class StageTreeScreen extends Screen {
             filter = s == null ? "" : s.trim().toLowerCase(java.util.Locale.ROOT);
             recomputeFilter();
             rebuildNodes();
+            // Re-clamp the selection: filtering can shrink the node list below the current index.
+            if (selected >= nodes.size()) selected = nodes.isEmpty() ? -1 : 0;
             clampListScroll();
         });
         addRenderableWidget(this.searchBox);
@@ -300,7 +302,7 @@ public class StageTreeScreen extends Screen {
     }
 
     private void renderDetail(GuiGraphics g, int mouseX, int mouseY) {
-        if (selected < 0) return;
+        if (selected < 0 || selected >= nodes.size()) return; // defensive: list can shrink under a search
         Node node = nodes.get(selected);
         StageId id = node.id();
         int x0 = dividerX + PAD, x1 = right - PAD;

@@ -24,6 +24,7 @@
     "ServerAdvancementHidingMixin",
     "BeaconBlockEntityMixin",
     "SlotBrewingPickupMixin",
+    "BrewingStandBlockEntityMixin",
     "ClientboundSectionBlocksUpdatePacketAccessor"
   ],
   "client": [

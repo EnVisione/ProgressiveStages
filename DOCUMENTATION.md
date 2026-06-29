@@ -1754,11 +1754,13 @@ player **missing** the gating stage **unable to TAKE** the brewed potion out of 
 brewing stand's potion slots: the potion still brews and **sits there** until the
 player unlocks it, at which point they can pull it normally.
 
-> **Limitation:** only the **player-facing pickup** from the stand's potion slots
-> is gated. Hopper / automation extraction is **not** gated (the underlying
-> potions are component-based, so automated transfer bypasses the slot
-> `mayPickup` check). Use a `[screens]` or block gate on the brewing stand itself
-> if you need to keep players out entirely.
+> **Both player and hopper extraction are gated.** The player-facing pickup from
+> the potion slots is blocked by the slot `mayPickup` check; hopper / funnel
+> extraction is blocked by `BrewingStandBlockEntityMixin` (on
+> `canTakeItemThroughFace`), gated on the **nearest player** within 16 blocks —
+> the same best-effort heuristic the mod uses for automated crafting (hopper
+> transfers carry no player). If no player is in range, extraction proceeds. For
+> an absolute lock, also gate the brewing stand block itself via `[screens]`.
 
 > Implementation: [`SlotBrewingPickupMixin`](src/main/java/com/enviouse/progressivestages/mixin/SlotBrewingPickupMixin.java)
 > (`Slot.mayPickup` on `BrewingStandBlockEntity` containers),

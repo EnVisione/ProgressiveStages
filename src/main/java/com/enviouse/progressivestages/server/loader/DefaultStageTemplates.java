@@ -1430,7 +1430,7 @@ public final class DefaultStageTemplates {
             # locked = ["id:minecraft:strength", "id:minecraft:haste"]           # MobEffect ids
             #
             # Potions a player WITHOUT the stage can't take out of a brewing stand (it brews + sits
-            # there until unlocked; hopper/automation extraction isn't gated).
+            # there until unlocked; hopper extraction is also gated, best-effort via nearest player).
             # [brewing]
             # locked = ["id:minecraft:strength", "id:minecraft:swiftness"]       # Potion ids
             #
