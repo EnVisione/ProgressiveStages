@@ -22,6 +22,8 @@
     "LevelChunkSectionAccessor",
     "ServerCommonPacketListenerImplMixin",
     "ServerAdvancementHidingMixin",
+    "BeaconBlockEntityMixin",
+    "SlotBrewingPickupMixin",
     "ClientboundSectionBlocksUpdatePacketAccessor"
   ],
   "client": [

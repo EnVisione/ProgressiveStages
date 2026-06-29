@@ -52,6 +52,10 @@ public final class LockDefinition {
     private final CategoryLocks professions;
     /** v2.5 [advancements].locked — advancements hidden from the advancements screen until the stage is owned. */
     private final CategoryLocks advancements;
+    /** v3.0 [beacon].locked — beacon effect ids (MobEffect ids) not applied to a player missing the stage. */
+    private final CategoryLocks beacon;
+    /** v3.0 [brewing].locked — potion ids that can't be brewed by a player missing the stage. */
+    private final CategoryLocks brewing;
     private final CategoryLocks petsTaming;
     private final CategoryLocks petsBreeding;
     private final CategoryLocks petsCommanding;
@@ -126,6 +130,8 @@ public final class LockDefinition {
         this.trades        = b.trades;
         this.professions   = b.professions;
         this.advancements  = b.advancements;
+        this.beacon        = b.beacon;
+        this.brewing       = b.brewing;
         this.petsTaming    = b.petsTaming;
         this.petsBreeding  = b.petsBreeding;
         this.petsCommanding = b.petsCommanding;
@@ -175,6 +181,8 @@ public final class LockDefinition {
     public CategoryLocks trades()       { return trades; }
     public CategoryLocks professions()  { return professions; }
     public CategoryLocks advancements() { return advancements; }
+    public CategoryLocks beacon()       { return beacon; }
+    public CategoryLocks brewing()      { return brewing; }
     public CategoryLocks petsTaming()     { return petsTaming; }
     public CategoryLocks petsBreeding()   { return petsBreeding; }
     public CategoryLocks petsCommanding() { return petsCommanding; }
@@ -222,7 +230,7 @@ public final class LockDefinition {
     public boolean isEmpty() {
         return items.isEmpty() && blocks.isEmpty() && fluids.isEmpty() && entities.isEmpty()
             && enchants.isEmpty() && crops.isEmpty() && screens.isEmpty() && loot.isEmpty() && trades.isEmpty()
-            && professions.isEmpty() && advancements.isEmpty()
+            && professions.isEmpty() && advancements.isEmpty() && beacon.isEmpty() && brewing.isEmpty()
             && petsTaming.isEmpty() && petsBreeding.isEmpty() && petsCommanding.isEmpty() && mobSpawns.isEmpty()
             && recipeIds.isEmpty() && recipeOutputs.isEmpty()
             && lockedDimensions.isEmpty() && interactions.isEmpty()
@@ -434,6 +442,8 @@ public final class LockDefinition {
         private CategoryLocks trades = CategoryLocks.EMPTY;
         private CategoryLocks professions = CategoryLocks.EMPTY;
         private CategoryLocks advancements = CategoryLocks.EMPTY;
+        private CategoryLocks beacon = CategoryLocks.EMPTY;
+        private CategoryLocks brewing = CategoryLocks.EMPTY;
         private CategoryLocks petsTaming = CategoryLocks.EMPTY;
         private CategoryLocks petsBreeding = CategoryLocks.EMPTY;
         private CategoryLocks petsCommanding = CategoryLocks.EMPTY;
@@ -476,6 +486,8 @@ public final class LockDefinition {
         public Builder trades(CategoryLocks v)       { this.trades = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder professions(CategoryLocks v)  { this.professions = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder advancements(CategoryLocks v) { this.advancements = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder beacon(CategoryLocks v)       { this.beacon = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder brewing(CategoryLocks v)      { this.brewing = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder petsTaming(CategoryLocks v)     { this.petsTaming = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder petsBreeding(CategoryLocks v)   { this.petsBreeding = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder petsCommanding(CategoryLocks v) { this.petsCommanding = v != null ? v : CategoryLocks.EMPTY; return this; }

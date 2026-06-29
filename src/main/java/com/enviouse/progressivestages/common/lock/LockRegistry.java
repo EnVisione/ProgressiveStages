@@ -68,6 +68,12 @@ public final class LockRegistry {
     private final ResolvedCategory<Object>            advancementCat  = new ResolvedCategory<>(null);
     /** Fast-path: true if any stage declares an advancement lock (gates the packet-filter mixin). */
     private volatile boolean anyAdvancementLocks = false;
+    /** v3.0 beacon effects — id-only (MobEffect ids); not applied to a player missing the stage. */
+    private final ResolvedCategory<Object>            beaconCat       = new ResolvedCategory<>(null);
+    private volatile boolean anyBeaconLocks = false;
+    /** v3.0 brewing — id-only (Potion ids); can't be brewed by a player missing the stage. */
+    private final ResolvedCategory<Object>            brewingCat      = new ResolvedCategory<>(null);
+    private volatile boolean anyBrewingLocks = false;
     private final ResolvedCategory<EntityType<?>>     petTamingCat      = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petBreedingCat    = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<EntityType<?>>     petCommandingCat  = new ResolvedCategory<>(Registries.ENTITY_TYPE);
@@ -145,6 +151,10 @@ public final class LockRegistry {
         anyAdvancementLocks = false;
         enchantCaps.clear();
         anyEnchantCaps = false;
+        beaconCat.clear();
+        anyBeaconLocks = false;
+        brewingCat.clear();
+        anyBrewingLocks = false;
         petTamingCat.clear(); petBreedingCat.clear(); petCommandingCat.clear();
         recipeIdCat.clear(); recipeOutputCat.clear();
         dimensionLocks.clear();
@@ -202,6 +212,10 @@ public final class LockRegistry {
                 .add(new EnchantCapEntry(id, cap.maxLevel()));
             anyEnchantCaps = true;
         }
+        beaconCat.register(locks.beacon(), id);
+        if (!locks.beacon().isEmpty()) anyBeaconLocks = true;
+        brewingCat.register(locks.brewing(), id);
+        if (!locks.brewing().isEmpty()) anyBrewingLocks = true;
         petTamingCat.register(locks.petsTaming(), id);
         petBreedingCat.register(locks.petsBreeding(), id);
         petCommandingCat.register(locks.petsCommanding(), id);
@@ -1013,6 +1027,30 @@ public final class LockRegistry {
 
     /** v3.0: cheap fast-path — true if any stage declares an enchant level cap. */
     public boolean hasEnchantCaps() { return anyEnchantCaps; }
+
+    // ---- v3.0 [beacon] (gate individual beacon effects) ----
+
+    public boolean hasBeaconLocks() { return anyBeaconLocks; }
+
+    /** True if {@code player} can't receive this beacon effect (gated + stage not owned). */
+    public boolean isBeaconEffectBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation effectId) {
+        if (!anyBeaconLocks || player == null || effectId == null) return false;
+        Set<StageId> gating = beaconCat.findStagesIdOnly(effectId);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
+
+    // ---- v3.0 [brewing] (gate brewing a specific potion) ----
+
+    public boolean hasBrewingLocks() { return anyBrewingLocks; }
+
+    /** True if {@code player} can't brew this potion (gated + stage not owned). */
+    public boolean isBrewingBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation potionId) {
+        if (!anyBrewingLocks || player == null || potionId == null) return false;
+        Set<StageId> gating = brewingCat.findStagesIdOnly(potionId);
+        if (gating.isEmpty()) return false;
+        return !playerHasAllStages(player, gating);
+    }
 
     /**
      * v3.0: the maximum level {@code player} may have for {@code enchantId} — the MIN of every
