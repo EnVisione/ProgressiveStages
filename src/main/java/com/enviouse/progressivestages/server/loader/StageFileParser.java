@@ -155,6 +155,9 @@ public final class StageFileParser {
         if (color != null) builder.color(color);
         String category = stageSection.get("category");
         if (category != null) builder.category(category);
+        List<String> tags = new ArrayList<>();
+        for (String t : stringList(stageSection, "tags")) if (t != null && !t.isBlank()) tags.add(t.trim().toLowerCase());
+        builder.tags(tags);
         String scope = stageSection.get("scope");
         if (scope != null) builder.scope(scope);
         builder.durationMillis(parseDuration(stageSection.get("duration")));

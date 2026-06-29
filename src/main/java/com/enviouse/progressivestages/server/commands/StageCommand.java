@@ -56,6 +56,23 @@ public class StageCommand {
                         .suggests(StageCommand::suggestStages)
                         .executes(StageCommand::revokeStage))))
 
+            // v3.0: /stage tag grant|revoke <players> <tag>  +  /stage tag list <tag>
+            .then(Commands.literal("tag")
+                .then(Commands.literal("grant")
+                    .then(Commands.argument("players", EntityArgument.players())
+                        .then(Commands.argument("tag", StringArgumentType.word())
+                            .suggests(StageCommand::suggestTags)
+                            .executes(ctx -> tagBulk(ctx, true)))))
+                .then(Commands.literal("revoke")
+                    .then(Commands.argument("players", EntityArgument.players())
+                        .then(Commands.argument("tag", StringArgumentType.word())
+                            .suggests(StageCommand::suggestTags)
+                            .executes(ctx -> tagBulk(ctx, false)))))
+                .then(Commands.literal("list")
+                    .then(Commands.argument("tag", StringArgumentType.word())
+                        .suggests(StageCommand::suggestTags)
+                        .executes(StageCommand::tagList))))
+
             // /stage list [player]
             .then(Commands.literal("list")
                 .executes(ctx -> listStages(ctx, null))
@@ -252,6 +269,62 @@ public class StageCommand {
         if (path.startsWith(remaining) || full.startsWith(remaining)) {
             builder.suggest(suggest);
         }
+    }
+
+    // ---------------------------- v3.0 tag bulk ops ----------------------------
+
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestTags(
+            CommandContext<CommandSourceStack> ctx, com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        java.util.Set<String> tags = new java.util.TreeSet<>();
+        for (StageId id : StageOrder.getInstance().getAllStageIds()) {
+            StageOrder.getInstance().getStageDefinition(id).ifPresent(d -> tags.addAll(d.getTags()));
+        }
+        return net.minecraft.commands.SharedSuggestionProvider.suggest(tags, builder);
+    }
+
+    private static int tagBulk(CommandContext<CommandSourceStack> context, boolean grant) throws CommandSyntaxException {
+        java.util.Collection<ServerPlayer> players = EntityArgument.getPlayers(context, "players");
+        String tag = StringArgumentType.getString(context, "tag");
+        List<StageId> stages = StageOrder.getInstance().getStagesWithTag(tag);
+        if (stages.isEmpty()) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cNo stages declare the tag '&f" + tag + "&c'."));
+            return 0;
+        }
+        var cause = com.enviouse.progressivestages.common.api.StageCause.COMMAND;
+        int changes = 0;
+        for (ServerPlayer p : players) {
+            for (StageId s : stages) {
+                boolean has = StageManager.getInstance().hasStage(p, s);
+                if (grant && !has) {
+                    StageManager.getInstance().grantStageBypassDependencies(p, s, cause);
+                    changes++;
+                } else if (!grant && has) {
+                    StageManager.getInstance().revokeStageWithCause(p, s, cause);
+                    changes++;
+                }
+            }
+        }
+        final int ch = changes, ns = stages.size(), np = players.size();
+        final String verb = grant ? "Granted" : "Revoked";
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&a" + verb + " tag '&f" + tag + "&a' (" + ns + " stage(s)) — &f" + ch
+                + "&a change(s) across &f" + np + "&a player(s)."), true);
+        return changes;
+    }
+
+    private static int tagList(CommandContext<CommandSourceStack> context) {
+        String tag = StringArgumentType.getString(context, "tag");
+        List<StageId> stages = StageOrder.getInstance().getStagesWithTag(tag);
+        if (stages.isEmpty()) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cNo stages declare the tag '&f" + tag + "&c'."));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&7Stages tagged '&f" + tag + "&7' (" + stages.size() + "):"), false);
+        for (StageId s : stages) {
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes("  &8• &f" + s), false);
+        }
+        return stages.size();
     }
 
     private static int grantStage(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {

@@ -168,6 +168,17 @@ public class StageOrder {
         return getAllDependents(stageId);
     }
 
+    /** v3.0: all stages that declare {@code tag} in their {@code [stage].tags} (case-insensitive). */
+    public List<StageId> getStagesWithTag(String tag) {
+        if (tag == null || tag.isEmpty()) return Collections.emptyList();
+        String needle = tag.toLowerCase();
+        List<StageId> out = new ArrayList<>();
+        for (StageDefinition def : stageDefinitions.values()) {
+            if (def.getTags().contains(needle)) out.add(def.getId());
+        }
+        return out;
+    }
+
     /**
      * Check if a stage exists
      */
