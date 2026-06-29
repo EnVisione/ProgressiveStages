@@ -430,6 +430,8 @@ public class StageManager {
                         });
                         // v2.4: optional [unlock] toast/title/subtitle/sound/particles.
                         com.enviouse.progressivestages.server.enforcement.UnlockEffectsApplier.apply(player, def);
+                        // v3.0: optional [rewards] — items/effects/commands/teleport/xp on unlock.
+                        com.enviouse.progressivestages.server.enforcement.StageRewardApplier.apply(player, def);
                     }
                 }
 

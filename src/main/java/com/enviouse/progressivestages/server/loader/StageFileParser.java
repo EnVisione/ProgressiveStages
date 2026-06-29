@@ -7,6 +7,7 @@ import com.enviouse.progressivestages.common.config.RevokeRule;
 import com.enviouse.progressivestages.common.config.StageAttribute;
 import com.enviouse.progressivestages.common.config.StageCost;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.config.StageRewards;
 import com.enviouse.progressivestages.common.config.UnlockEffects;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
@@ -161,6 +162,7 @@ public final class StageFileParser {
         builder.revoke(parseRevoke(config));
         builder.cost(parseCost(config));
         builder.unlock(parseUnlock(config));
+        builder.rewards(parseRewards(config));
         builder.lockedAbilities(parseAbilities(config));
 
         return ParseResult.success(builder.build());
@@ -267,6 +269,50 @@ public final class StageFileParser {
             if (s != null && !s.trim().isEmpty()) out.add(s.trim().toLowerCase());
         }
         return out;
+    }
+
+    private static StageRewards parseRewards(Config config) {
+        Config sec = config.get("rewards");
+        if (sec == null) return StageRewards.NONE;
+        List<StageCost.ItemCost> items = new ArrayList<>();
+        for (String raw : stringList(sec, "items")) {
+            StageCost.ItemCost ic = parseItemCost(raw);
+            if (ic != null) items.add(ic);
+        }
+        List<StageRewards.EffectReward> effects = new ArrayList<>();
+        for (String raw : stringList(sec, "effects")) {
+            StageRewards.EffectReward er = parseEffectReward(raw);
+            if (er != null) effects.add(er);
+        }
+        List<String> commands = new ArrayList<>(stringList(sec, "commands"));
+        Object single = sec.get("command");
+        if (single instanceof String s && !s.isBlank()) commands.add(s.trim());
+        String teleport = sec.getOrElse("teleport", "");
+        int xpLevels = (int) readLong(sec, "xp_levels", 0L);
+        int xpPoints = (int) readLong(sec, "xp_points", 0L);
+        return new StageRewards(items, effects, commands, teleport == null ? "" : teleport.trim(),
+            Math.max(0, xpLevels), Math.max(0, xpPoints));
+    }
+
+    /** Parse {@code "minecraft:strength:60:1"} → effect id + duration(seconds) + amplifier. */
+    private static StageRewards.EffectReward parseEffectReward(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String[] parts = raw.trim().split(":");
+        // Peel up to two trailing all-digit segments (duration, then amplifier) off the id.
+        java.util.List<String> nums = new ArrayList<>();
+        int end = parts.length;
+        while (end > 1 && parts[end - 1].chars().allMatch(Character::isDigit) && nums.size() < 2) {
+            nums.add(0, parts[end - 1]);
+            end--;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(String.join(":", java.util.Arrays.copyOfRange(parts, 0, end)));
+        if (id == null) return null;
+        int durationSec = 30, amp = 0;
+        try {
+            if (nums.size() == 1) durationSec = Integer.parseInt(nums.get(0));
+            else if (nums.size() == 2) { durationSec = Integer.parseInt(nums.get(0)); amp = Integer.parseInt(nums.get(1)); }
+        } catch (NumberFormatException ignored) {}
+        return new StageRewards.EffectReward(id, Math.max(1, durationSec) * 20, Math.max(0, amp));
     }
 
     private static UnlockEffects parseUnlock(Config config) {
