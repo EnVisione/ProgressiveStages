@@ -397,6 +397,7 @@ public final class StageFileParser {
             case KILL_WITH                                   -> new String[]{"entity", "mob", "target", "id"};
             // BREED/TAME accept an OPTIONAL species target (id or #tag); absent = count all.
             case TAME, BREED                                 -> new String[]{"entity", "animal", "target", "id"};
+            case SCRIPT                                      -> new String[]{"id", "condition", "script", "target"};
             case PLAY_TIME, LEVEL, XP, DAY_COUNT, WORLD_TIME -> new String[]{};
         };
         for (String k : keys) {

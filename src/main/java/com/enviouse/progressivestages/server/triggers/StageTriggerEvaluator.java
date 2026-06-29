@@ -465,7 +465,14 @@ public final class StageTriggerEvaluator {
                 (oneShotMarked(player, stageId, c) || matchesCurrentState(player, c)) ? c.count() : 0L;
             case TAME       -> counterValue(player, c.target().isEmpty() ? "tame" : "tame:" + c.targetBody());
             case KILL_WITH  -> killWithProgress(player, c);
+            case SCRIPT     -> com.enviouse.progressivestages.common.compat.ScriptHooks
+                                   .evalCondition(c.targetBody(), player) ? c.count() : 0L;
         };
+    }
+
+    /** v2.5: best completion fraction (0..1) for a stage — public accessor for KubeJS / external use. */
+    public static float stagePercent(ServerPlayer player, StageId stageId) {
+        return bestRulePercent(player, stageId);
     }
 
     private static long counterValue(ServerPlayer player, String counterKey) {

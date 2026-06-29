@@ -43,7 +43,8 @@ public enum TriggerConditionType {
     WEATHER,     // experienced weather rain/thunder/clear (one-shot, persisted)
     ENTER_STRUCTURE, // entered a structure (one-shot, persisted)
     TAME,        // animals tamed (generic counter)
-    KILL_WITH;   // kill entity X while holding item Y (generic counter)
+    KILL_WITH,   // kill entity X while holding item Y (generic counter)
+    SCRIPT;      // v2.5: a custom condition evaluated by a KubeJS-registered predicate (state)
 
     /**
      * Resolve a TOML {@code type = "..."} value (with generous aliases) to a type, or
@@ -76,6 +77,7 @@ public enum TriggerConditionType {
             case "enter_structure", "structure", "visit_structure" -> ENTER_STRUCTURE;
             case "tame", "tamed", "tame_animal" -> TAME;
             case "kill_with", "kill_using", "killwith" -> KILL_WITH;
+            case "script", "js", "kubejs", "custom" -> SCRIPT;
             default -> null;
         };
     }

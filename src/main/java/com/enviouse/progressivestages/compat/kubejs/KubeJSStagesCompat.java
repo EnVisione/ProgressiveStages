@@ -59,6 +59,24 @@ public final class KubeJSStagesCompat {
     }
 
     /**
+     * v2.5: fire the script-registered onGranted/onRevoked callbacks for EVERY engine grant/revoke
+     * (commands, [[triggers]], quest rewards, skill-tree purchase, regression) — the reliable
+     * lifecycle hook KubeJS's native stage events never gave us.
+     */
+    @SubscribeEvent
+    public static void onStageChange(com.enviouse.progressivestages.common.api.StageChangeEvent event) {
+        if (!com.enviouse.progressivestages.common.compat.ScriptHooks.isActive()) return;
+        ServerPlayer sp = event.getPlayer();
+        if (sp == null) return;
+        String stage = event.getStageId().toString();
+        if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.GRANTED) {
+            com.enviouse.progressivestages.common.compat.ScriptHooks.fireGranted(sp, stage);
+        } else if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.REVOKED) {
+            com.enviouse.progressivestages.common.compat.ScriptHooks.fireRevoked(sp, stage);
+        }
+    }
+
+    /**
      * Adapter that fulfills KubeJS's {@link Stages} contract by delegating to our
      * {@link StageManager}. {@code addNoUpdate} / {@code removeNoUpdate} are the
      * low-level hooks KubeJS wraps with its own event firing, so we don't need to
