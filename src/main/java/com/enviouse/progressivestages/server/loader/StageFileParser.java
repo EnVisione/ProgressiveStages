@@ -356,6 +356,14 @@ public final class StageFileParser {
             return null;
         }
         long count = readLong(c, "count", 1L);
+        // v3.0: time-based conditions accept a friendly `duration` (e.g. "3d") in place of raw seconds.
+        if (type == TriggerConditionType.STAGE_HELD_FOR || type == TriggerConditionType.BIOME_TIME) {
+            Object dur = c.get("duration");
+            if (dur instanceof String ds && !ds.isBlank()) {
+                long millis = parseDuration(ds);
+                if (millis > 0) count = Math.max(1L, millis / 1000L);
+            }
+        }
         String target = readTriggerTarget(c, type);
         if (target.isEmpty() && type.requiresTarget()) {
             LOGGER.warn("[ProgressiveStages] Trigger condition '{}' is missing its target — skipped",
@@ -421,7 +429,10 @@ public final class StageFileParser {
             // BREED/TAME accept an OPTIONAL species target (id or #tag); absent = count all.
             case TAME, BREED                                 -> new String[]{"entity", "animal", "target", "id"};
             case SCRIPT                                      -> new String[]{"id", "condition", "script", "target"};
-            case PLAY_TIME, LEVEL, XP, DAY_COUNT, WORLD_TIME -> new String[]{};
+            case BIOME_TIME                                  -> new String[]{"biome", "id", "target"};
+            case STAGE_HELD_FOR                              -> new String[]{"stage", "id", "target"};
+            case PLAY_TIME, LEVEL, XP, DAY_COUNT, WORLD_TIME,
+                 REACH_Y, FISH, SLEEP, RIDE                  -> new String[]{};
         };
         for (String k : keys) {
             Object v = c.get(k);

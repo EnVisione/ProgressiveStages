@@ -85,6 +85,8 @@ public final class StageTriggerEvaluator {
     private static volatile boolean watchTame = false;
     /** v2.5: true if any breed rule targets a specific species/tag (drives per-species event counting). */
     private static volatile boolean watchBreedSpecies = false;
+    /** v3.0: biome_time conditions — accumulated per poll while the player is in the biome. */
+    private static final List<TriggerCondition> biomeTimeConds = new java.util.concurrent.CopyOnWriteArrayList<>();
     // v2.4 unlock juice
     private static final Set<StageId> hudBarStages = ConcurrentHashMap.newKeySet();
     private static final Set<StageId> nudgeStages = ConcurrentHashMap.newKeySet();
@@ -125,6 +127,7 @@ public final class StageTriggerEvaluator {
         watchedKillWithItems.clear();
         watchTame = false;
         watchBreedSpecies = false;
+        biomeTimeConds.clear();
         hudBarStages.clear();
         nudgeStages.clear();
         for (StageDefinition def : stages) {
@@ -132,6 +135,9 @@ public final class StageTriggerEvaluator {
                 RULES.put(def.getId(), def.getTriggers());
                 for (TriggerRule rule : def.getTriggers()) {
                     for (TriggerCondition c : rule.conditions()) {
+                        if (c.type() == TriggerConditionType.BIOME_TIME) {
+                            biomeTimeConds.add(c);
+                        }
                         if (c.type() == TriggerConditionType.KILL_WITH) {
                             // Count by the concrete victim killed with this item; tag victims are
                             // summed over their members at read time, so we only key on the item.
@@ -180,6 +186,7 @@ public final class StageTriggerEvaluator {
         Long last = lastPoll.get(player.getUUID());
         if (last != null && now - last < interval) return;
         lastPoll.put(player.getUUID(), now);
+        accumulateBiomeTime(player, interval);
         evaluatePlayer(player);
         // v2.4 unlock juice (poll-driven, change-detected).
         if (!hudBarStages.isEmpty()) pushActiveGoal(player);
@@ -467,7 +474,58 @@ public final class StageTriggerEvaluator {
             case KILL_WITH  -> killWithProgress(player, c);
             case SCRIPT     -> com.enviouse.progressivestages.common.compat.ScriptHooks
                                    .evalCondition(c.targetBody(), player) ? c.count() : 0L;
+            // v3.0
+            case REACH_Y    -> player.blockPosition().getY();
+            case FISH       -> customStat(player, Stats.FISH_CAUGHT);
+            case SLEEP      -> customStat(player, Stats.SLEEP_IN_BED);
+            case RIDE       -> rideBlocks(player);
+            case BIOME_TIME -> counterValue(player, "biometime:" + c.targetBody());
+            case STAGE_HELD_FOR -> stageHeldSeconds(player, c);
         };
+    }
+
+    /** Per-poll biome-time accrual: +seconds (= poll interval / 20) for each biome_time the player is in. */
+    private static void accumulateBiomeTime(ServerPlayer player, int intervalTicks) {
+        if (biomeTimeConds.isEmpty() || player.server == null) return;
+        long seconds = Math.max(1L, intervalTicks / 20L);
+        for (TriggerCondition c : biomeTimeConds) {
+            if (inBiome(player, c.targetBody(), c.targetIsTag())) {
+                StageCounterData.get(player.server).increment(player.getUUID(),
+                    "biometime:" + c.targetBody(), seconds);
+            }
+        }
+    }
+
+    /** Total blocks ridden on any vehicle (retroactive, from vanilla distance stats). */
+    private static long rideBlocks(ServerPlayer player) {
+        long cm = customStat(player, Stats.MINECART_ONE_CM) + customStat(player, Stats.BOAT_ONE_CM)
+            + customStat(player, Stats.PIG_ONE_CM) + customStat(player, Stats.HORSE_ONE_CM)
+            + customStat(player, Stats.STRIDER_ONE_CM);
+        return cm / 100L;
+    }
+
+    /** Seconds since the player's team was granted the target stage (0 if not owned / no record). */
+    private static long stageHeldSeconds(ServerPlayer player, TriggerCondition c) {
+        if (player.server == null) return 0;
+        StageId target;
+        try { target = StageId.parse(c.targetBody()); } catch (Exception e) { return 0; }
+        if (!ProgressiveStagesAPI.hasStage(player, target)) return 0;
+        StageDefinition def = StageOrder.getInstance().getStageDefinition(target).orElse(null);
+        UUID key = (def != null && def.isServerScope())
+            ? com.enviouse.progressivestages.common.stage.StageManager.SERVER_TEAM
+            : com.enviouse.progressivestages.common.team.TeamProvider.getInstance().getTeamId(player);
+        long grant = StageRegressionData.get(player.server).getGrantTime(key, target);
+        if (grant <= 0) return 0;
+        return (System.currentTimeMillis() - grant) / 1000L;
+    }
+
+    /** True if the player is currently in the given biome id / {@code #tag}. */
+    private static boolean inBiome(ServerPlayer player, String targetBody, boolean isTag) {
+        ResourceLocation id = resolve(targetBody);
+        if (id == null) return false;
+        Holder<net.minecraft.world.level.biome.Biome> biome = player.level().getBiome(player.blockPosition());
+        if (isTag) return biome.is(TagKey.create(Registries.BIOME, id));
+        return biome.unwrapKey().map(k -> k.location().equals(id)).orElse(false);
     }
 
     /** v2.5: best completion fraction (0..1) for a stage — public accessor for KubeJS / external use. */

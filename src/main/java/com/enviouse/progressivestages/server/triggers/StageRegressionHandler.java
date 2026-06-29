@@ -45,7 +45,9 @@ public final class StageRegressionHandler {
         // clock and the stage would expire at a different wall-clock time per team.
         UUID key = def.isServerScope() ? StageManager.SERVER_TEAM : event.getTeamId();
         if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.GRANTED) {
-            if (def.isTemporary()) data.markGranted(key, event.getStageId(), System.currentTimeMillis());
+            // v3.0: record the grant time for EVERY stage (not only temporary ones) so the
+            // stage_held_for trigger and temporary-expiry both have a timestamp to read.
+            data.markGranted(key, event.getStageId(), System.currentTimeMillis());
         } else if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.REVOKED) {
             data.clear(key, event.getStageId());
         }

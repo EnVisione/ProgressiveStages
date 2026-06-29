@@ -44,7 +44,14 @@ public enum TriggerConditionType {
     ENTER_STRUCTURE, // entered a structure (one-shot, persisted)
     TAME,        // animals tamed (generic counter)
     KILL_WITH,   // kill entity X while holding item Y (generic counter)
-    SCRIPT;      // v2.5: a custom condition evaluated by a KubeJS-registered predicate (state)
+    SCRIPT,      // v2.5: a custom condition evaluated by a KubeJS-registered predicate (state)
+    // v3.0 additions
+    REACH_Y,     // currently at altitude Y >= count (state)
+    FISH,        // fish caught                      -> Stats.FISH_CAUGHT (retroactive)
+    SLEEP,       // times slept in a bed             -> Stats.SLEEP_IN_BED (retroactive)
+    RIDE,        // blocks ridden on any vehicle     -> vehicle distance stats (retroactive)
+    BIOME_TIME,  // seconds spent in a target biome  (event-counted)
+    STAGE_HELD_FOR; // held another stage for >= count seconds (time since grant)
 
     /**
      * Resolve a TOML {@code type = "..."} value (with generous aliases) to a type, or
@@ -78,6 +85,12 @@ public enum TriggerConditionType {
             case "tame", "tamed", "tame_animal" -> TAME;
             case "kill_with", "kill_using", "killwith" -> KILL_WITH;
             case "script", "js", "kubejs", "custom" -> SCRIPT;
+            case "reach_y", "altitude", "y_level", "height" -> REACH_Y;
+            case "fish", "fishing", "fish_caught" -> FISH;
+            case "sleep", "slept", "sleep_in_bed" -> SLEEP;
+            case "ride", "riding", "ride_distance" -> RIDE;
+            case "biome_time", "time_in_biome", "biome_seconds" -> BIOME_TIME;
+            case "stage_held_for", "held_stage", "stage_age", "owned_for" -> STAGE_HELD_FOR;
             default -> null;
         };
     }
@@ -86,7 +99,7 @@ public enum TriggerConditionType {
     public boolean isCounter() {
         return switch (this) {
             case KILL, MINE, CRAFT, PICKUP, USE, DROP, BREAK_ITEM, DISTANCE, STAT, PLAY_TIME,
-                 BREED, TAME, KILL_WITH -> true;
+                 BREED, TAME, KILL_WITH, FISH, SLEEP, RIDE, BIOME_TIME -> true;
             default -> false;
         };
     }
@@ -100,7 +113,9 @@ public enum TriggerConditionType {
     public boolean requiresTarget() {
         return switch (this) {
             // DISTANCE defaults to "all"; BREED/TAME take an OPTIONAL species target.
-            case PLAY_TIME, LEVEL, XP, DISTANCE, DAY_COUNT, WORLD_TIME, BREED, TAME -> false;
+            // REACH_Y/FISH/SLEEP/RIDE derive their own subject; BIOME_TIME/STAGE_HELD_FOR need a target.
+            case PLAY_TIME, LEVEL, XP, DISTANCE, DAY_COUNT, WORLD_TIME, BREED, TAME,
+                 REACH_Y, FISH, SLEEP, RIDE -> false;
             default -> true;
         };
     }
