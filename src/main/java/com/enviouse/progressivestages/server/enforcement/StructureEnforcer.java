@@ -16,6 +16,8 @@ import net.minecraft.world.level.levelgen.structure.StructureStart;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Enforces {@code [structures].locked_entry} with piece-precise bounding boxes.
@@ -39,6 +41,15 @@ import java.util.Map;
 public final class StructureEnforcer {
 
     private StructureEnforcer() {}
+
+    /**
+     * v2.5: last position (per player) recorded while standing OUTSIDE every locked structure. When
+     * a player crosses into a gated structure they lack the stage for, they're teleported back here
+     * — a natural "bounce back to where you came from", the way {@code /locate} + a soft barrier would
+     * behave. Falls back to a nearest-edge push when no safe spot is on record (e.g. they logged in
+     * inside the structure).
+     */
+    private static final Map<UUID, double[]> SAFE_POS = new ConcurrentHashMap<>(); // [x, y, z]
 
     // ---------------------------------------------------------------
     // Public API
@@ -67,16 +78,23 @@ public final class StructureEnforcer {
             // Apply mining fatigue while inside a locked structure that sets prevent_block_break.
             // This is the §2.12 "Indestructibility" signal — block breaks are already cancelled
             // by canBreakBlock(), so this adds the tactile slowdown players expect.
-            LockRegistry.StructureRulesAggregate aggRules = LockRegistry.getInstance().getStructures();
-            if (aggRules.preventBlockBreak) {
+            if (agg.preventBlockBreak) {
                 player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.DIG_SLOWDOWN, 60, 4, true, false));
             }
 
-            pushOutside(player, start.getBoundingBox());
+            repel(player, start.getBoundingBox(), agg.entryPadding);
             ItemEnforcer.notifyLockedWithCooldown(player, entry.getValue(), "This structure");
             return;
         }
+
+        // Outside every locked structure → remember this as the safe spot to bounce back to.
+        SAFE_POS.put(player.getUUID(), new double[]{player.getX(), player.getY(), player.getZ()});
+    }
+
+    /** Drop the per-player safe-position record on logout. */
+    public static void cleanupPlayer(UUID playerId) {
+        SAFE_POS.remove(playerId);
     }
 
     public static boolean canBreakBlock(ServerPlayer player, BlockPos pos) {
@@ -187,13 +205,27 @@ public final class StructureEnforcer {
         return true;
     }
 
-    private static void pushOutside(ServerPlayer player, BoundingBox box) {
+    /**
+     * Bounce the player out of a gated structure: back to their last recorded safe position when we
+     * have one (and it's genuinely outside the box), otherwise to the nearest box edge plus the
+     * configured {@code entry_padding} buffer.
+     */
+    private static void repel(ServerPlayer player, BoundingBox box, int pad) {
+        double[] safe = SAFE_POS.get(player.getUUID());
+        if (safe != null && !box.isInside(BlockPos.containing(safe[0], safe[1], safe[2]))) {
+            player.teleportTo(safe[0], safe[1], safe[2]);
+            return;
+        }
+        pushOutside(player, box, Math.max(1.5, pad + 0.5));
+    }
+
+    private static void pushOutside(ServerPlayer player, BoundingBox box, double buffer) {
         double px = player.getX();
         double pz = player.getZ();
-        double minX = box.minX() - 0.5;
-        double maxX = box.maxX() + 1.5;
-        double minZ = box.minZ() - 0.5;
-        double maxZ = box.maxZ() + 1.5;
+        double minX = box.minX() - buffer;
+        double maxX = box.maxX() + buffer;
+        double minZ = box.minZ() - buffer;
+        double maxZ = box.maxZ() + buffer;
 
         double distMinX = Math.abs(px - minX);
         double distMaxX = Math.abs(maxX - px);

@@ -307,22 +307,25 @@ public final class LockDefinition {
      */
     public static final class StructureRules {
         public static final StructureRules EMPTY = new StructureRules(
-            CategoryLocks.EMPTY, false, false, false, false);
+            CategoryLocks.EMPTY, false, false, false, false, 0);
 
         private final CategoryLocks lockedEntry;
         private final boolean preventBlockBreak;
         private final boolean preventBlockPlace;
         private final boolean preventExplosions;
         private final boolean disableMobSpawning;
+        /** v2.5: extra buffer (blocks) added around the structure box for the entry check. */
+        private final int entryPadding;
 
         public StructureRules(CategoryLocks lockedEntry, boolean preventBlockBreak,
                               boolean preventBlockPlace, boolean preventExplosions,
-                              boolean disableMobSpawning) {
+                              boolean disableMobSpawning, int entryPadding) {
             this.lockedEntry = lockedEntry;
             this.preventBlockBreak = preventBlockBreak;
             this.preventBlockPlace = preventBlockPlace;
             this.preventExplosions = preventExplosions;
             this.disableMobSpawning = disableMobSpawning;
+            this.entryPadding = Math.max(0, entryPadding);
         }
 
         public CategoryLocks lockedEntry()  { return lockedEntry; }
@@ -330,6 +333,7 @@ public final class LockDefinition {
         public boolean preventBlockPlace()  { return preventBlockPlace; }
         public boolean preventExplosions()  { return preventExplosions; }
         public boolean disableMobSpawning() { return disableMobSpawning; }
+        public int entryPadding()           { return entryPadding; }
 
         public boolean isEmpty() {
             return lockedEntry.isEmpty() && !preventBlockBreak && !preventBlockPlace

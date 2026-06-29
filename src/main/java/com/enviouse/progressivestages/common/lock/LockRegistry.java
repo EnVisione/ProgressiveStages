@@ -1623,7 +1623,7 @@ public final class LockRegistry {
      */
     public static final class StructureRulesAggregate {
         public static final StructureRulesAggregate EMPTY =
-            new StructureRulesAggregate(Map.of(), false, false, false, false);
+            new StructureRulesAggregate(Map.of(), false, false, false, false, 0);
 
         /** Structure ID → required stage. Only exact IDs are used for entry locks. */
         public final Map<ResourceLocation, StageId> lockedEntry;
@@ -1631,14 +1631,17 @@ public final class LockRegistry {
         public final boolean preventBlockPlace;
         public final boolean preventExplosions;
         public final boolean disableMobSpawning;
+        /** v2.5: max entry-padding buffer (blocks) across all locked-structure stages. */
+        public final int entryPadding;
 
         public StructureRulesAggregate(Map<ResourceLocation, StageId> lockedEntry,
-                                       boolean pbb, boolean pbp, boolean pex, boolean dms) {
+                                       boolean pbb, boolean pbp, boolean pex, boolean dms, int entryPadding) {
             this.lockedEntry = Collections.unmodifiableMap(lockedEntry);
             this.preventBlockBreak = pbb;
             this.preventBlockPlace = pbp;
             this.preventExplosions = pex;
             this.disableMobSpawning = dms;
+            this.entryPadding = Math.max(0, entryPadding);
         }
 
         StructureRulesAggregate merge(LockDefinition.StructureRules other, StageId stage) {
@@ -1654,7 +1657,8 @@ public final class LockRegistry {
                 this.preventBlockBreak || other.preventBlockBreak(),
                 this.preventBlockPlace || other.preventBlockPlace(),
                 this.preventExplosions || other.preventExplosions(),
-                this.disableMobSpawning || other.disableMobSpawning()
+                this.disableMobSpawning || other.disableMobSpawning(),
+                Math.max(this.entryPadding, other.entryPadding())
             );
         }
     }

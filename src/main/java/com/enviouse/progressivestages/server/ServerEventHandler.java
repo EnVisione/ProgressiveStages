@@ -778,6 +778,7 @@ public class ServerEventHandler {
             lastRegionCheck.remove(player.getUUID());
             ItemEnforcer.clearCooldowns(player.getUUID());
             DimensionEnforcer.cleanupPlayer(player.getUUID());
+            StructureEnforcer.cleanupPlayer(player.getUUID());
             OreSpoofManager.get().onPlayerLogout(player);
         }
     }

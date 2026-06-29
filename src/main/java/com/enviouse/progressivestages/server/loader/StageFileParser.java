@@ -673,7 +673,11 @@ public final class StageFileParser {
         boolean pbp = rules != null && rules.getOrElse("prevent_block_place", false);
         boolean pex = rules != null && rules.getOrElse("prevent_explosions", false);
         boolean dms = rules != null && rules.getOrElse("disable_mob_spawning", false);
-        return new LockDefinition.StructureRules(lockedEntry, pbb, pbp, pex, dms);
+        // v2.5: extra buffer (blocks) before the structure boundary repels the player. May be set
+        // on [structures].rules.entry_padding or directly on [structures].entry_padding.
+        int pad = (int) readLong(section, "entry_padding", 0L);
+        if (rules != null) pad = Math.max(pad, (int) readLong(rules, "entry_padding", 0L));
+        return new LockDefinition.StructureRules(lockedEntry, pbb, pbp, pex, dms, Math.max(0, pad));
     }
 
     private static List<LockDefinition.OreOverride> parseOreOverrides(Config config) {
