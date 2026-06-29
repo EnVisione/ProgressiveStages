@@ -95,6 +95,26 @@ public final class StageFileParser {
         return parseConfig(config, filePath.getFileName().toString());
     }
 
+    /**
+     * v2.5: parse a stage definition from an arbitrary stream (used for datapack-loaded stages, where
+     * the TOML lives inside {@code data/<ns>/progressivestages/stages/*.toml} rather than a config file).
+     */
+    public static Optional<StageDefinition> parse(java.io.InputStream in, String fileName) {
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))) {
+            Config config = PARSER.parse(reader);
+            ParseResult result = parseConfig(config, fileName);
+            if (!result.isSuccess()) {
+                LOGGER.warn("Failed to parse datapack stage {}: {}", fileName, result.getErrorMessage());
+                return Optional.empty();
+            }
+            return Optional.of(result.getStageDefinition());
+        } catch (Exception e) {
+            LOGGER.warn("Failed to read datapack stage {}: {}", fileName, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
     private static ParseResult parseConfig(Config config, String fileName) {
         Config stageSection = config.get("stage");
         if (stageSection == null) return ParseResult.validationError("Missing [stage] section");

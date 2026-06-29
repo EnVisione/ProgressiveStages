@@ -105,6 +105,12 @@ public class ServerEventHandler {
         StageCommand.register(event.getDispatcher());
     }
 
+    /** v2.5: register the datapack stage loader so data/&lt;ns&gt;/progressivestages/stages/*.toml load + /reload. */
+    @SubscribeEvent
+    public static void onAddReloadListeners(net.neoforged.neoforge.event.AddReloadListenerEvent event) {
+        event.addListener(new com.enviouse.progressivestages.server.loader.DatapackStageLoader());
+    }
+
     @SubscribeEvent
     public static void onPlayerJoin(EntityJoinLevelEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {

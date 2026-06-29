@@ -27,7 +27,10 @@ public class StageFileLoader {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private final Map<StageId, StageDefinition> loadedStages = new LinkedHashMap<>();
+    /** v2.5: stages parsed from datapacks (data/&lt;ns&gt;/progressivestages/stages/*.toml). Config wins on id conflict. */
+    private final Map<StageId, StageDefinition> datapackStages = new LinkedHashMap<>();
     private Path stagesDirectory;
+    private boolean initialized = false;
 
     private static StageFileLoader INSTANCE;
 
@@ -73,6 +76,19 @@ public class StageFileLoader {
         // v2.3: build the per-stage trigger registry from the loaded definitions
         com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
         com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(loadedStages.values());
+        initialized = true;
+    }
+
+    /**
+     * v2.5: receive the stages parsed from datapacks. If the loader is already initialized (config
+     * stages loaded), trigger a full reload so the datapack set is merged in (config still wins on
+     * id conflict). Called from the datapack reload listener.
+     */
+    public void setDatapackStages(Map<StageId, StageDefinition> stages) {
+        datapackStages.clear();
+        if (stages != null) datapackStages.putAll(stages);
+        LOGGER.info("[ProgressiveStages] Loaded {} datapack stage definition(s)", datapackStages.size());
+        if (initialized) reload();
     }
 
     /**
@@ -98,22 +114,31 @@ public class StageFileLoader {
      * Load all .toml files from the stages directory
      */
     private void loadAllStages() {
-        if (stagesDirectory == null || !Files.exists(stagesDirectory)) {
+        // Config files load first so they win on id conflict with datapack stages.
+        if (stagesDirectory != null && Files.exists(stagesDirectory)) {
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
+                for (Path file : stream) {
+                    String fileName = file.getFileName().toString().toLowerCase();
+                    if (fileName.equals("triggers.toml")) {
+                        LOGGER.debug("Skipping triggers.toml - not a stage definition file");
+                        continue;
+                    }
+                    loadStageFile(file);
+                }
+            } catch (IOException e) {
+                LOGGER.error("Failed to list stage files", e);
+            }
+        } else {
             LOGGER.warn("Stages directory not found");
-            return;
         }
 
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
-            for (Path file : stream) {
-                String fileName = file.getFileName().toString().toLowerCase();
-                if (fileName.equals("triggers.toml")) {
-                    LOGGER.debug("Skipping triggers.toml - not a stage definition file");
-                    continue;
-                }
-                loadStageFile(file);
+        // v2.5: merge datapack-provided stages for any id a config file didn't already define.
+        for (Map.Entry<StageId, StageDefinition> e : datapackStages.entrySet()) {
+            if (loadedStages.putIfAbsent(e.getKey(), e.getValue()) != null) {
+                LOGGER.info("[ProgressiveStages] Datapack stage {} overridden by a config file", e.getKey());
+            } else {
+                LOGGER.debug("Loaded datapack stage: {}", e.getKey());
             }
-        } catch (IOException e) {
-            LOGGER.error("Failed to list stage files", e);
         }
 
         for (StageDefinition stage : loadedStages.values()) {
