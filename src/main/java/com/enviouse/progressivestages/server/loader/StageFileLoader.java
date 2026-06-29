@@ -239,6 +239,11 @@ public class StageFileLoader {
         validateCategoryIds(locks.petsBreeding(), entityRegistry, "PetBreeding", invalidItems);
         validateCategoryIds(locks.recipeOutputs(), itemRegistry, "RecipeOutput", invalidItems);
 
+        // v2.5: dead trigger targets — a [[triggers]] condition whose (non-tag) subject id doesn't
+        // resolve to a real entity/block/item/effect. Data-driven targets (advancement/dimension/
+        // biome/structure/stat) and tags are skipped here since they aren't in the static registries.
+        validateTriggerTargets(stage, invalidItems);
+
         if (!invalidItems.isEmpty()) {
             return new FileValidationResult(
                 fileName,
@@ -250,6 +255,49 @@ public class StageFileLoader {
         }
 
         return new FileValidationResult(fileName, true, false, null, null);
+    }
+
+    /**
+     * v2.5: validate that each trigger condition's exact-id subject resolves to a real registry
+     * entry. Only the four statically-resolvable kinds (entity / block / item / mob-effect) are
+     * checked; tags ({@code #...}) and data-driven targets (advancement/dimension/biome/structure/
+     * raw stat) are intentionally skipped because they aren't present in the built-in registries.
+     */
+    private static void validateTriggerTargets(StageDefinition stage,
+                                               List<String> invalidItems) {
+        if (!stage.hasTriggers()) return;
+        var itemReg   = net.minecraft.core.registries.BuiltInRegistries.ITEM;
+        var blockReg  = net.minecraft.core.registries.BuiltInRegistries.BLOCK;
+        var entityReg = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE;
+        var effectReg = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT;
+        for (var rule : stage.getTriggers()) {
+            for (var c : rule.conditions()) {
+                if (!c.targetBody().isEmpty() && !c.targetIsTag()) {
+                    net.minecraft.core.Registry<?> reg = switch (c.type()) {
+                        case KILL, KILL_WITH, TAME -> entityReg;
+                        case MINE                  -> blockReg;
+                        case CRAFT, PICKUP, USE, DROP, BREAK_ITEM, HAS_ITEM -> itemReg;
+                        case EFFECT                -> effectReg;
+                        default -> null;
+                    };
+                    if (reg != null) {
+                        var id = net.minecraft.resources.ResourceLocation.tryParse(c.targetBody());
+                        if (id == null || !reg.containsKey(id)) {
+                            invalidItems.add("Trigger(" + c.type().name().toLowerCase()
+                                + "): unknown target " + c.targetBody());
+                        }
+                    }
+                }
+                // kill_with's held item is always an item id.
+                if (c.type() == com.enviouse.progressivestages.common.trigger.TriggerConditionType.KILL_WITH
+                        && !c.with().isEmpty() && !c.with().startsWith("#")) {
+                    var id = net.minecraft.resources.ResourceLocation.tryParse(c.with());
+                    if (id == null || !itemReg.containsKey(id)) {
+                        invalidItems.add("Trigger(kill_with): unknown held item " + c.with());
+                    }
+                }
+            }
+        }
     }
 
     /**

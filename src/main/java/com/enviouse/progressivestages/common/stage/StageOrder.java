@@ -229,31 +229,119 @@ public class StageOrder {
     }
 
     /**
-     * Validate all dependencies point to existing stages.
-     * @return List of validation errors (empty if all valid)
+     * Validate the dependency graph.
+     *
+     * <p>v2.5 deepened this beyond the original dead-dependency + self-cycle check. It now reports:
+     * <ul>
+     *   <li><b>Dead dependency targets</b> — a stage depends on an id no stage file defines.</li>
+     *   <li><b>Dependency cycles</b> — full multi-node cycles ({@code a → b → c → a}) found via a
+     *       white/grey/black DFS, not just the {@code a → a} self-loop the old code could see.</li>
+     *   <li><b>Transitively unreachable stages</b> — a stage whose dependency closure contains a
+     *       cycle member or a non-existent stage, so its prerequisites can never all be satisfied
+     *       through legitimate progression.</li>
+     * </ul>
+     *
+     * @return list of human-readable validation messages (empty if the graph is clean)
      */
     public List<String> validateDependencies() {
         List<String> errors = new ArrayList<>();
 
+        // 1. Dead dependency targets.
+        Set<StageId> hasDeadDep = new HashSet<>();
         for (StageDefinition def : stageDefinitions.values()) {
             for (StageId dep : def.getDependencies()) {
                 if (!stageDefinitions.containsKey(dep)) {
                     errors.add("Stage '" + def.getId() + "' depends on non-existent stage: " + dep);
+                    hasDeadDep.add(def.getId());
                 }
             }
+        }
 
-            // Check for circular dependencies
-            Set<StageId> allDeps = new LinkedHashSet<>();
-            try {
-                collectDependencies(def.getId(), allDeps, new HashSet<>());
-            } catch (StackOverflowError e) {
-                errors.add("Stage '" + def.getId() + "' has a circular dependency");
-            }
-            if (allDeps.contains(def.getId())) {
-                errors.add("Stage '" + def.getId() + "' has a circular dependency (depends on itself)");
+        // 2. Full cycle detection (white/grey/black DFS). Each detected cycle is reported once.
+        List<List<StageId>> cycles = findCycles();
+        Set<StageId> cycleMembers = new HashSet<>();
+        for (List<StageId> cycle : cycles) {
+            cycleMembers.addAll(cycle);
+            StringBuilder sb = new StringBuilder();
+            for (StageId s : cycle) sb.append(s.getPath()).append(" → ");
+            sb.append(cycle.get(0).getPath()); // close the loop visually
+            errors.add("Circular dependency: " + sb);
+        }
+
+        // 3. Transitively unreachable stages — depend (directly or transitively) on a cycle member
+        //    or a non-existent stage, so the dependency closure can never be fully satisfied. We
+        //    skip stages already named above to keep the report focused on the blast radius.
+        Set<StageId> tainted = new HashSet<>(cycleMembers);
+        tainted.addAll(hasDeadDep);
+        for (StageDefinition def : stageDefinitions.values()) {
+            StageId id = def.getId();
+            if (tainted.contains(id)) continue;
+            Set<StageId> closure = new LinkedHashSet<>();
+            collectDependencies(id, closure, new HashSet<>());
+            for (StageId dep : closure) {
+                if (cycleMembers.contains(dep) || !stageDefinitions.containsKey(dep)) {
+                    errors.add("Stage '" + id + "' is unreachable — its prerequisite '" + dep
+                        + "' can never be obtained (cycle or missing stage upstream)");
+                    break;
+                }
             }
         }
 
         return errors;
+    }
+
+    /**
+     * Find every dependency cycle in the graph using an iterative-safe recursive DFS with
+     * white/grey/black colouring. A back-edge to a grey (on the current path) node closes a cycle;
+     * the path segment from that node to the current node is recorded. Non-existent dependency
+     * targets are ignored here (reported separately).
+     */
+    private List<List<StageId>> findCycles() {
+        final int WHITE = 0, GREY = 1, BLACK = 2;
+        Map<StageId, Integer> color = new HashMap<>();
+        List<List<StageId>> cycles = new ArrayList<>();
+        Set<String> seenCycleKeys = new HashSet<>();
+        Deque<StageId> path = new ArrayDeque<>();
+        for (StageId start : registeredStages) {
+            if (color.getOrDefault(start, WHITE) == WHITE) {
+                cycleDfs(start, color, path, cycles, seenCycleKeys, WHITE, GREY, BLACK);
+            }
+        }
+        return cycles;
+    }
+
+    private void cycleDfs(StageId node, Map<StageId, Integer> color, Deque<StageId> path,
+                          List<List<StageId>> cycles, Set<String> seenCycleKeys,
+                          int WHITE, int GREY, int BLACK) {
+        color.put(node, GREY);
+        path.addLast(node);
+        StageDefinition def = stageDefinitions.get(node);
+        if (def != null) {
+            for (StageId dep : def.getDependencies()) {
+                if (!stageDefinitions.containsKey(dep)) continue; // dead dep handled elsewhere
+                int c = color.getOrDefault(dep, WHITE);
+                if (c == GREY) {
+                    // Back-edge: extract the cycle (from dep's position in the path to the end).
+                    List<StageId> cycle = new ArrayList<>();
+                    boolean collecting = false;
+                    for (StageId p : path) {
+                        if (p.equals(dep)) collecting = true;
+                        if (collecting) cycle.add(p);
+                    }
+                    if (!cycle.isEmpty()) {
+                        // Canonical key (sorted) so the same cycle reached via different entry
+                        // points is reported only once.
+                        List<String> sorted = new ArrayList<>();
+                        for (StageId s : cycle) sorted.add(s.toString());
+                        Collections.sort(sorted);
+                        if (seenCycleKeys.add(String.join(",", sorted))) cycles.add(cycle);
+                    }
+                } else if (c == WHITE) {
+                    cycleDfs(dep, color, path, cycles, seenCycleKeys, WHITE, GREY, BLACK);
+                }
+            }
+        }
+        path.removeLast();
+        color.put(node, BLACK);
     }
 }

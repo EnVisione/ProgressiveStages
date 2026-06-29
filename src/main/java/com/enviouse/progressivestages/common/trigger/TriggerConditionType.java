@@ -37,8 +37,9 @@ public enum TriggerConditionType {
     HAS_ITEM,    // count currently held in inventory (state)
     // v2.4 additions
     EFFECT,      // currently has a status effect (state)
-    BREED,       // animals bred                    -> Stats.ANIMALS_BRED
+    BREED,       // animals bred (global stat, or per-species via event counter)
     DAY_COUNT,   // reached world day N (state)
+    WORLD_TIME,  // current time-of-day tick within the day 0..23999 (state)
     WEATHER,     // experienced weather rain/thunder/clear (one-shot, persisted)
     ENTER_STRUCTURE, // entered a structure (one-shot, persisted)
     TAME,        // animals tamed (generic counter)
@@ -70,6 +71,7 @@ public enum TriggerConditionType {
             case "effect", "status_effect", "has_effect", "potion" -> EFFECT;
             case "breed", "bred", "animals_bred" -> BREED;
             case "day", "day_count", "days", "world_day", "reach_day" -> DAY_COUNT;
+            case "world_time", "time_of_day", "daytime", "clock" -> WORLD_TIME;
             case "weather", "survive_weather" -> WEATHER;
             case "enter_structure", "structure", "visit_structure" -> ENTER_STRUCTURE;
             case "tame", "tamed", "tame_animal" -> TAME;
@@ -95,7 +97,8 @@ public enum TriggerConditionType {
     /** Types that require a {@code target} (entity/block/item/id); the rest derive their own. */
     public boolean requiresTarget() {
         return switch (this) {
-            case PLAY_TIME, LEVEL, XP, DISTANCE, DAY_COUNT, BREED, TAME -> false; // DISTANCE defaults to "all"
+            // DISTANCE defaults to "all"; BREED/TAME take an OPTIONAL species target.
+            case PLAY_TIME, LEVEL, XP, DISTANCE, DAY_COUNT, WORLD_TIME, BREED, TAME -> false;
             default -> true;
         };
     }

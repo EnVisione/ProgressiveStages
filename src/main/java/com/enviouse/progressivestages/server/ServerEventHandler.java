@@ -752,6 +752,22 @@ public class ServerEventHandler {
         }
     }
 
+    // ============ v2.5: re-apply [attribute] modifiers after respawn / dimension clone ============
+
+    /**
+     * Stage {@code [attribute]} modifiers are TRANSIENT (not written to player NBT), so the fresh
+     * ServerPlayer created on death-respawn or End-return starts with default attributes and loses
+     * them. {@link PlayerEvent.PlayerRespawnEvent} fires after the new player is placed for both
+     * cases; reconcile re-applies every owned stage's modifiers. Idempotent, so harmless if the
+     * login path already ran.
+     */
+    @SubscribeEvent
+    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            StageAttributeApplier.reconcile(player);
+        }
+    }
+
     // ============ Cleanup ============
 
     @SubscribeEvent

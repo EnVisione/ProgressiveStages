@@ -375,8 +375,9 @@ public final class StageFileParser {
             case WEATHER                                     -> new String[]{"weather", "id", "target"};
             case ENTER_STRUCTURE                             -> new String[]{"structure", "id", "target"};
             case KILL_WITH                                   -> new String[]{"entity", "mob", "target", "id"};
-            case TAME                                        -> new String[]{"entity", "animal", "target", "id"};
-            case PLAY_TIME, LEVEL, XP, DAY_COUNT, BREED      -> new String[]{};
+            // BREED/TAME accept an OPTIONAL species target (id or #tag); absent = count all.
+            case TAME, BREED                                 -> new String[]{"entity", "animal", "target", "id"};
+            case PLAY_TIME, LEVEL, XP, DAY_COUNT, WORLD_TIME -> new String[]{};
         };
         for (String k : keys) {
             Object v = c.get(k);

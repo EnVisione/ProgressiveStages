@@ -32,9 +32,14 @@ public final class StageAttributeApplier {
 
     private StageAttributeApplier() {}
 
-    /** Modifier id for the i-th attribute of a stage; stable so removeModifier always matches. */
+    /**
+     * Modifier id for the i-th attribute of a stage; stable so removeModifier always matches.
+     * Includes the stage's namespace so two stages that share a path under different namespaces
+     * (e.g. {@code packA:tier1} and {@code packB:tier1}) don't collide on one modifier id.
+     */
     private static ResourceLocation modifierId(StageId stageId, int index) {
-        return ResourceLocation.fromNamespaceAndPath("progressivestages", "attr/" + stageId.getPath() + "/" + index);
+        return ResourceLocation.fromNamespaceAndPath("progressivestages",
+            "attr/" + stageId.getNamespace() + "/" + stageId.getPath() + "/" + index);
     }
 
     /** Re-apply all stage attribute modifiers for one player based on their team's owned stages. */

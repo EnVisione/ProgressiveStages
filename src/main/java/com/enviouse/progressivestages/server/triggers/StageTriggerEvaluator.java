@@ -80,8 +80,11 @@ public final class StageTriggerEvaluator {
 
     // v2.4: event-counted conditions. We only increment counters for combos some rule actually
     // watches, to keep StageCounterData bounded.
-    private static final Set<String> watchedKillWith = ConcurrentHashMap.newKeySet(); // "entityId|itemId"
+    /** Held-item ids referenced by any kill_with rule — we count a kill only when the held item matches. */
+    private static final Set<String> watchedKillWithItems = ConcurrentHashMap.newKeySet();
     private static volatile boolean watchTame = false;
+    /** v2.5: true if any breed rule targets a specific species/tag (drives per-species event counting). */
+    private static volatile boolean watchBreedSpecies = false;
     // v2.4 unlock juice
     private static final Set<StageId> hudBarStages = ConcurrentHashMap.newKeySet();
     private static final Set<StageId> nudgeStages = ConcurrentHashMap.newKeySet();
@@ -119,8 +122,9 @@ public final class StageTriggerEvaluator {
     /** Rebuild the rule registry from the loaded stage definitions. Called on load + reload. */
     public static void rebuild(Collection<StageDefinition> stages) {
         RULES.clear();
-        watchedKillWith.clear();
+        watchedKillWithItems.clear();
         watchTame = false;
+        watchBreedSpecies = false;
         hudBarStages.clear();
         nudgeStages.clear();
         for (StageDefinition def : stages) {
@@ -129,9 +133,13 @@ public final class StageTriggerEvaluator {
                 for (TriggerRule rule : def.getTriggers()) {
                     for (TriggerCondition c : rule.conditions()) {
                         if (c.type() == TriggerConditionType.KILL_WITH) {
-                            watchedKillWith.add(c.targetBody() + "|" + c.with());
+                            // Count by the concrete victim killed with this item; tag victims are
+                            // summed over their members at read time, so we only key on the item.
+                            if (!c.with().isEmpty()) watchedKillWithItems.add(c.with());
                         } else if (c.type() == TriggerConditionType.TAME) {
                             watchTame = true;
+                        } else if (c.type() == TriggerConditionType.BREED && !c.target().isEmpty()) {
+                            watchBreedSpecies = true;
                         }
                     }
                 }
@@ -292,20 +300,35 @@ public final class StageTriggerEvaluator {
         ServerPlayer killer = resolveKiller(event);
         if (killer == null) return;
 
-        // v2.4: kill_with counting — count this kill only if some rule watches (victim, held item).
-        if (!watchedKillWith.isEmpty() && killer.server != null) {
-            ResourceLocation victim = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntity().getType());
+        // v2.4/v2.5: kill_with counting — count this kill when the held item is one a rule watches.
+        // We store per-(victim,item) so both exact-id and #tag victims resolve at read time.
+        if (!watchedKillWithItems.isEmpty() && killer.server != null) {
             ResourceLocation held = BuiltInRegistries.ITEM.getKey(killer.getMainHandItem().getItem());
-            if (victim != null && held != null) {
-                String key = victim + "|" + held;
-                if (watchedKillWith.contains(key)) {
-                    StageCounterData.get(killer.server).increment(killer.getUUID(), "killwith:" + key, 1);
+            if (held != null && watchedKillWithItems.contains(held.toString())) {
+                ResourceLocation victim = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntity().getType());
+                if (victim != null) {
+                    StageCounterData.get(killer.server).increment(killer.getUUID(),
+                        "killwith:" + victim + "|" + held, 1);
                 }
             }
         }
 
         // Defer one tick: the ENTITY_KILLED statistic is awarded by die() AFTER this event.
         scheduleEvaluate(killer);
+    }
+
+    /** v2.5: per-species breed counting for {@code breed} conditions that name a species/tag. */
+    @SubscribeEvent
+    public static void onBabySpawn(net.neoforged.neoforge.event.entity.living.BabyEntitySpawnEvent event) {
+        if (!active || !watchBreedSpecies) return;
+        if (!(event.getCausedByPlayer() instanceof ServerPlayer player) || player.server == null) return;
+        net.minecraft.world.entity.AgeableMob child = event.getChild();
+        if (child == null) return;
+        ResourceLocation childType = BuiltInRegistries.ENTITY_TYPE.getKey(child.getType());
+        if (childType != null) {
+            StageCounterData.get(player.server).increment(player.getUUID(), "breed:" + childType, 1);
+        }
+        scheduleEvaluate(player);
     }
 
     /** v2.4: tame counting for the {@code tame} condition. */
@@ -435,12 +458,13 @@ public final class StageTriggerEvaluator {
             case HAS_ITEM   -> heldItemCount(player, c);
             // v2.4
             case EFFECT     -> hasEffect(player, c) ? c.count() : 0L;
-            case BREED      -> customStat(player, Stats.ANIMALS_BRED);
+            case BREED      -> breedProgress(player, c);
             case DAY_COUNT  -> player.level().getDayTime() / 24000L;
+            case WORLD_TIME -> player.level().getDayTime() % 24000L;
             case WEATHER, ENTER_STRUCTURE ->
                 (oneShotMarked(player, stageId, c) || matchesCurrentState(player, c)) ? c.count() : 0L;
             case TAME       -> counterValue(player, c.target().isEmpty() ? "tame" : "tame:" + c.targetBody());
-            case KILL_WITH  -> counterValue(player, killWithKey(c.targetBody(), c.with()));
+            case KILL_WITH  -> killWithProgress(player, c);
         };
     }
 
@@ -449,8 +473,42 @@ public final class StageTriggerEvaluator {
         return StageCounterData.get(player.server).get(player.getUUID(), counterKey);
     }
 
-    private static String killWithKey(String entityId, String itemId) {
-        return "killwith:" + entityId + "|" + itemId;
+    /**
+     * Breed progress. No target → the global vanilla {@code ANIMALS_BRED} stat (retroactive, all
+     * species). Exact species → the per-species event counter. {@code #tag} → the sum of its
+     * members' per-species counters. (Per-species counts are event-driven, so they only accrue
+     * from when the trigger was loaded — not retroactive, matching tame/kill_with.)
+     */
+    private static long breedProgress(ServerPlayer player, TriggerCondition c) {
+        if (c.target().isEmpty()) return customStat(player, Stats.ANIMALS_BRED);
+        if (!c.targetIsTag()) return counterValue(player, "breed:" + c.targetBody());
+        return sumEntityTagCounter(player, c.targetBody(), "breed:", "");
+    }
+
+    /**
+     * kill_with progress. Exact victim → the per-(victim,item) counter; {@code #tag} victim → the
+     * sum of that counter over every entity type in the tag, all sharing the same held item.
+     */
+    private static long killWithProgress(ServerPlayer player, TriggerCondition c) {
+        String item = c.with();
+        if (!c.targetIsTag()) return counterValue(player, "killwith:" + c.targetBody() + "|" + item);
+        return sumEntityTagCounter(player, c.targetBody(), "killwith:", "|" + item);
+    }
+
+    /** Sum {@code prefix + <memberId> + suffix} counters across every entity type in an entity tag. */
+    private static long sumEntityTagCounter(ServerPlayer player, String tagBody, String prefix, String suffix) {
+        ResourceLocation tagId = resolve(tagBody);
+        if (tagId == null) return 0;
+        TagKey<EntityType<?>> tag = TagKey.create(Registries.ENTITY_TYPE, tagId);
+        long sum = 0;
+        var setOpt = BuiltInRegistries.ENTITY_TYPE.getTag(tag);
+        if (setOpt.isPresent()) {
+            for (Holder<EntityType<?>> h : setOpt.get()) {
+                ResourceLocation mid = BuiltInRegistries.ENTITY_TYPE.getKey(h.value());
+                if (mid != null) sum += counterValue(player, prefix + mid + suffix);
+            }
+        }
+        return sum;
     }
 
     private static boolean hasEffect(ServerPlayer player, TriggerCondition c) {
