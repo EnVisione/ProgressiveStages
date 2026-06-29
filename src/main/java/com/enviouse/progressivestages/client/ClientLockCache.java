@@ -36,6 +36,28 @@ public class ClientLockCache {
     private static final Map<ResourceLocation, java.util.Set<StageId>> itemMultiLocks = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, java.util.Set<StageId>> recipeMultiLocks = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, java.util.Set<StageId>> recipeItemMultiLocks = new ConcurrentHashMap<>();
+    /** v3.0: entity id → gating stages (for the Jade/WTHIT overlay on locked mobs). */
+    private static final Map<ResourceLocation, java.util.Set<StageId>> entityMultiLocks = new ConcurrentHashMap<>();
+
+    public static void setEntityMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        entityMultiLocks.clear();
+        if (locks != null) entityMultiLocks.putAll(locks);
+    }
+
+    /** Gating stages for an entity id ({@link java.util.Set#of()} when not gated or creative-bypassing). */
+    public static java.util.Set<StageId> getRequiredStagesForEntity(ResourceLocation entityId) {
+        if (creativeBypass || entityId == null) return java.util.Set.of();
+        java.util.Set<StageId> set = entityMultiLocks.get(entityId);
+        return set != null ? set : java.util.Set.of();
+    }
+
+    /** True iff the player owns ALL gating stages for this entity (so it isn't locked for them). */
+    public static boolean playerOwnsAllStagesForEntity(ResourceLocation entityId) {
+        java.util.Set<StageId> gating = getRequiredStagesForEntity(entityId);
+        if (gating.isEmpty()) return true;
+        for (StageId s : gating) if (!ClientStageCache.hasStage(s)) return false;
+        return true;
+    }
 
     // Creative bypass flag - when true, all lock checks return false (not locked)
     private static volatile boolean creativeBypass = false;
@@ -341,6 +363,7 @@ public class ClientLockCache {
         itemMultiLocks.clear();
         recipeMultiLocks.clear();
         recipeItemMultiLocks.clear();
+        entityMultiLocks.clear();
         creativeBypass = false;
 
         if (StageConfig.isDebugLogging()) {

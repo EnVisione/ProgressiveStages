@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages.compat.jade;
 
 import com.enviouse.progressivestages.common.util.Constants;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Block;
 import snownee.jade.api.IWailaClientRegistration;
 import snownee.jade.api.IWailaPlugin;
@@ -21,5 +22,6 @@ public class ProgressiveStagesJadePlugin implements IWailaPlugin {
     @Override
     public void registerClient(IWailaClientRegistration registration) {
         registration.registerBlockComponent(new StageLockBlockProvider(), Block.class);
+        registration.registerEntityComponent(new StageLockEntityProvider(), Entity.class);
     }
 }

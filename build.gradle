@@ -138,6 +138,10 @@ dependencies {
     // runtime, Jade never scans our @WailaPlugin, so the plugin class is simply never loaded.
     compileOnly "maven.modrinth:jade:15.10.5+neoforge"
 
+    // WTHIT (optional) — the other "what am I looking at" mod, for overlay parity (compat/wthit).
+    // Also from the Modrinth Maven. compileOnly so it's inert when WTHIT isn't installed.
+    compileOnly "maven.modrinth:wthit:neo-12.10.2"
+
     // TOML parser for stage files
     implementation 'com.electronwill.night-config:toml:3.6.7'
 }

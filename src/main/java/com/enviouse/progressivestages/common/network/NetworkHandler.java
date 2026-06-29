@@ -388,7 +388,19 @@ public class NetworkHandler {
             }
         }
 
-        PacketDistributor.sendToPlayer(player, new LockSyncPayload(itemLocks, recipeLocks, recipeItemLocks));
+        // v3.0: entity locks — for the Jade/WTHIT "Requires <stage>" overlay on locked mobs.
+        List<LockEntry> entityLocks = new ArrayList<>();
+        for (var type : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE) {
+            ResourceLocation eid = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            if (eid == null) continue;
+            java.util.Set<com.enviouse.progressivestages.common.api.StageId> gating = registry.getRequiredStagesForEntity(type);
+            if (gating.isEmpty()) continue;
+            for (com.enviouse.progressivestages.common.api.StageId s : gating) {
+                entityLocks.add(new LockEntry(eid, s.getResourceLocation()));
+            }
+        }
+
+        PacketDistributor.sendToPlayer(player, new LockSyncPayload(itemLocks, recipeLocks, recipeItemLocks, entityLocks));
     }
 
     /**
@@ -488,6 +500,14 @@ public class NetworkHandler {
             }
             ClientLockCache.setItemLocks(itemLocks);
             ClientLockCache.setItemMultiLocks(itemMulti);
+
+            // v3.0: entity locks → multi-stage map for the Jade/WTHIT overlay.
+            Map<ResourceLocation, java.util.Set<StageId>> entityMulti = new HashMap<>();
+            for (LockEntry entry : payload.entityLocks()) {
+                entityMulti.computeIfAbsent(entry.itemId(), k -> new java.util.LinkedHashSet<>())
+                    .add(StageId.fromResourceLocation(entry.stageId()));
+            }
+            ClientLockCache.setEntityMultiLocks(entityMulti);
 
             Map<ResourceLocation, StageId> recipeLocks = new HashMap<>();
             Map<ResourceLocation, java.util.Set<StageId>> recipeMulti = new HashMap<>();
@@ -624,7 +644,8 @@ public class NetworkHandler {
      * Lock registry sync payload.
      * Includes item locks, recipe locks (by recipe ID), and recipe-item locks (by output item ID).
      */
-    public record LockSyncPayload(List<LockEntry> itemLocks, List<LockEntry> recipeLocks, List<LockEntry> recipeItemLocks) implements CustomPacketPayload {
+    public record LockSyncPayload(List<LockEntry> itemLocks, List<LockEntry> recipeLocks,
+                                  List<LockEntry> recipeItemLocks, List<LockEntry> entityLocks) implements CustomPacketPayload {
         public static final Type<LockSyncPayload> TYPE = new Type<>(Constants.LOCK_SYNC_PACKET);
 
         public static final StreamCodec<FriendlyByteBuf, LockSyncPayload> STREAM_CODEC = StreamCodec.composite(
@@ -634,6 +655,8 @@ public class NetworkHandler {
             LockSyncPayload::recipeLocks,
             LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
             LockSyncPayload::recipeItemLocks,
+            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
+            LockSyncPayload::entityLocks,
             LockSyncPayload::new
         );
 
