@@ -22,6 +22,7 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +73,21 @@ public class StageCommand {
                     .then(Commands.argument("tag", StringArgumentType.word())
                         .suggests(StageCommand::suggestTags)
                         .executes(StageCommand::tagList))))
+
+            // v3.0: /stage simulate [player] — dry-run what they'd unlock next and what's short
+            .then(Commands.literal("simulate")
+                .executes(ctx -> simulate(ctx, ctx.getSource().getPlayerOrException()))
+                .then(Commands.argument("player", EntityArgument.player())
+                    .executes(ctx -> simulate(ctx, EntityArgument.getPlayer(ctx, "player")))))
+
+            // v3.0: /stage new <id> — scaffold a stage TOML file
+            .then(Commands.literal("new")
+                .then(Commands.argument("id", StringArgumentType.word())
+                    .executes(StageCommand::newStage)))
+
+            // v3.0: /stage export — write a markdown progression guide
+            .then(Commands.literal("export")
+                .executes(StageCommand::exportGuide))
 
             // /stage list [player]
             .then(Commands.literal("list")
@@ -325,6 +341,163 @@ public class StageCommand {
             context.getSource().sendSuccess(() -> TextUtil.parseColorCodes("  &8• &f" + s), false);
         }
         return stages.size();
+    }
+
+    // ---------------------------- v3.0 authoring / debug ----------------------------
+
+    private static String condLabel(com.enviouse.progressivestages.common.trigger.TriggerCondition c) {
+        String t = c.type().name().toLowerCase().replace('_', ' ');
+        String base = c.target().isEmpty() ? t : t + " " + c.target();
+        return c.with().isEmpty() ? base : base + " with " + c.with();
+    }
+
+    /** /stage simulate — dry-run: what's reachable next and exactly which conditions are short. */
+    private static int simulate(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        var src = context.getSource();
+        StageManager sm = StageManager.getInstance();
+        StageOrder order = StageOrder.getInstance();
+        List<StageId> available = new ArrayList<>();
+        List<StageId> blocked = new ArrayList<>();
+        java.util.Map<StageId, Float> pct = new java.util.HashMap<>();
+        for (StageId id : order.getAllStageIds()) {
+            if (sm.hasStage(player, id)) continue;
+            if (!sm.getMissingDependencies(player, id).isEmpty()) { blocked.add(id); continue; }
+            available.add(id);
+            pct.put(id, com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.stagePercent(player, id));
+        }
+        available.sort((a, b) -> Float.compare(pct.get(b), pct.get(a)));
+
+        final String pname = player.getName().getString();
+        src.sendSuccess(() -> TextUtil.parseColorCodes("&6&l▶ Simulate &7— &f" + pname), false);
+        if (available.isEmpty() && blocked.isEmpty()) {
+            src.sendSuccess(() -> TextUtil.parseColorCodes("&7Every stage is already owned."), false);
+            return 1;
+        }
+        int shown = 0;
+        for (StageId id : available) {
+            if (shown++ >= 8) break;
+            final int p = Math.round(pct.get(id) * 100f);
+            final String name = order.getStageDefinition(id).map(StageDefinition::getDisplayName).orElse(id.getPath());
+            src.sendSuccess(() -> TextUtil.parseColorCodes("&a➤ &f" + name + " &7(" + p + "%)"), false);
+            var rules = com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.describeProgress(player, id);
+            if (rules.isEmpty()) {
+                src.sendSuccess(() -> TextUtil.parseColorCodes("    &8(granted by command / quest / purchase)"), false);
+            }
+            for (var rule : rules) {
+                for (var cp : rule.conditions()) {
+                    if (cp.satisfied()) continue;
+                    final long need = Math.max(0, cp.threshold() - cp.current());
+                    final String lbl = condLabel(cp.condition());
+                    final long cur = cp.current(), th = cp.threshold();
+                    src.sendSuccess(() -> TextUtil.parseColorCodes(
+                        "    &c✗ &7" + lbl + " &8" + cur + "/" + th + " &c(need " + need + " more)"), false);
+                }
+            }
+        }
+        if (!blocked.isEmpty()) {
+            src.sendSuccess(() -> TextUtil.parseColorCodes("&8— blocked by prerequisites —"), false);
+            for (StageId id : blocked) {
+                final String name = order.getStageDefinition(id).map(StageDefinition::getDisplayName).orElse(id.getPath());
+                final String miss = sm.getMissingDependencies(player, id).stream()
+                    .map(StageId::getPath).reduce((a, b) -> a + ", " + b).orElse("");
+                src.sendSuccess(() -> TextUtil.parseColorCodes("&8🔒 &7" + name + " &8← needs &7" + miss), false);
+            }
+        }
+        return 1;
+    }
+
+    /** /stage new <id> — scaffold a stage TOML file in the config directory. */
+    private static int newStage(CommandContext<CommandSourceStack> context) {
+        String id = StringArgumentType.getString(context, "id").toLowerCase();
+        java.nio.file.Path dir = StageFileLoader.getInstance().getStagesDirectory();
+        if (dir == null) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cStages directory not ready."));
+            return 0;
+        }
+        java.nio.file.Path file = dir.resolve(id + ".toml");
+        if (java.nio.file.Files.exists(file)) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cA file '&f" + id + ".toml&c' already exists."));
+            return 0;
+        }
+        try {
+            java.nio.file.Files.writeString(file, scaffold(id));
+        } catch (java.io.IOException e) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cFailed to write: " + e.getMessage()));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&aCreated &f" + id + ".toml&a — edit it, then run &e/stage reload&a."), true);
+        return 1;
+    }
+
+    private static String scaffold(String id) {
+        String display = id.substring(0, 1).toUpperCase() + id.substring(1).replace('_', ' ');
+        return "# Stage file scaffolded by /stage new. See the diamond_age.toml for the full reference.\n"
+            + "[stage]\n"
+            + "id = \"" + id + "\"\n"
+            + "display_name = \"" + display + "\"\n"
+            + "description = \"\"\n"
+            + "# icon = \"minecraft:diamond\"\n"
+            + "# dependency = [\"iron_age\"]      # prerequisite stage(s)\n"
+            + "# tags = [\"tier1\"]               # for /stage tag grant ...\n\n"
+            + "# --- what this stage LOCKS (omit any you don't need) ---\n"
+            + "[items]\n"
+            + "locked = []   # [\"id:minecraft:diamond\", \"mod:create\", \"tag:c:ingots\", \"name:*sword\"]\n\n"
+            + "# [blocks]\n# locked = []\n\n"
+            + "# --- auto-grant when conditions are met (optional) ---\n"
+            + "# [[triggers]]\n"
+            + "# mode = \"all_of\"\n"
+            + "# [[triggers.conditions]]\n"
+            + "# type = \"mine\"\n"
+            + "# block = \"minecraft:diamond_ore\"\n"
+            + "# count = 10\n\n"
+            + "# --- optional: [cost] (purchasable), [rewards], [unlock] juice, [attribute], [revoke] ---\n";
+    }
+
+    /** /stage export — write a markdown progression guide built from the stage graph. */
+    private static int exportGuide(CommandContext<CommandSourceStack> context) {
+        StageOrder order = StageOrder.getInstance();
+        StringBuilder sb = new StringBuilder("# Progression Guide\n\n_Generated by ProgressiveStages._\n\n");
+        for (StageId id : order.getAllStageIds()) {
+            var defOpt = order.getStageDefinition(id);
+            if (defOpt.isEmpty()) continue;
+            StageDefinition def = defOpt.get();
+            sb.append("## ").append(def.getDisplayName()).append(" (`").append(id).append("`)\n\n");
+            if (def.getDescription() != null && !def.getDescription().isEmpty()) {
+                sb.append(def.getDescription()).append("\n\n");
+            }
+            if (!def.getDependencies().isEmpty()) {
+                sb.append("**Requires:** ").append(def.getDependencies().stream()
+                    .map(StageId::getPath).reduce((a, b) -> a + ", " + b).orElse("")).append("\n\n");
+            }
+            var dependents = order.getDependents(id);
+            if (!dependents.isEmpty()) {
+                sb.append("**Leads to:** ").append(dependents.stream()
+                    .map(StageId::getPath).reduce((a, b) -> a + ", " + b).orElse("")).append("\n\n");
+            }
+            if (def.hasTriggers()) {
+                sb.append("**Unlock by:**\n");
+                for (var rule : def.getTriggers()) {
+                    for (var c : rule.conditions()) {
+                        sb.append("- ").append(condLabel(c)).append(" ×").append(c.count()).append("\n");
+                    }
+                }
+                sb.append("\n");
+            }
+            if (def.isPurchasable()) sb.append("**Purchasable** from the skill tree.\n\n");
+        }
+        java.nio.file.Path dir = StageFileLoader.getInstance().getStagesDirectory();
+        java.nio.file.Path out = (dir != null ? dir.getParent()
+            : net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get()).resolve("progressivestages_guide.md");
+        try {
+            java.nio.file.Files.writeString(out, sb.toString());
+        } catch (java.io.IOException e) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cFailed to write guide: " + e.getMessage()));
+            return 0;
+        }
+        final String path = out.toString();
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes("&aExported progression guide → &f" + path), true);
+        return 1;
     }
 
     private static int grantStage(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
