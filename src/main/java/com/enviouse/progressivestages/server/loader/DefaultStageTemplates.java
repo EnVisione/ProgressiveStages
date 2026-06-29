@@ -1388,6 +1388,20 @@ public final class DefaultStageTemplates {
             # refund_percent = 50           # give back 50% of the cost if the stage is later revoked
             #
             # ─────────────────────────────────────────────────────────────────────────
+            # 27.3b  [unlock] — the "juice" shown WHEN the stage is granted (v2.4)
+            # ─────────────────────────────────────────────────────────────────────────
+            # This is the toast / title / subtitle / sound / particles you SEE + HEAR on unlock.
+            # Every field is optional — leave one out and that part simply doesn't play.
+            # [unlock]
+            # toast    = "Diamond Age reached!"              # advancement-style toast (top-right)
+            # title    = "&b&lDIAMOND AGE"                   # big on-screen TITLE (supports &-colors)
+            # subtitle = "&7A new era begins"                # smaller line under the title
+            # sound    = "minecraft:ui.toast.challenge_complete"   # SOUND played at the moment of unlock
+            # particle = "minecraft:totem_of_undying"        # particle burst around the player
+            # progress_nudges = true                         # one-time 50/75/90% "almost there" chat hints
+            # hud_bar         = true                         # blue progress bar above the XP bar to next goal
+            #
+            # ─────────────────────────────────────────────────────────────────────────
             # 27.4  [professions] — gate a villager's WHOLE trade GUI by profession (v2.5)
             # ─────────────────────────────────────────────────────────────────────────
             # A player without the stage can't trade with that villager at all. id:/mod:/name:.
@@ -1442,7 +1456,7 @@ public final class DefaultStageTemplates {
             #   scope    = "server"            # server-wide: first team to earn unlocks it for all
             #   duration = "2d"                # temporary: auto-expires 2 real days after grant
             #
-            # See section 25 for [attribute] / [revoke] / [unlock] worked examples,
+            # See section 25 for [attribute] / [revoke] worked examples,
             # and section 23 for the full [[triggers]] schema.
             # ============================================================================
             """);
