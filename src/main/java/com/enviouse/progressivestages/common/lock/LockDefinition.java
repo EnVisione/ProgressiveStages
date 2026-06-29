@@ -41,6 +41,8 @@ public final class LockDefinition {
     private final CategoryLocks fluids;
     private final CategoryLocks entities;      // attack/interaction (v1 feature, preserved)
     private final CategoryLocks enchants;
+    /** v3.0 [enchants].max_levels — cap an enchantment at a level until the stage is owned. */
+    private final List<EnchantCap> enchantCaps;
     private final CategoryLocks crops;
     private final CategoryLocks screens;
     private final CategoryLocks loot;
@@ -117,6 +119,7 @@ public final class LockDefinition {
         this.fluids        = b.fluids;
         this.entities      = b.entities;
         this.enchants      = b.enchants;
+        this.enchantCaps   = List.copyOf(b.enchantCaps);
         this.crops         = b.crops;
         this.screens       = b.screens;
         this.loot          = b.loot;
@@ -162,7 +165,11 @@ public final class LockDefinition {
     public CategoryLocks fluids()       { return fluids; }
     public CategoryLocks entities()     { return entities; }
     public CategoryLocks enchants()     { return enchants; }
+    public List<EnchantCap> enchantCaps() { return enchantCaps; }
     public CategoryLocks crops()        { return crops; }
+
+    /** v3.0: an enchantment level cap — {@code enchant} is limited to {@code maxLevel} until the stage is owned. */
+    public record EnchantCap(ResourceLocation enchant, int maxLevel) {}
     public CategoryLocks screens()      { return screens; }
     public CategoryLocks loot()         { return loot; }
     public CategoryLocks trades()       { return trades; }
@@ -420,6 +427,7 @@ public final class LockDefinition {
         private CategoryLocks fluids = CategoryLocks.EMPTY;
         private CategoryLocks entities = CategoryLocks.EMPTY;
         private CategoryLocks enchants = CategoryLocks.EMPTY;
+        private List<EnchantCap> enchantCaps = new ArrayList<>();
         private CategoryLocks crops = CategoryLocks.EMPTY;
         private CategoryLocks screens = CategoryLocks.EMPTY;
         private CategoryLocks loot = CategoryLocks.EMPTY;
@@ -461,6 +469,7 @@ public final class LockDefinition {
         public Builder fluids(CategoryLocks v)       { this.fluids = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder entities(CategoryLocks v)     { this.entities = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder enchants(CategoryLocks v)     { this.enchants = v != null ? v : CategoryLocks.EMPTY; return this; }
+        public Builder enchantCaps(List<EnchantCap> v) { this.enchantCaps = v != null ? v : new ArrayList<>(); return this; }
         public Builder crops(CategoryLocks v)        { this.crops = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder screens(CategoryLocks v)      { this.screens = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder loot(CategoryLocks v)         { this.loot = v != null ? v : CategoryLocks.EMPTY; return this; }

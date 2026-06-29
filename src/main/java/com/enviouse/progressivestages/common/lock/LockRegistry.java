@@ -52,6 +52,10 @@ public final class LockRegistry {
     private final ResolvedCategory<EntityType<?>>     spawnCat        = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<net.minecraft.world.item.enchantment.Enchantment>
                                                       enchantCat      = new ResolvedCategory<>(Registries.ENCHANTMENT);
+    /** v3.0: enchant id → (gating stage, max level). Effective cap = min over stages the player lacks. */
+    private final Map<ResourceLocation, java.util.List<EnchantCapEntry>> enchantCaps = new ConcurrentHashMap<>();
+    private volatile boolean anyEnchantCaps = false;
+    private record EnchantCapEntry(StageId stage, int maxLevel) {}
     private final ResolvedCategory<Block>             cropCat         = new ResolvedCategory<>(Registries.BLOCK);
     private final ResolvedCategory<Block>             screenCat       = new ResolvedCategory<>(Registries.BLOCK);
     /** Mirror of {@link #screenCat} typed to Item, so item-opened GUIs (backpacks, portable crafting) also gate. */
@@ -139,6 +143,8 @@ public final class LockRegistry {
         professionCat.clear();
         advancementCat.clear();
         anyAdvancementLocks = false;
+        enchantCaps.clear();
+        anyEnchantCaps = false;
         petTamingCat.clear(); petBreedingCat.clear(); petCommandingCat.clear();
         recipeIdCat.clear(); recipeOutputCat.clear();
         dimensionLocks.clear();
@@ -191,6 +197,11 @@ public final class LockRegistry {
         professionCat.register(locks.professions(), id);
         advancementCat.register(locks.advancements(), id);
         if (!locks.advancements().isEmpty()) anyAdvancementLocks = true;
+        for (LockDefinition.EnchantCap cap : locks.enchantCaps()) {
+            enchantCaps.computeIfAbsent(cap.enchant(), k -> new java.util.ArrayList<>())
+                .add(new EnchantCapEntry(id, cap.maxLevel()));
+            anyEnchantCaps = true;
+        }
         petTamingCat.register(locks.petsTaming(), id);
         petBreedingCat.register(locks.petsBreeding(), id);
         petCommandingCat.register(locks.petsCommanding(), id);
@@ -998,6 +1009,27 @@ public final class LockRegistry {
         Set<StageId> gating = getRequiredStagesForEnchantment(enchantId, holder);
         if (gating.isEmpty()) return false;
         return !playerHasAllStages(player, gating);
+    }
+
+    /** v3.0: cheap fast-path — true if any stage declares an enchant level cap. */
+    public boolean hasEnchantCaps() { return anyEnchantCaps; }
+
+    /**
+     * v3.0: the maximum level {@code player} may have for {@code enchantId} — the MIN of every
+     * {@code max_levels} cap declared by a stage the player does NOT own. {@link Integer#MAX_VALUE}
+     * (uncapped) if no missing-stage cap applies.
+     */
+    public int effectiveEnchantCap(net.minecraft.server.level.ServerPlayer player, ResourceLocation enchantId) {
+        if (!anyEnchantCaps || player == null || enchantId == null) return Integer.MAX_VALUE;
+        java.util.List<EnchantCapEntry> list = enchantCaps.get(enchantId);
+        if (list == null) return Integer.MAX_VALUE;
+        int cap = Integer.MAX_VALUE;
+        com.enviouse.progressivestages.common.stage.StageManager sm =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+        for (EnchantCapEntry e : list) {
+            if (!sm.hasStage(player, e.stage())) cap = Math.min(cap, e.maxLevel());
+        }
+        return cap;
     }
 
     /** Multi-stage variant of getModLockStage — returns ALL stages locking this mod. */

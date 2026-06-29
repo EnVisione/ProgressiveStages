@@ -46,13 +46,7 @@ public final class EnchantEnforcer {
             return stripFromBook(player, stack);
         }
 
-        ItemEnchantments.Mutable mutable = null;
-        for (Holder<Enchantment> holder : current.keySet()) {
-            if (isHolderLockedForPlayer(player, holder)) {
-                if (mutable == null) mutable = new ItemEnchantments.Mutable(current);
-                mutable.removeIf(h -> h.equals(holder));
-            }
-        }
+        ItemEnchantments.Mutable mutable = applyEnchantPolicy(player, current);
         if (mutable == null) return false;
         stack.set(DataComponents.ENCHANTMENTS, mutable.toImmutable());
         return true;
@@ -62,16 +56,33 @@ public final class EnchantEnforcer {
         ItemEnchantments stored = stack.get(DataComponents.STORED_ENCHANTMENTS);
         if (stored == null || stored.isEmpty()) return false;
 
-        ItemEnchantments.Mutable mutable = null;
-        for (Holder<Enchantment> holder : stored.keySet()) {
-            if (isHolderLockedForPlayer(player, holder)) {
-                if (mutable == null) mutable = new ItemEnchantments.Mutable(stored);
-                mutable.removeIf(h -> h.equals(holder));
-            }
-        }
+        ItemEnchantments.Mutable mutable = applyEnchantPolicy(player, stored);
         if (mutable == null) return false;
         stack.set(DataComponents.STORED_ENCHANTMENTS, mutable.toImmutable());
         return true;
+    }
+
+    /**
+     * Remove locked enchants and CAP the rest to their effective {@code max_levels} (v3.0). Returns a
+     * mutated copy, or {@code null} if nothing changed.
+     */
+    private static ItemEnchantments.Mutable applyEnchantPolicy(ServerPlayer player, ItemEnchantments current) {
+        boolean capsActive = LockRegistry.getInstance().hasEnchantCaps();
+        ItemEnchantments.Mutable mutable = null;
+        for (Holder<Enchantment> holder : current.keySet()) {
+            if (isHolderLockedForPlayer(player, holder)) {
+                if (mutable == null) mutable = new ItemEnchantments.Mutable(current);
+                mutable.removeIf(h -> h.equals(holder));
+            } else if (capsActive) {
+                ResourceLocation eid = holder.unwrapKey().map(k -> k.location()).orElse(null);
+                int cap = LockRegistry.getInstance().effectiveEnchantCap(player, eid);
+                if (cap != Integer.MAX_VALUE && current.getLevel(holder) > cap) {
+                    if (mutable == null) mutable = new ItemEnchantments.Mutable(current);
+                    mutable.set(holder, Math.max(0, cap)); // level 0 removes the enchant
+                }
+            }
+        }
+        return mutable;
     }
 
     /**

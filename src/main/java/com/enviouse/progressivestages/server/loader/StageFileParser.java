@@ -573,6 +573,7 @@ public final class StageFileParser {
         b.fluids(       parseCategory(config, "fluids"));
         b.entities(     parseCategory(config, "entities"));
         b.enchants(     parseCategory(config, "enchants"));
+        b.enchantCaps(  parseEnchantCaps(config));
         b.crops(        parseCategory(config, "crops"));
         b.screens(      parseCategory(config, "screens"));
         b.loot(         parseCategory(config, "loot"));
@@ -666,6 +667,26 @@ public final class StageFileParser {
         for (String s : raw) {
             String body = s.startsWith("mod:") ? s.substring(4) : s;
             if (!body.isEmpty()) out.add(body.toLowerCase());
+        }
+        return out;
+    }
+
+    /** v3.0: parse {@code [enchants].max_levels = ["minecraft:sharpness:3", ...]} → enchant level caps. */
+    private static List<LockDefinition.EnchantCap> parseEnchantCaps(Config config) {
+        Config sec = config.get("enchants");
+        if (sec == null) return Collections.emptyList();
+        List<LockDefinition.EnchantCap> out = new ArrayList<>();
+        for (String raw : stringList(sec, "max_levels")) {
+            if (raw == null) continue;
+            int idx = raw.lastIndexOf(':');
+            if (idx <= 0 || idx >= raw.length() - 1) continue;
+            String lvlPart = raw.substring(idx + 1);
+            if (!lvlPart.chars().allMatch(Character::isDigit)) continue;
+            ResourceLocation id = ResourceLocation.tryParse(raw.substring(0, idx));
+            if (id == null) continue;
+            try {
+                out.add(new LockDefinition.EnchantCap(id, Math.max(0, Integer.parseInt(lvlPart))));
+            } catch (NumberFormatException ignored) {}
         }
         return out;
     }
