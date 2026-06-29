@@ -49,7 +49,9 @@ public final class StructureEnforcer {
      * behave. Falls back to a nearest-edge push when no safe spot is on record (e.g. they logged in
      * inside the structure).
      */
-    private static final Map<UUID, double[]> SAFE_POS = new ConcurrentHashMap<>(); // [x, y, z]
+    private record SafePos(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim,
+                           double x, double y, double z) {}
+    private static final Map<UUID, SafePos> SAFE_POS = new ConcurrentHashMap<>();
 
     // ---------------------------------------------------------------
     // Public API
@@ -89,7 +91,8 @@ public final class StructureEnforcer {
         }
 
         // Outside every locked structure → remember this as the safe spot to bounce back to.
-        SAFE_POS.put(player.getUUID(), new double[]{player.getX(), player.getY(), player.getZ()});
+        SAFE_POS.put(player.getUUID(),
+            new SafePos(level.dimension(), player.getX(), player.getY(), player.getZ()));
     }
 
     /** Drop the per-player safe-position record on logout. */
@@ -211,9 +214,12 @@ public final class StructureEnforcer {
      * configured {@code entry_padding} buffer.
      */
     private static void repel(ServerPlayer player, BoundingBox box, int pad) {
-        double[] safe = SAFE_POS.get(player.getUUID());
-        if (safe != null && !box.isInside(BlockPos.containing(safe[0], safe[1], safe[2]))) {
-            player.teleportTo(safe[0], safe[1], safe[2]);
+        SafePos safe = SAFE_POS.get(player.getUUID());
+        // Only bounce back to the safe spot if it's in THIS dimension (a stale cross-dimension
+        // coordinate would teleport the player into wrong terrain/void) and genuinely outside the box.
+        if (safe != null && safe.dim().equals(player.level().dimension())
+                && !box.isInside(BlockPos.containing(safe.x(), safe.y(), safe.z()))) {
+            player.teleportTo(safe.x(), safe.y(), safe.z());
             return;
         }
         pushOutside(player, box, Math.max(1.5, pad + 0.5));

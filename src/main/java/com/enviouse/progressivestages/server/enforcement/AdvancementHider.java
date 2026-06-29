@@ -20,8 +20,12 @@ public final class AdvancementHider {
     public static void resyncIfNeeded(ServerPlayer player) {
         if (player == null || player.server == null) return;
         if (!LockRegistry.getInstance().hasAdvancementLocks()) return;
-        // reload() resets + re-sends the player's whole advancement state; the mixin then re-filters
-        // it against the player's now-current stages. Stage changes are infrequent, so this is fine.
-        player.getAdvancements().reload(player.server.getAdvancements());
+        // reload() clears in-memory progress and re-reads it from disk, so we save() FIRST to flush
+        // any progress earned since the last periodic save — otherwise the reload would discard it.
+        // The reload then re-sends the player's whole advancement state, which the mixin re-filters
+        // against the now-current stages. Stage changes are infrequent, so this is fine.
+        var advancements = player.getAdvancements();
+        advancements.save();
+        advancements.reload(player.server.getAdvancements());
     }
 }

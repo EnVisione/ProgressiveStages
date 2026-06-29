@@ -377,7 +377,30 @@ public final class StageFileParser {
                 return null;
             }
         }
+        // v2.5: tame/breed/kill_with build counter keys from canonical registry ids on the write side
+        // (BuiltInRegistries.getKey always namespaces). Canonicalize an exact-id (non-tag) target/with
+        // here — "cow" -> "minecraft:cow" — so a namespaceless config value still matches at read time.
+        target = canonicalizeSubject(type, target);
+        if (type == TriggerConditionType.KILL_WITH) with = canonicalizeId(with);
         return new TriggerCondition(type, target, count, with);
+    }
+
+    /** Canonicalize an exact-id subject for the event-counted condition types; tags/keywords untouched. */
+    private static String canonicalizeSubject(TriggerConditionType type, String target) {
+        if (target.isEmpty()) return target;
+        if (type != TriggerConditionType.TAME && type != TriggerConditionType.BREED
+                && type != TriggerConditionType.KILL_WITH) return target;
+        if (target.startsWith("#") || target.startsWith("tag:")) return target; // tags resolve member-wise
+        String body = target.startsWith("id:") ? target.substring(3) : target;
+        ResourceLocation rl = ResourceLocation.tryParse(body);
+        return rl != null ? rl.toString() : target;
+    }
+
+    /** Canonicalize a plain item id (kill_with's held item), leaving tags/unparseable values as-is. */
+    private static String canonicalizeId(String s) {
+        if (s == null || s.isEmpty() || s.startsWith("#")) return s;
+        ResourceLocation rl = ResourceLocation.tryParse(s);
+        return rl != null ? rl.toString() : s;
     }
 
     /** Read the type-appropriate target key, with generous fallbacks. */

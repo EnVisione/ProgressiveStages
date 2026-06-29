@@ -10,6 +10,19 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ---
 
+## What's new in 2.5
+
+- **`[professions]` lock category** — `[professions].locked = ["id:minecraft:weaponsmith", "mod:somemod", "name:cleric"]` gates **opening a villager's trade GUI by the villager's PROFESSION**. A player lacking the gating stage can't trade with that villager at all (vs. `[trades]`, which hides individual offers by result item). `id:` / `mod:` / `name:` matching (no tags). Wandering traders have no profession and are unaffected — use `[trades]` for those. Fully opt-in (no overhead when unused).
+- **`[advancements]` lock category** — `[advancements].locked = ["id:minecraft:nether/root", "mod:somemod"]` **hides locked advancements from the advancements screen entirely** — server-side, the client is never even told they exist. When the gating stage is gained, a full advancement re-send makes them pop into view (no relog). `id:` / `mod:` / `name:` matching; opt-in fast-path when unused.
+- **Structure gating enhancements** — `[structures]` now supports `entry_padding` (an integer block buffer that places repelled players well clear of the boundary; also accepted under `[structures.rules]`), and a player who breaches a gated structure is now teleported **back to their last safe position** (where they last stood outside any locked structure) rather than just shoved to the nearest edge.
+- **New `[[triggers]]` conditions** — `world_time` (aliases `time_of_day`/`daytime`/`clock`: the current time-of-day tick `0..23999`, e.g. trigger at night); `breed` now takes an **optional** species/tag target (no target = all bred animals, retroactive; with a target = that species/tag, event-counted); `kill_with` now accepts a **`#tag`** victim (summed over the tag's members); and `script` (aliases `js`/`kubejs`/`custom`: a fully custom condition evaluated by a KubeJS-registered predicate via `type="script", id="<conditionId>"`).
+- **Datapack-loaded stages** — stage TOML files can ship inside datapacks at `data/<namespace>/progressivestages/stages/*.toml`. They load at world load and on `/reload` and merge with the config-folder stages — **a config file with the same stage id always wins**, so datapacks provide overridable defaults.
+- **`[stage]` hidden / color / category now work in the GUI** — previously parsed but inert. Now `hidden = true` omits the stage from the Stage Tree, `color = "#RRGGBB"` tints the stage name (status colour is the fallback), and `category = "..."` shows as a tag in the detail header.
+- **Deep KubeJS integration** — a KubeJS plugin binds a global `ProgressiveStages` object: `onGranted`/`onRevoked` callbacks that fire on **every** engine grant/revoke (commands, triggers, quest rewards, skill-tree purchase, regression), `condition('id', player => bool)` to register custom `script:` trigger conditions, plus `has` / `grant` / `revoke` / `list` / `percent` helpers. (Corrects a prior doc claim: KubeJS 7.x has **no** native stage events that fire on engine grants — `onGranted`/`onRevoked` are the reliable hook.) Reset each server-script reload.
+- **Deeper `/stage validate`** — now detects full multi-node dependency cycles (not just self-loops), transitively-unreachable stages, and dead trigger targets (a `[[triggers]]` condition whose exact-id entity/block/item/effect — or `kill_with` item — doesn't resolve). Profession ids are validated too.
+
+---
+
 ## What's new in 2.4
 
 - **`[attribute]` stage buffs** — a stage can grant attribute modifiers (`[[attribute]]` with `id` / `operation` / `amount`) that apply while the team **owns** the stage. Any vanilla or modded attribute (`minecraft:generic.max_health`, `generic.scale`, `generic.movement_speed`, …), `add` / `multiply_base` / `multiply_total` operations. Applied on grant/login, removed on revoke (transient, reconciled); current health clamps down if max health drops.
@@ -116,6 +129,8 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[enchants]` | `locked` | Hide enchants in enchanting table, refuse anvil application, strip from inventory |
 | `[crops]` | `locked`, `always_unlocked` | Block planting, growth ticks, bonemeal application |
 | `[screens]` | `locked` | Block opening container / GUI blocks |
+| `[professions]` | `locked` | **New in 2.5.** Gate opening a villager's trade GUI by the villager's PROFESSION (`id:`/`mod:`/`name:`; no tags). Wandering traders unaffected (use `[trades]`). |
+| `[advancements]` | `locked` | **New in 2.5.** Hide locked advancements from the advancements screen entirely (server never tells the client they exist; re-sent when the stage is gained). `id:`/`mod:`/`name:`; no tags. |
 | `[loot]` | `locked` | Filter locked items out of loot tables and mob/block drops |
 | `[pets]` | `locked_taming`, `locked_breeding`, `locked_commanding` | Block taming, breeding, or commanding specific entity types |
 | `[curios]` | `locked_slots` | Block equipping into specific Curios slot ids |
@@ -123,7 +138,7 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[[mobs.replacements]]` | `target`, `replace_with` | Substitute one mob type for another at spawn |
 | `[[interactions]]` | `type`, `held_item`, `target_block` / `target_entity`, `description` | Block right-click / item-on-block / item-on-entity combos |
 | `[[regions]]` | `dimension`, `pos1`, `pos2`, `prevent_entry`, `prevent_explosions`, ... | 3D bounding-box gates |
-| `[structures]` | `locked_entry` + `[structures.rules]` (`prevent_block_break`, `prevent_block_place`, `prevent_explosions`, `disable_mob_spawning`) | Block entry into specific generated structures |
+| `[structures]` | `locked_entry` + `[structures.rules]` (`prevent_block_break`, `prevent_block_place`, `prevent_explosions`, `disable_mob_spawning`, **`entry_padding`** — new in 2.5) | Block entry into specific generated structures. **New in 2.5:** breaching players teleport back to their last safe position; `entry_padding` (blocks) keeps the fallback push clear of the boundary. |
 | `[enforcement]` | `allowed_use`, `allowed_pickup`, `allowed_hotbar`, `allowed_mouse_pickup`, `allowed_inventory` | Per-stage exception lists for in-inventory enforcement |
 | `[enforcement]` (overrides) | `block_item_use`, `block_item_pickup`, `block_item_inventory`, `block_block_placement`, `block_block_interaction`, `block_dimension_travel`, `block_entity_attack`, `block_screen_open`, `block_crop_growth`, `block_pet_interact` | **New in 2.3.** Per-stage override of the same-named global enforcement toggle, applied only to this stage's gated resources (omit = inherit global). Most-restrictive-wins across multi-stage gates. |
 | `[abilities]` | `locked` | **New in 2.4.** Block movement/action abilities (e.g. `["elytra"]` — no gliding) until the stage is owned |
@@ -131,7 +146,7 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[revoke]` | `on_death`, `xp_below`, `cascade` | **New in 2.4.** Regression — lose the stage on death, while total XP < N, and optionally cascade the revoke to dependents |
 | `[cost]` | `xp_levels`, `items`, `bypass_requirements` | **New in 2.4.** Make the stage **purchasable** from the in-game tree GUI (Unlock button); server-validated |
 | `[unlock]` | `toast`, `title`/`subtitle`, `sound`, `particle`, `progress_nudges`, `hud_bar` | **New in 2.4.** Unlock "juice" — toast/title/sound/particle on unlock, progress hints, and a blue progress bar above the XP bar (all optional) |
-| `[stage]` metadata | `hidden`, `color`, `category`, `scope`, `duration` | **New in 2.4.** Hide from GUI tree, GUI tint, group label, `scope = "server"` (server-wide stage), temporary `duration` (auto-expires after real time) |
+| `[stage]` metadata | `hidden`, `color`, `category`, `scope`, `duration` | **New in 2.4** (`hidden`/`color`/`category` GUI behaviour **activated in 2.5**). Hide from the GUI tree, tint the stage name (`#RRGGBB`), group label/tag, `scope = "server"` (server-wide stage), temporary `duration` (auto-expires after real time) |
 | (root) | `minecraft = true` | Shorthand: equivalent to `mods = ["minecraft"]` across items/blocks/fluids/entities |
 
 Two whitelist mechanisms exist:
@@ -237,7 +252,7 @@ mode = "all_of"
   entity = "minecraft:ender_dragon"
 ```
 
-Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance` (blocks travelled, by movement kind or `all`), `stat` (any vanilla custom statistic), `play_time` (minutes), `level`, `xp`, `has_item`, `advancement`, `dimension`, `biome`, and **new in 2.4** `effect` (currently has a status effect), `breed`, `day_count` (reached world day N), `weather` (`rain`/`thunder`/`clear`, one-shot), `enter_structure` (one-shot), `tame`, `kill_with` (kill an entity while holding a given item). Subjects accept `#tag`/`tag:` form; `count` defaults to 1. (`tame`/`kill_with` use mod-tracked counters rather than vanilla stats.) The counter types read vanilla statistics, so they're **retroactive** and survive restarts with no extra save files; `dimension`/`biome` "visited" one-shots are persisted per player (reset with `/progressivestages trigger reset <player> <stage>`). Progress is per-player and the first team member to satisfy a rule unlocks the stage for the whole team. Poll cadence is `enforcement.trigger_poll_interval` ticks (relevant events also force an immediate re-check).
+Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`, `distance` (blocks travelled, by movement kind or `all`), `stat` (any vanilla custom statistic), `play_time` (minutes), `level`, `xp`, `has_item`, `advancement`, `dimension`, `biome`, and **new in 2.4** `effect` (currently has a status effect), `breed`, `day_count` (reached world day N), `weather` (`rain`/`thunder`/`clear`, one-shot), `enter_structure` (one-shot), `tame`, `kill_with` (kill an entity while holding a given item), and **new in 2.5** `world_time` (time-of-day tick `0..23999`, e.g. at night) and `script` (a custom KubeJS-registered predicate, referenced by `type="script", id="<conditionId>"`). Subjects accept `#tag`/`tag:` form; `count` defaults to 1. (`tame`/`kill_with` use mod-tracked counters rather than vanilla stats.) **New in 2.5:** `breed` takes an optional species/tag target (no target = all bred animals, retroactive; with a target = that species/tag, event-counted), and `kill_with` accepts a `#tag` victim (summed over the tag's members). The counter types read vanilla statistics, so they're **retroactive** and survive restarts with no extra save files; `dimension`/`biome` "visited" one-shots are persisted per player (reset with `/progressivestages trigger reset <player> <stage>`). Progress is per-player and the first team member to satisfy a rule unlocks the stage for the whole team. Poll cadence is `enforcement.trigger_poll_interval` ticks (relevant events also force an immediate re-check).
 
 **Triggers respect dependencies:** a stage is not auto-granted by its triggers until every `[stage].dependency` prerequisite is owned. Counters keep accruing while a prerequisite is missing, so the next poll after the last prerequisite is granted completes the unlock. Omit a stage's `dependency` to let its triggers fire freely, regardless of progression.
 
@@ -271,7 +286,7 @@ show_description_on_tooltip = true    # append [stage].description to the toolti
 | **Curios** | `CurioCanEquipEvent` gate; per-slot stage locks via `[curios].locked_slots` |
 | **Lootr** | `ILootrFilterProvider` filters stage-locked loot from per-player chest snapshots |
 | **Mekanism** | Entity-join + block-break hooks honor stage gates; gases/pigments hidden in EMI via class-module detection |
-| **KubeJS** | First-class stages — `player.stages.has/add/remove(...)` plus `PlayerEvents.stageAdded` / `stageRemoved`; Java `StageChangeEvent` (NeoForge bus) carries the `StageCause` |
+| **KubeJS** | **New in 2.5:** a global `ProgressiveStages` object with `onGranted`/`onRevoked` callbacks (fire on every engine grant/revoke), `condition('id', player => bool)` for custom `script:` trigger conditions, and `has`/`grant`/`revoke`/`list`/`percent` helpers. Also first-class `player.stages.has/add/remove(...)`; Java `StageChangeEvent` (NeoForge bus) carries the `StageCause`. (KubeJS 7.x has no native stage events on engine grants — use `onGranted`/`onRevoked`.) |
 | **NaturesCompass** | Filters dimension/structure search results so locked dimensions don't appear |
 | **Visual Workbench** | Reflective shim — locks targeting `minecraft:crafting_table` apply through VW-replaced workbenches |
 
@@ -291,7 +306,7 @@ All integrations are reflection-loaded; absent mods are silently skipped. Each c
 | `/stage tree` | OP | Print the stage dependency tree |
 | `/stage gui` | OP | Open the in-game Stage Tree / Progression viewer (any player can open it via the keybind) |
 | `/stage progress [next\|all\|<stage>] [player]` | OP | Show live `[[triggers]]` rule/condition progress toward stages |
-| `/stage validate` | OP | Validate every stage TOML file (registry existence, dependency cycles, malformed entries) |
+| `/stage validate` | OP | Validate every stage TOML file (registry existence, dependency cycles, malformed entries). **Deepened in 2.5:** full multi-node dependency cycles, transitively-unreachable stages, dead trigger targets (unresolved exact-id entity/block/item/effect or `kill_with` item), and profession ids. |
 | `/stage reload` | OP | Reload stage configs (incl. each stage's `[[triggers]]`) from disk |
 | `/progressivestages triggers list [player]` | OP | List every stage that declares `[[triggers]]`; with a player, show their live per-condition progress |
 | `/progressivestages trigger reset <player> <stage>` | OP | Clear a stage's persisted one-shot (dimension / biome visited) progress |
@@ -381,6 +396,16 @@ compat/
 ---
 
 ## Changelog
+
+### v2.5
+- **`[professions]` lock category** — gate opening a villager's trade GUI by the villager's PROFESSION (`id:`/`mod:`/`name:`; no tags). Wandering traders unaffected (use `[trades]`). Opt-in (no overhead when unused).
+- **`[advancements]` lock category** — hide locked advancements from the advancements screen entirely (stripped from the update packet server-side; the client never learns they exist; full re-send when the stage is gained). `id:`/`mod:`/`name:` matching.
+- **Structure gating enhancements** — `entry_padding` (block buffer; accepted under `[structures]` or `[structures.rules]`) and last-safe-position teleport: a breaching player is sent back to where they last stood outside any locked structure.
+- **New `[[triggers]]` conditions** — `world_time` (time-of-day tick `0..23999`; aliases `time_of_day`/`daytime`/`clock`); `breed` gains an optional species/tag target (no target = all/retroactive; target = event-counted); `kill_with` accepts a `#tag` victim; `script` (`js`/`kubejs`/`custom`) — a custom KubeJS-registered predicate via `type="script", id="<id>"`.
+- **Datapack-loaded stages** — `data/<namespace>/progressivestages/stages/*.toml` load at world load and on `/reload` and merge with config-folder stages; a same-id config file always wins (datapacks = overridable defaults).
+- **`[stage]` hidden/color/category now live in the GUI** — previously inert: `hidden` omits the stage from the tree, `color = "#RRGGBB"` tints its name, `category` shows as a tag in the detail header.
+- **Deep KubeJS integration** — global `ProgressiveStages` object: `onGranted`/`onRevoked` (fire on every engine grant/revoke), `condition('id', player => bool)` for `script:` conditions, `has`/`grant`/`revoke`/`list`/`percent`. Reset each server-script reload. Corrects the prior doc claim that KubeJS native `STAGE_ADDED`/`STAGE_REMOVED` fire on engine grants — they do not (KubeJS 7.x has no native stage events).
+- **Deeper `/stage validate`** — full multi-node dependency cycles, transitively-unreachable stages, dead trigger targets (unresolved exact-id entity/block/item/effect or `kill_with` item), and profession-id validation.
 
 ### v2.4
 - **`[attribute]` stage buffs** — `[[attribute]]` entries (`id` / `operation` / `amount`) grant attribute modifiers while the team owns the stage; any vanilla or modded attribute, `add` / `multiply_base` / `multiply_total`. Applied on grant/login, removed on revoke (transient + reconciled); current health clamps down if max health drops.

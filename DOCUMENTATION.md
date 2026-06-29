@@ -1,6 +1,6 @@
-# ProgressiveStages 2.4 — Complete Documentation
+# ProgressiveStages 2.5 — Complete Documentation
 
-> ProgressiveStages **2.4** for NeoForge 1.21.1, Java 21.  
+> ProgressiveStages **2.5** for NeoForge 1.21.1, Java 21.  
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -30,6 +30,9 @@
    - [4.13 `[mobs]` — spawn gating and dynamic replacement](#413-mobs--spawn-gating-and-dynamic-replacement)
    - [4.14 `[pets]` — taming, breeding, commanding, riding](#414-pets--taming-breeding-commanding-riding)
    - [4.15 `[screens]` — block / item GUI gating](#415-screens--block--item-gui-gating)
+   - [4.15a `[trades]` — villager / wandering-trader trade gating](#415a-trades--villager--wandering-trader-trade-gating)
+   - [4.15b `[professions]` — gate trading by villager profession](#415b-professions--gate-trading-by-villager-profession) — **New in 2.5**
+   - [4.15c `[advancements]` — hide advancements from the screen](#415c-advancements--hide-advancements-from-the-screen) — **New in 2.5**
    - [4.16 `[structures]` — entry, rules, chest locking](#416-structures--entry-rules-chest-locking)
    - [4.17 `[[regions]]` — fixed 3D boxes with flags + debuffs](#417-regions--fixed-3d-boxes-with-flags--debuffs)
    - [4.18 `[curios]` — per-slot gating when Curios is installed](#418-curios--per-slot-gating-when-curios-is-installed)
@@ -43,7 +46,8 @@
    - [4.26 `[cost]` — skill-tree purchasable stages](#426-cost--skill-tree-purchasable-stages) — **New in 2.4**
    - [4.27 `[unlock]` — unlock "juice"](#427-unlock--unlock-juice) — **New in 2.4**
    - [4.28 `[abilities]` — ability gating](#428-abilities--ability-gating) — **New in 2.4**
-   - [4.29 `[stage]` new metadata — hidden / color / category / scope](#429-stage-new-metadata--hidden--color--category--scope) — **New in 2.4**
+   - [4.29 `[stage]` new metadata — hidden / color / category / scope](#429-stage-new-metadata--hidden--color--category--scope) — **New in 2.4** *(hidden / color / category now live in the GUI — see 2.5 note)*
+   - [4.30 Datapack-loaded stages](#430-datapack-loaded-stages) — **New in 2.5**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -878,6 +882,78 @@ Creative and spectator players bypass. Toggle globally with
 `enforcement.block_trades`. Covers both villagers and the wandering trader (both
 route through the same merchant code path).
 
+### 4.15b `[professions]` — gate trading by villager profession
+
+> **New in 2.5.**
+
+```toml
+[professions]
+locked = [
+    "id:minecraft:weaponsmith",
+    "mod:somemod",
+    "name:cleric",
+]
+```
+
+Where `[trades]` hides **individual offers** by their *result* item, `[professions]`
+gates the **whole trade GUI** by the villager's **profession**. A player who lacks
+the gating stage simply **cannot open** a gated villager's trades at all — the
+`EntityInteract` is cancelled and the standard lock notice fires (with a per-player
+cooldown).
+
+The list is **id-only prefix matching** — `id:`, `mod:`, and `name:` against the
+profession's registry id (e.g. `minecraft:weaponsmith`). **Tags are not supported**
+(professions carry no tags). Examples:
+
+| Entry | Matches |
+|-------|---------|
+| `id:minecraft:weaponsmith` | exactly the weaponsmith profession |
+| `mod:somemod` | every profession registered by `somemod` |
+| `name:cleric` | any profession whose id contains `cleric` |
+
+- **Wandering traders have no profession** and are therefore **never** affected —
+  use `[trades]` (§4.15a) to gate their offers.
+- **Entirely opt-in.** With no `[professions]` locks declared anywhere, every
+  villager-interact check is a cheap no-op (no per-tick overhead).
+- Creative players bypass. There is **no separate global toggle** — the feature is
+  active whenever any stage declares a `[professions]` lock.
+
+The implementation is
+[`VillagerProfessionEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/VillagerProfessionEnforcer.java),
+invoked from `ServerEventHandler.onEntityInteract`.
+
+### 4.15c `[advancements]` — hide advancements from the screen
+
+> **New in 2.5.**
+
+```toml
+[advancements]
+locked = [
+    "id:minecraft:nether/root",
+    "mod:somemod",
+]
+```
+
+Locked advancements (those whose gating stage the player lacks) are **hidden
+entirely** from the advancements screen — and not merely greyed out. The server
+**strips them from every `ClientboundUpdateAdvancementsPacket`** before it reaches
+the client ([`ServerAdvancementHidingMixin`](src/main/java/com/enviouse/progressivestages/mixin/ServerAdvancementHidingMixin.java)),
+so a vanilla client is **never even told the advancement exists**. There is no
+spoiler to reveal in F-key tooltips, tab names, or the advancement tree.
+
+When the player **gains** the gating stage, a **full advancement re-send** is
+triggered ([`AdvancementHider.resyncIfNeeded`](src/main/java/com/enviouse/progressivestages/server/enforcement/AdvancementHider.java)
+calls `player.getAdvancements().reload(...)`), so the now-reachable advancements
+**pop into view without a relog** (and revoked ones disappear again).
+
+Like `[professions]`, matching is **id-only** (`id:` / `mod:` / `name:`; **no
+tags**) and the feature is **opt-in** — a cheap `hasAdvancementLocks()` fast-path
+short-circuits the packet filter whenever no stage gates an advancement.
+
+The implementations are
+[`AdvancementHider`](src/main/java/com/enviouse/progressivestages/server/enforcement/AdvancementHider.java)
+and [`ServerAdvancementHidingMixin`](src/main/java/com/enviouse/progressivestages/mixin/ServerAdvancementHidingMixin.java).
+
 ### 4.16 `[structures]` — entry, rules, chest locking
 
 ```toml
@@ -894,6 +970,7 @@ prevent_block_break = true
 prevent_block_place = true
 prevent_explosions = true
 disable_mob_spawning = true
+entry_padding = 3            # New in 2.5 — see below (also accepted directly under [structures])
 ```
 
 Two parts: the list of locked structure IDs (`locked_entry`) and a single
@@ -902,10 +979,26 @@ Two parts: the list of locked structure IDs (`locked_entry`) and a single
 #### `locked_entry`
 
 When a player enters the piece bounding box of any listed structure and lacks
-the gating stage, they are teleported to the nearest outside edge. The check
-runs every `enforcement.region_tick_frequency` ticks (default 20 = 1s). Piece
-precision means players can't sneak in through a partial overlap — every
-structure piece's bounding box is checked individually.
+the gating stage, they are **bounced back out**. The check runs every
+`enforcement.region_tick_frequency` ticks (default 20 = 1s). Piece precision
+means players can't sneak in through a partial overlap — every structure piece's
+bounding box is checked individually.
+
+**Last-safe-position teleport — New in 2.5.** Each tick a player is *outside*
+every locked structure, the enforcer records that spot as their **last safe
+position**. When they then breach a gated structure they are teleported **back to
+that remembered safe spot** (provided it's genuinely still outside the box) rather
+than merely shoved to the nearest edge — so they end up where they actually stood,
+not pinned against the wall. If no safe position has been recorded yet, the
+enforcer falls back to pushing them to the nearest box edge. (The record is dropped
+on logout.)
+
+**`entry_padding` — New in 2.5.** An integer buffer **in blocks** that places the
+repelled player **well clear of the boundary** rather than right on its edge.
+Accepted **either** under `[structures.rules].entry_padding` **or** directly on
+`[structures].entry_padding` (the larger of the two wins). It only applies to the
+nearest-edge fallback push; defaults to `0`. Set e.g. `entry_padding = 3` to keep
+players from clipping the boundary or re-triggering the check immediately.
 
 #### `[structures.rules]`
 
@@ -1405,8 +1498,9 @@ each tick** if they try to glide.
 
 ### 4.29 `[stage]` new metadata — hidden / color / category / scope
 
-**New in 2.4.** The `[stage]` table (§4.2) gained several optional metadata keys,
-mostly for the Stage Tree GUI and for server-wide stages:
+**New in 2.4** (with the GUI behaviour of `hidden` / `color` / `category` fully
+**activated in 2.5**). The `[stage]` table (§4.2) gained several optional metadata
+keys, mostly for the Stage Tree GUI and for server-wide stages:
 
 ```toml
 [stage]
@@ -1420,11 +1514,49 @@ duration = "2h"            # temporary stage (see §4.25)
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `hidden` | bool | When `true`, the stage is **hidden from the Stage Tree GUI**. It still functions (locks, triggers, grants) — it's just not drawn in the tree. |
-| `color` | string | A GUI **tint** for the stage node — a hex string (`"#55FF55"`) or an `&`-color code. |
-| `category` | string | A **group label** used to bucket stages in the GUI. |
+| `hidden` | bool | When `true`, the stage is **omitted from the Stage Tree GUI** entirely (its children re-root to the top level). It still functions (locks, triggers, grants) — it's just not drawn in the tree. |
+| `color` | string | A GUI **tint** for the stage's name — a `#RRGGBB` hex string (`"#55FF55"`) or an `&`-color code. Applies to the stage's name in both the tree and the detail header (the status colour is the fallback when omitted). |
+| `category` | string | A **group label**, shown as a `[category]` tag in the detail-pane header. |
 | `scope` | string | `"team"` (default) or `"server"`. A **`"server"`-scoped stage is SERVER-WIDE**: the **first team** to satisfy it unlocks it for the **whole server** (everyone, including future joiners). Use for global milestones ("someone has beaten the dragon → the End gate opens for all"). |
 | `duration` | string | Temporary-stage lifetime — see §4.25. |
+
+> **Activated in 2.5.** Prior to 2.5, `hidden` / `color` / `category` were
+> **parsed but inert**. As of 2.5 they take effect in the Stage Tree GUI exactly
+> as described above: `hidden` removes the node, `color` (when it's a `#RRGGBB`
+> hex) tints the stage name, and `category` shows as a tag in the detail header.
+> They are synced to the client via `ClientStageCache`
+> ([`StageTreeScreen`](src/main/java/com/enviouse/progressivestages/client/gui/StageTreeScreen.java)).
+
+### 4.30 Datapack-loaded stages
+
+> **New in 2.5.**
+
+Stage TOML files no longer have to live in the config folder — a **datapack** can
+ship its own stages at:
+
+```
+data/<namespace>/progressivestages/stages/*.toml
+```
+
+Each `.toml` uses the **exact same schema** as a config-folder stage file (every
+category, `[[triggers]]`, `[unlocks]`, etc.). Datapack stages are loaded by a
+**reloadable-resource listener**, so they're (re)read both at **world load** and on
+**`/reload`**, and merged with the config-folder stages.
+
+**Merge rule: config always wins.** If a stage id is defined **both** in a datapack
+**and** in `config/ProgressiveStages/<id>.toml`, the **config file wins** — the
+datapack copy is overridden. This makes datapacks an ideal way to ship
+**overridable defaults**: a content/quest datapack can bundle a baseline
+progression that a pack author or server admin can then tweak locally **without
+editing the datapack** (just drop a same-id file in the config folder).
+
+> A datapack with a stage id that duplicates **another datapack's** stage id logs a
+> warning and keeps the last one loaded. Use distinct ids across datapacks.
+
+The implementation is
+[`DatapackStageLoader`](src/main/java/com/enviouse/progressivestages/server/loader/DatapackStageLoader.java)
+(a `SimplePreparableReloadListener`), which hands its parsed map to
+`StageFileLoader.setDatapackStages(...)` for the config-wins merge.
 
 ---
 
@@ -1525,12 +1657,14 @@ omitted).
 | `dimension` | `dimension` = `<id>` | Dimension entered at least once | one-shot |
 | `biome` | `biome` = `<id\|tag>` | Biome visited at least once | one-shot |
 | `effect` | `effect` = `<id>` | **New in 2.4.** Currently has a status effect (e.g. `effect = "minecraft:strength"`) | state |
-| `breed` | `entity` = `<id\|tag>` | **New in 2.4.** Animals bred | yes |
+| `breed` | `entity`/`animal` = `<id\|tag>` (optional) | **New in 2.4** (target **New in 2.5**). Animals bred — no target = all (retroactive); with a target = that species/tag (event-counted) | yes |
 | `day_count` | `count` = `<N>` | **New in 2.4.** Reached world day N | state |
+| `world_time` | `count` = `<tick>` | **New in 2.5.** Current time-of-day tick within the day (`0..23999`) — e.g. trigger at night | state |
 | `weather` | `weather` = `"rain"\|"thunder"\|"clear"` | **New in 2.4.** Experienced this weather (persisted one-shot) | one-shot |
 | `enter_structure` | `structure` = `<id>` | **New in 2.4.** Entered this structure at least once (persisted one-shot) | one-shot |
 | `tame` | `entity` = `<id\|tag>` (optional) | **New in 2.4.** Animals tamed | yes (mod counter) |
-| `kill_with` | `entity` = `<id>`, `with`/`item` = `<id>` | **New in 2.4.** Killed `entity` while holding `with` | yes (mod counter) |
+| `kill_with` | `entity` = `<id\|#tag>`, `with`/`item` = `<id>` | **New in 2.4** (`#tag` victim **New in 2.5**). Killed `entity` while holding `with` | yes (mod counter) |
+| `script` | `id` = `<conditionId>` | **New in 2.5.** Custom condition evaluated by a KubeJS-registered predicate (§11) | state |
 
 **New in 2.4 condition details:**
 
@@ -1538,8 +1672,12 @@ omitted).
   has* the named status effect, e.g. `effect = "minecraft:strength"`. Like
   `level` / `xp` it can flip back to unsatisfied when the effect wears off, until
   the whole rule fires.
-- **`breed`** — counts animals **bred**. Subject `entity` accepts `id`/tag form;
-  `count` defaults to 1.
+- **`breed`** — counts animals **bred**. **New in 2.5:** the `entity`/`animal`
+  target is now **optional**. With **no target** it counts **all** bred animals via
+  the vanilla `ANIMALS_BRED` stat (retroactive); with a **target** (`entity = "minecraft:cow"`
+  or `entity = "#minecraft:..."`) it counts **that species/tag**, **event-counted**
+  (non-retroactive — only accrues from when the trigger loads, matching `tame` /
+  `kill_with`). `count` defaults to 1.
 - **`day_count`** — satisfied once the world day number reaches `count = N`.
 - **`weather`** — a persisted one-shot: once the player has **experienced** the
   named weather (`"rain"`, `"thunder"`, or `"clear"`) it stays satisfied.
@@ -1549,7 +1687,24 @@ omitted).
   specific type / tag; omit it to count any tame.
 - **`kill_with`** — counts kills of `entity` performed **while holding** the
   `with` item (alias `item`). Example: `entity = "minecraft:ender_dragon"`,
-  `with = "minecraft:diamond_sword"`, `count = 1`.
+  `with = "minecraft:diamond_sword"`, `count = 1`. **New in 2.5:** the `entity`
+  victim may also be a **`#tag`** (e.g. `entity = "#minecraft:skeletons"`), in
+  which case the count is **summed over every entity type in the tag** (all sharing
+  the same held `with` item).
+
+**New in 2.5 condition details:**
+
+- **`world_time`** — a **live state** check on the **time of day**: satisfied when
+  the world's current daytime tick (`getDayTime() % 24000`, in `0..23999`) reaches
+  `count`. For example `count = 13000` is roughly nightfall. Aliases:
+  `time_of_day`, `daytime`, `clock`. (Note: `day_count` reads the *day number*;
+  `world_time` reads the *tick within the current day*.)
+- **`script`** — a **fully custom** condition evaluated by a **KubeJS-registered
+  predicate**. Reference it with `type = "script"` and `id = "<conditionId>"`; the
+  predicate is registered from a server script with `ProgressiveStages.condition('<conditionId>', player => <boolean>)`
+  (see §11). It evaluates as a live **state** check (the rule fires once the
+  predicate — and the rest of the rule — is satisfied). If no script registered
+  that id, it evaluates to `false`. Aliases: `js`, `kubejs`, `custom`.
 
 > **Counter source note.** `tame` and `kill_with` use **mod-tracked counters**
 > (the mod increments them itself), so unlike the §5.3 retroactive types they
@@ -1959,11 +2114,35 @@ Most subcommands require permission level **3** (admin). The exception is
 | Command | Permission | Description |
 |---------|------------|-------------|
 | `/progressivestages reload` | 3 | Reload stage TOMLs (including each stage's `[[triggers]]`); re-sync every online player. |
-| `/progressivestages validate` | 3 | Parse every stage file with detailed error reporting; warn about dependency issues. |
+| `/progressivestages validate` | 3 | Parse every stage file with detailed error reporting; warn about dependency issues. **Deepened in 2.5** — see below. |
 | `/progressivestages ftb status [player]` | 3 | Diagnostics for the FTB Quests integration. |
 | `/progressivestages triggers list [player]` | 3 | List every stage that declares `[[triggers]]` rules; with a player, show their live per-condition progress. |
 | `/progressivestages trigger reset <player> <stage>` | 3 | Clear the persisted one-shot (`dimension` / `biome` visited) progress for that stage. |
 | `/progressivestages no-creative-popup` | any player | Toggle the creative-bypass warning popup for the calling player only. |
+
+**Deeper `validate` — New in 2.5.** Beyond the original syntax-error, invalid-id,
+and self-loop / dead-dependency checks, `validate` now also reports:
+
+- **Full multi-node dependency cycles** — not just `a → a` self-loops but
+  `a → b → c → a` chains, found via a white/grey/black DFS and reported once each
+  (canonicalised so the same cycle reached from different entry points isn't
+  double-listed).
+- **Transitively-unreachable stages** — a stage whose dependency closure contains a
+  cycle member or a non-existent stage, so its prerequisites can never all be
+  satisfied (it is permanently un-grantable).
+- **Dead trigger targets** — a `[[triggers]]` condition whose **exact-id** subject
+  doesn't resolve in the registry: the entity (`kill` / `kill_with` / `tame`),
+  block (`mine`), item (`craft` / `pickup` / `use` / `drop` / `break_item` /
+  `has_item`), or mob-effect (`effect`), plus the `kill_with` **held item**. Tags
+  (`#...`) and data-driven targets (advancement / dimension / biome / structure /
+  raw stat) are intentionally skipped (they aren't in the built-in registries).
+- **Profession ids** — `[professions].locked` exact ids are validated against the
+  villager-profession registry.
+
+(Cycle / unreachable detection lives in
+[`StageOrder.validateDependencies`](src/main/java/com/enviouse/progressivestages/common/stage/StageOrder.java);
+dead-target / profession checks in
+[`StageFileLoader.validateTriggerTargets`](src/main/java/com/enviouse/progressivestages/server/loader/StageFileLoader.java).)
 
 ### 7.3 `/progressivestages ftb status` output
 
@@ -2146,30 +2325,97 @@ PlayerEvents.tick(event => {
 })
 ```
 
-PS stages also fire KubeJS's **standard stage events** on every grant / revoke,
-so you can react to them with the usual `PlayerEvents.stageAdded` /
-`PlayerEvents.stageRemoved`:
+> **Correction (2.5).** Earlier docs claimed PS fires KubeJS's native
+> `STAGE_ADDED` / `STAGE_REMOVED` events on **every** grant/revoke. **It does
+> not** — KubeJS 7.x has **no native stage events**. KubeJS only fires its own
+> internal sync when a script itself calls `player.stages.add/remove(...)`; an
+> **engine** grant (a `[[triggers]]` unlock, a command, a quest reward, a
+> skill-tree purchase, a regression) does **not** route through that path and
+> therefore never fired a KubeJS stage event. The reliable lifecycle hook is the
+> new `ProgressiveStages.onGranted` / `onRevoked` API below.
+
+### 11.1 The `ProgressiveStages` global object — **New in 2.5**
+
+A dedicated KubeJS plugin
+([`ProgressiveStagesKubeJSPlugin`](src/main/java/com/enviouse/progressivestages/compat/kubejs/ProgressiveStagesKubeJSPlugin.java),
+discovered via `kubejs.plugins.txt`) binds a global **`ProgressiveStages`** object
+([`PSKubeBindings`](src/main/java/com/enviouse/progressivestages/compat/kubejs/PSKubeBindings.java))
+into every script context, giving packs deep, server-authoritative control.
+
+**Lifecycle hooks — fire on EVERY engine grant/revoke** (commands, `[[triggers]]`,
+quest rewards, skill-tree purchase, regression — all of them):
 
 ```javascript
-PlayerEvents.stageAdded("diamond_age", event => {
-    event.player.tell("You earned the diamond stage!")
-    event.player.give("minecraft:diamond_pickaxe")
+// server_scripts/stages.js
+ProgressiveStages.onGranted((player, stage) => {
+    player.tell("Unlocked " + stage)
 })
-
-PlayerEvents.stageRemoved("diamond_age", event => {
-    event.player.tell("The diamond stage slipped away…")
+ProgressiveStages.onRevoked((player, stage) => {
+    player.tell("Lost " + stage)
 })
 ```
 
-The compat bridge fires KubeJS's `STAGE_ADDED` / `STAGE_REMOVED` events on every
-grant/revoke. Implementation:
-[`KubeJSStagesCompat`](src/main/java/com/enviouse/progressivestages/compat/kubejs/KubeJSStagesCompat.java).
+**Custom trigger conditions — the `script` condition type (§5.2):** register a
+predicate by id, then reference it from any stage's `[[triggers]]` with
+`type = "script", id = "<id>"`:
+
+```javascript
+// stage TOML:  [[triggers]]  type = "script"  id = "rich"
+ProgressiveStages.condition('rich', player =>
+    player.getMainHandItem().id == 'minecraft:diamond')
+```
+
+**Imperative control / queries** from any KubeJS event:
+
+| Call | Returns | Notes |
+|------|---------|-------|
+| `ProgressiveStages.has(player, 'stage')` | boolean | Does the player (team) own the stage |
+| `ProgressiveStages.grant(player, 'stage')` | boolean | Grant the stage (cause `COMMAND`) |
+| `ProgressiveStages.revoke(player, 'stage')` | boolean | Revoke the stage (cause `COMMAND`) |
+| `ProgressiveStages.list(player)` | string[] | All owned stage ids |
+| `ProgressiveStages.percent(player, 'stage')` | int `0..100` | The stage's `[[triggers]]` completion % |
+
+```javascript
+ServerEvents.tick(e => e.server.players.forEach(p => {
+    if (ProgressiveStages.percent(p, 'diamond_age') >= 100)
+        ProgressiveStages.grant(p, 'diamond_age')
+}))
+```
+
+> **Reset per reload.** All `onGranted` / `onRevoked` callbacks and `condition`
+> registrations are **cleared at the start of each server-script reload**, so a
+> `/reload` re-registers them cleanly instead of stacking duplicate handlers
+> ([`ScriptHooks.reset()`](src/main/java/com/enviouse/progressivestages/common/compat/ScriptHooks.java)).
+> The seam class `ScriptHooks` has **no KubeJS import**, so the engine can fire
+> hooks / evaluate `script` conditions whether or not KubeJS is installed (the
+> registries are simply empty when nothing registered them).
+
+### 11.2 First-class `player.stages` API
+
+ProgressiveStages also implements KubeJS's own `Stages` interface, so scripts can
+read/add/remove PS stages through the **normal `player.stages` API**
+([`KubeJSStagesCompat`](src/main/java/com/enviouse/progressivestages/compat/kubejs/KubeJSStagesCompat.java)):
+
+```javascript
+PlayerEvents.tick(event => {
+    let player = event.player
+    if (player.stages.has("stone_age")) player.stages.add("diamond_age")
+    player.stages.remove("stone_age")
+})
+```
+
+A script-initiated `player.stages.add/remove(...)` goes through KubeJS's own
+wrappers (which fire KubeJS's internal sync); it **also** flows through the PS
+engine, so it still fires `ProgressiveStages.onGranted` / `onRevoked` and the Java
+`StageChangeEvent`. For reacting to grants, prefer `ProgressiveStages.onGranted`
+over the (non-existent) native stage events.
 
 **Java event bus, too.** Independent of KubeJS, every grant/revoke also fires the
 Java [`StageChangeEvent`](src/main/java/com/enviouse/progressivestages/common/api/StageChangeEvent.java)
 on the NeoForge event bus, carrying a `StageCause` (`COMMAND`, `TRIGGER`,
 `PURCHASE`, `REGRESSION`, …) so other mods can react with full provenance — see
-§15.4.
+§15.4. (`ProgressiveStages.onGranted` / `onRevoked` are driven by this same event,
+so they too see every cause.)
 
 A common pattern: use KubeJS to define a recipe with a unique recipe ID, then
 gate that recipe ID in a stage's `[recipes].locked_ids` list — gives KubeJS
@@ -2545,9 +2791,11 @@ common/
     PrefixEntry.java                 ← prefix parser (id:/mod:/tag:/name:)
   network/
     NetworkHandler.java              ← packet registration + send helpers
+  compat/
+    ScriptHooks.java                 ← KubeJS-free seam: onGranted/onRevoked + script: condition registry (2.5)
   stage/
     StageManager.java                ← grant / revoke / sync core
-    StageOrder.java                  ← dependency graph + lookups
+    StageOrder.java                  ← dependency graph + lookups + deep validate (cycles/unreachable) (2.5)
   tags/
     StageTagRegistry.java            ← NeoForge tag emission for stages
     DynamicTagProvider.java          ← datapack tag generation
@@ -2581,13 +2829,16 @@ server/
     RegionEnforcer.java              ← [[regions]] entry + flags
     ScreenEnforcer.java              ← [screens] block + item GUI
     StageLootModifier.java           ← Global Loot Modifier impl
-    StructureEnforcer.java           ← [structures] entry + chest locking
+    StructureEnforcer.java           ← [structures] entry + chest locking + entry_padding + last-safe-pos (2.5)
+    VillagerProfessionEnforcer.java  ← [professions] trade-GUI gate by villager profession (2.5)
+    AdvancementHider.java            ← [advancements] re-send driver (2.5; filter in ServerAdvancementHidingMixin)
   integration/
     FTBTeamsIntegration.java         ← FTB Teams membership wiring
   loader/
     DefaultStageTemplates.java       ← built-in stage TOML strings (locks + [[triggers]] + [display])
-    StageFileLoader.java             ← directory scan + reload
+    StageFileLoader.java             ← directory scan + reload; datapack/config merge + deep validate (2.5)
     StageFileParser.java             ← TOML → StageDefinition (parses [[triggers]] + [display])
+    DatapackStageLoader.java         ← loads data/<ns>/progressivestages/stages/*.toml (2.5)
   triggers/
     StageTriggerEvaluator.java       ← per-stage [[triggers]] evaluator (poll + event re-checks, 2.1)
     TriggerPersistence.java          ← per-world dimension/biome "visited" one-shot record
@@ -2595,7 +2846,7 @@ server/
 common/trigger/                      ← per-stage [[triggers]] data model (2.1)
   TriggerRule.java                   ← one [[triggers]] block (OR-ed rule)
   TriggerCondition.java              ← one [[triggers.conditions]] entry
-  TriggerConditionType.java          ← kill / mine / craft / … / dimension / biome enum
+  TriggerConditionType.java          ← kill / mine / craft / … / dimension / biome / world_time / script enum
   TriggerMode.java                   ← all_of / any_of
 
 client/
@@ -2620,6 +2871,7 @@ mixin/                               ← every mixin (vanilla menus + EMI screen
   CraftingMenuMixin.java
   ResultSlotMixin.java
   ServerPlayerMerchantMixin.java
+  ServerAdvancementHidingMixin.java  ← strips [advancements]-gated entries from the update packet (2.5)
   client/
     EmiScreenManagerMixin.java
     EmiStackWidgetMixin.java
@@ -2637,7 +2889,10 @@ compat/                              ← every soft-dep integration
     FtbQuestsHooks.java
     RequiredStageHolder.java
     StageRequirementHelper.java
-  kubejs/KubeJSStagesCompat.java
+  kubejs/
+    KubeJSStagesCompat.java          ← player.stages bridge + fires onGranted/onRevoked on engine changes (2.5)
+    ProgressiveStagesKubeJSPlugin.java ← binds the global ProgressiveStages object (2.5)
+    PSKubeBindings.java              ← ProgressiveStages.onGranted/onRevoked/condition/has/grant/… (2.5)
   lootr/
     LootrCompat.java
     LootrStageFilter.java
