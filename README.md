@@ -10,6 +10,10 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ---
 
+💬 **Community & support:** [Discord](https://discord.com/invite/9v4gaRSfdJ) · 🐛 [Issues](https://github.com/EnVisione/ProgressiveStages/issues)
+
+---
+
 ## What's new in 3.0
 
 - **`[rewards]` on grant** — the companion to `[cost]`. `[rewards]` hands a stage's loot out **the moment it's granted**: `items = ["minecraft:diamond:5"]`, `effects = ["minecraft:strength:60:1"]` (`id:seconds:amplifier`), `commands = ["give {player} ..."]` (run as the player at permission 2; `{player}` substituted; singular `command` also accepted), `teleport = "[dim] x y z"` (dimension optional), `xp_levels`, `xp_points`. Fires **once per real grant** — applied to the player who earned/bought the stage (not per team member), not on login/sync — for every cause.
