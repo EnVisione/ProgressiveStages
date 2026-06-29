@@ -247,6 +247,9 @@ public class NetworkHandler {
         return n;
     }
 
+    /** v3.0: per-player skill-tree purchase cooldown tracking (transient, in-memory). */
+    private static final java.util.Map<java.util.UUID, Long> lastPurchase = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static void handlePurchaseServer(RequestPurchasePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
@@ -258,12 +261,25 @@ public class NetworkHandler {
                 return;
             }
             com.enviouse.progressivestages.common.config.StageCost cost = def.getCost();
+            // v3.0: enforce the purchase cooldown (server-authoritative).
+            if (cost.cooldownSeconds() > 0) {
+                long now = System.currentTimeMillis();
+                Long last = lastPurchase.get(player.getUUID());
+                if (last != null && now - last < cost.cooldownSeconds() * 1000L) {
+                    long remain = (cost.cooldownSeconds() * 1000L - (now - last)) / 1000L;
+                    player.sendSystemMessage(com.enviouse.progressivestages.common.util.TextUtil
+                        .parseColorCodes("&cPurchase on cooldown — &f" + remain + "s&c left."));
+                    sendStageGuiData(player);
+                    return;
+                }
+            }
             // Consume cost.
             if (cost.xpLevels() > 0) player.giveExperienceLevels(-cost.xpLevels());
             for (var ic : cost.items()) consumeItem(player, ic.item(), ic.count());
             // Grant (bypass dependency auto-grant since prereqs are already satisfied).
             StageManager.getInstance().grantStageWithCause(player, stageId,
                 com.enviouse.progressivestages.common.api.StageCause.PURCHASE);
+            if (cost.cooldownSeconds() > 0) lastPurchase.put(player.getUUID(), System.currentTimeMillis());
             // Refresh the GUI snapshot.
             sendStageGuiData(player);
         });

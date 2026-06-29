@@ -245,7 +245,15 @@ public final class StageFileParser {
             StageCost.ItemCost ic = parseItemCost(raw);
             if (ic != null) items.add(ic);
         }
-        return new StageCost(Math.max(0, xpLevels), items, bypass);
+        // v3.0: optional purchase cooldown (seconds, or a friendly `cooldown = "5m"`) + revoke refund %.
+        int cooldown = (int) readLong(sec, "cooldown_seconds", 0L);
+        Object cd = sec.get("cooldown");
+        if (cd instanceof String s && !s.isBlank()) {
+            long millis = parseDuration(s);
+            if (millis > 0) cooldown = (int) (millis / 1000L);
+        }
+        int refund = (int) readLong(sec, "refund_percent", 0L);
+        return new StageCost(Math.max(0, xpLevels), items, bypass, Math.max(0, cooldown), refund);
     }
 
     /** Parse {@code "minecraft:diamond:5"} (id + count) or {@code "minecraft:diamond"} (count 1). */

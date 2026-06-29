@@ -251,9 +251,35 @@ public class StageManager {
         // Fire events for each revoked stage
         for (StageId revokedStage : revoked) {
             fireStageChangeEvent(player, teamId, revokedStage, StageChangeType.REVOKED, cause);
+            // v3.0: refund part of a purchasable stage's cost to the player when it's revoked.
+            StageOrder.getInstance().getStageDefinition(revokedStage).ifPresent(d -> {
+                if (d.isPurchasable() && d.getCost().refundPercent() > 0) refundCost(player, d.getCost());
+            });
         }
 
         if (serverScoped) syncAllPlayers(); else syncToTeamMembers(teamId);
+    }
+
+    /** v3.0: return refund_percent of a purchased stage's item/xp cost to the player. */
+    private void refundCost(ServerPlayer player, com.enviouse.progressivestages.common.config.StageCost cost) {
+        int pct = cost.refundPercent();
+        int xp = cost.xpLevels() * pct / 100;
+        if (xp > 0) player.giveExperienceLevels(xp);
+        for (var ic : cost.items()) {
+            int give = ic.count() * pct / 100;
+            if (give <= 0) continue;
+            net.minecraft.world.item.Item item =
+                net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(ic.item()).orElse(null);
+            if (item == null) continue;
+            int max = Math.max(1, new net.minecraft.world.item.ItemStack(item).getMaxStackSize());
+            int remaining = give;
+            while (remaining > 0) {
+                int n = Math.min(remaining, max);
+                net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(item, n);
+                if (!player.getInventory().add(stack) || !stack.isEmpty()) player.drop(stack, false);
+                remaining -= n;
+            }
+        }
     }
 
     /**
