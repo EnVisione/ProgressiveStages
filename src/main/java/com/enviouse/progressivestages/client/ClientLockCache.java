@@ -197,8 +197,11 @@ public class ClientLockCache {
     private static void triggerEmiReload() {
         try {
             com.enviouse.progressivestages.client.emi.ProgressiveStagesEMIPlugin.triggerEmiReload();
-        } catch (Exception e) {
-            // Ignore - EMI may not be loaded
+        } catch (Throwable e) {
+            // Ignore — EMI may not be loaded. MUST catch Throwable, not just Exception: when EMI is
+            // absent, class-loading ProgressiveStagesEMIPlugin (it implements EmiPlugin) throws
+            // NoClassDefFoundError (an Error), which would otherwise crash the recipe-viewer reload
+            // and make EMI behave like a hard dependency.
         }
         try {
             com.enviouse.progressivestages.client.jei.ProgressiveStagesJEIPlugin.refreshJei();
