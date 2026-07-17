@@ -2,6 +2,7 @@
   "required": false,
   "minVersion": "0.8",
   "package": "com.enviouse.progressivestages.mixin",
+  "plugin": "com.enviouse.progressivestages.mixin.OptionalCompatMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
   "client": [

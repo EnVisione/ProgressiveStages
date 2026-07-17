@@ -15,8 +15,12 @@ each phase can ship with migration support, tests, and rollback safety.
 
 The 3.0 final baseline has completed its automated Phase A audit, regression tests, clean build,
 artifact inspection, configuration migration, merged trigger, UI, command, KubeJS, and optional
-integration checks. The real client, dedicated server, multiplayer, and optional mod runtime
-matrix remains the final manual Phase A release gate.
+integration checks. A no-integration dedicated server reaches the ready state, generates the
+documented config hierarchy, loads all three defaults, and shuts down with every dimension saved.
+A client launched under a virtual display completes mod, resource, font, texture, and GUI atlas
+initialization without a ProgressiveStages error. Manual in-world UI interaction, two-client
+multiplayer, and the installed optional-mod combination matrix remain the final Phase A release
+gates.
 
 Phases B through F are the approved development roadmap. Their registry kernel, universal
 condition tree, transaction engine, policy and action registries, advanced progression modes,
@@ -567,7 +571,7 @@ Every phase runs:
 
 ## Immediate next work
 
-1. Complete the real client, dedicated server, multiplayer, and optional mod Phase A matrix.
+1. Complete manual in-world UI, two-client multiplayer, and optional mod Phase A matrix testing.
 2. Build the registry and schema kernel without changing existing stage semantics.
 3. Adapt the current trigger condition types into registry entries.
 4. Introduce fully immutable compiled snapshots and atomic registry replacement.

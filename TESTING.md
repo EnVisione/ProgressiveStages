@@ -88,6 +88,7 @@ The test sources live under `src/test/java`.
 | `StageModelImmutabilityTest` | Defensive copies for rewards, regions, and enforcement maps. |
 | `StagePurchaseDataTest` | Namespaced offline refund persistence. |
 | `ScriptHooksTest` | Normalized script provider identifiers. |
+| `OptionalCompatMixinPluginTest` | Optional integration mixins apply only when their target classes exist. |
 | `ClientLockCacheTest` | Immutable defensive client lock snapshots. |
 | `TriggerConditionTypeTest` | Trigger aliases and invalid condition types. |
 | `BeginnerExamplePackTest` | Every copy-ready beginner TOML parses and its graph validates. |
