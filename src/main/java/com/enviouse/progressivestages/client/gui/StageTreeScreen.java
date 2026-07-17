@@ -301,7 +301,10 @@ public final class StageTreeScreen extends Screen {
 
         if (selected != null) renderInspector(g, mouseX, mouseY);
         renderWindowFrame(g, mouseX, mouseY);
-        super.render(g, mouseX, mouseY, partialTick);
+        // Screen.render would run the blur pass again. Render widgets directly above the completed map.
+        for (var renderable : renderables) {
+            renderable.render(g, mouseX, mouseY, partialTick);
+        }
 
         if (hovered != null && (selected == null || !insideInspector(mouseX, mouseY))) {
             renderNodeTooltip(g, hovered, mouseX, mouseY);
