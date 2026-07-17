@@ -2196,19 +2196,24 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
 - **Open it** with the **"Open Progression Tree"** keybind (category
   *ProgressiveStages* in Controls). It is **UNBOUND by default** — players
   assign a key in Options → Controls. You can also use `/stage`, `/stages`,
-  `/ps`, or `/stage gui`.
+  `/ps`, `/stage gui`, or the lock button immediately to the right of the
+  recipe-book button in the survival inventory.
 
-**Navigation.** Drag empty map space with the left mouse button. The mouse wheel
-scrolls vertically; Shift+wheel scrolls horizontally. WASD and the arrow keys
-also pan. The header home button returns to the most relevant available stage.
-The in-map category selector cycles with left/right click; `C` and Shift+`C`
-cycle it from the keyboard.
+**Navigation.** Hold the left mouse button and drag from empty map space or from
+a stage node. A short click opens that node, while movement pans the map like
+the vanilla advancement screen. The mouse wheel scrolls vertically;
+Shift+wheel scrolls horizontally. WASD and the arrow keys also pan. The header
+home button returns to the most relevant available stage. The in-map category
+selector cycles with left/right click; `C` and Shift+`C` cycle it from the
+keyboard.
 
 **Nodes and details.** Hover a framed node for its name, id, status,
 description, category, and trigger completion. Click it to pin an inspector with
-its prerequisites, full live `[[triggers]]` condition breakdown, unlock item
-preview, and purchase control. Search matches display name, id, description,
-category, and locked item ids. The Owned button hides completed nodes.
+its prerequisites, full live `[[triggers]]` condition breakdown grouped into
+clearly labeled `all_of` or `any_of` routes, unlock item preview, and purchase
+control. The inspector occupies a dedicated layer above every map node and item
+icon. Search matches display name, id, description, category, and locked item
+ids. The Owned button hides completed nodes.
 
 **Author layout (`[display]`).** Omit coordinates for automatic dependency-DAG
 layout, or specify both `x` and `y` (pixels). `frame` is `task`, `goal`, or
@@ -2223,6 +2228,15 @@ frame = "challenge"
 background = "minecraft:block/deepslate_tiles"
 reveal = "dependencies"
 sort_order = 20
+```
+
+The background value is resolved as a client texture resource. The example
+above resolves to `assets/minecraft/textures/block/deepslate_tiles.png`. A pack
+texture stored at `assets/mypack/textures/gui/progression.png` is selected with:
+
+```toml
+[display]
+background = "mypack:gui/progression"
 ```
 
 **Skill-tree Unlock button — New in 2.4.** When a stage declares a `[cost]`

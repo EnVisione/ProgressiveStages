@@ -93,6 +93,22 @@ class StageFileParserTest {
         assertTrue(result.getErrorMessage().contains("Invalid cost item"), result.getErrorMessage());
     }
 
+    @Test
+    void customProgressionMapBackgroundIsParsed() throws IOException {
+        Path file = write("background.toml", """
+            [stage]
+            id = "background_test"
+
+            [display]
+            background = "mypack:gui/progression"
+            """);
+
+        StageFileParser.ParseResult result = StageFileParser.parseWithErrors(file);
+
+        assertTrue(result.isSuccess(), result.getErrorMessage());
+        assertEquals("mypack:gui/progression", result.getStageDefinition().getUiBackground());
+    }
+
     private Path write(String name, String contents) throws IOException {
         Path file = temporaryDirectory.resolve(name);
         Files.writeString(file, contents);

@@ -332,6 +332,7 @@ Open the map with any of these:
 The map follows the vanilla advancement visual language:
 
 - Drag empty map space to pan.
+- You can also begin a drag on a stage node. A short click still opens its details.
 - Use the mouse wheel, arrow keys, or WASD to move.
 - Hover a node for its name, status, description, and progress.
 - Click a node to pin the detailed inspector.
@@ -339,6 +340,7 @@ The map follows the vanilla advancement visual language:
 - Use the Owned control to hide completed stages.
 - Use the category control to cycle stage categories.
 - Use the home control to center on the best next stage.
+- Open the same map from the lock button beside the recipe-book button in the survival inventory.
 
 Configure presentation in the stage file:
 
@@ -354,6 +356,8 @@ sort_order = 20
 
 Omit both `x` and `y` to use automatic dependency layout. `frame` accepts `task`, `goal`, or
 `challenge`. `reveal` accepts `always`, `dependencies`, or `unlocked`.
+For a custom texture stored at `assets/mypack/textures/gui/progression.png`, set
+`background = "mypack:gui/progression"`.
 
 ## 12. Decide who shares stages
 

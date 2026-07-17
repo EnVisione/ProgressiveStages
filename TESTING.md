@@ -50,7 +50,7 @@ BUILD SUCCESSFUL
 The release JAR appears at:
 
 ```text
-build/libs/progressivestages-3.0.0.jar
+build/libs/progressivestages-3.0.1.jar
 ```
 
 `clean build` performs compilation, resource processing, packaging, unit-test compilation, and
@@ -84,12 +84,14 @@ The test sources live under `src/test/java`.
 | `StageIdTest` | Namespaces, normalization, locale safety, and traversal rejection. |
 | `DependencyModeTest` | `all`, `any`, and `at_least` requirement counts. |
 | `StageOrderTest` | Converging dependency graphs and cycle handling. |
-| `StageFileParserTest` | Namespaced IDs, malformed data, trigger validation, costs, and generated templates. |
+| `StageFileParserTest` | Namespaced IDs, malformed data, trigger validation, costs, custom map backgrounds, and generated templates. |
 | `StageModelImmutabilityTest` | Defensive copies for rewards, regions, and enforcement maps. |
 | `StagePurchaseDataTest` | Namespaced offline refund persistence. |
 | `ScriptHooksTest` | Normalized script provider identifiers. |
 | `OptionalCompatMixinPluginTest` | Optional integration mixins apply only when their target classes exist. |
 | `ClientLockCacheTest` | Immutable defensive client lock snapshots. |
+| `StageTreeScreenRenderOrderTest` | One blur pass, inspector depth, and drag-from-node behavior. |
+| `StageTreeInventoryButtonTest` | Survival inventory registration, dynamic position, and map request wiring. |
 | `TriggerConditionTypeTest` | Trigger aliases and invalid condition types. |
 | `BeginnerExamplePackTest` | Every copy-ready beginner TOML parses and its graph validates. |
 
@@ -136,11 +138,11 @@ Use a disposable world and the tested pack in `examples/beginner_pack`.
 2. Run `/progressivestages validate`.
 3. Run `/stage list` and confirm the configured starting stage behavior.
 4. Open `/stage`.
-5. Pan the map by dragging empty space.
+5. Pan the map by dragging empty space, then repeat by beginning the drag on a stage node.
 6. Scroll with the wheel and keyboard.
 7. Search for `diamond`.
 8. Hover each visible node.
-9. Click a node and inspect dependencies and trigger progress.
+9. Click a node and inspect dependencies and trigger progress. Confirm no map icon appears above the inspector.
 10. Run `/stage revoke <player> iron_age`.
 11. Attempt to use an iron pickaxe and confirm it is blocked.
 12. Complete or grant Iron Age.
@@ -148,6 +150,9 @@ Use a disposable world and the tested pack in `examples/beginner_pack`.
 14. Revoke Iron Age again and confirm the lock returns.
 15. Repeat the before, after, revoke pattern for a block and recipe.
 16. Run `/stage sync <player>` and confirm the map and lock visuals remain correct.
+17. Enable Video Settings → Menu Background Blur, reopen the map, and confirm only the world is blurred.
+18. Open the survival inventory and use the lock button beside the recipe book to open the map.
+19. Toggle the recipe book, reopen the inventory, and confirm the lock button remains beside it.
 
 Record unexpected chat, logs, missing textures, stale icons, crashes, and visual overlap.
 
@@ -165,6 +170,7 @@ At each scale verify:
 - The window stays on screen.
 - Search text can be typed without WASD moving the map.
 - Nodes remain clickable after panning.
+- Dragging can begin on empty map space or on a node without accidentally opening details.
 - Tooltips remain readable near every edge.
 - The inspector scrolls when content is taller than its panel.
 - The close control only closes the inspector.
@@ -173,6 +179,9 @@ At each scale verify:
 - Long translated text truncates without crashing.
 - Hidden and unrevealed stages do not leak names.
 - Purchase buttons show the authoritative server state.
+- Node icons never overlap the pinned inspector.
+- Every configured trigger route and condition is visible in the inspector.
+- Custom `[display].background` textures tile without missing-texture markers.
 
 Also test keyboard-only navigation paths, narrator output, and controller behavior available through
 the user's input setup. Accessibility failures belong in the release record even when they do not

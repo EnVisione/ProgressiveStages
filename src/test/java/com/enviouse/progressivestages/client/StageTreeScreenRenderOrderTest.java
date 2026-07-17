@@ -33,6 +33,16 @@ class StageTreeScreenRenderOrderTest {
         assertFalse(renderMethod.contains("super.render("));
         assertTrue(background < map);
         assertTrue(frame < widgets);
+        assertTrue(renderMethod.contains("g.pose().translate(0.0F, 0.0F, 200.0F)"));
+    }
+
+    @Test
+    void mapDragCanBeginOnAStageNode() throws IOException {
+        String source = Files.readString(SCREEN);
+
+        assertTrue(source.contains("pressedNode = nodeAt(mouseX, mouseY)"));
+        assertTrue(source.contains("dragDistance += Math.hypot(dragX, dragY)"));
+        assertTrue(source.contains("if (dragDistance < 2.0 && pressedNode != null)"));
     }
 
     private static int occurrences(String value, String target) {

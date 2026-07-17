@@ -2,9 +2,7 @@ package com.enviouse.progressivestages.client;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
-import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
-import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.enviouse.progressivestages.common.util.TextUtil;
 import net.minecraft.ChatFormatting;
@@ -15,16 +13,23 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Client-side event handler for tooltips and rendering
  */
 @EventBusSubscriber(modid = Constants.MOD_ID, value = Dist.CLIENT)
 public class ClientEventHandler {
+
+    @SubscribeEvent
+    public static void onInventoryScreenInit(ScreenEvent.Init.Post event) {
+        if (event.getScreen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen inventory) {
+            event.addListener(new com.enviouse.progressivestages.client.gui.StageTreeInventoryButton(inventory));
+        }
+    }
 
     @SubscribeEvent
     public static void onItemTooltip(ItemTooltipEvent event) {

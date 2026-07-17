@@ -34,7 +34,7 @@ pack author who discovers the file without this README can still find the curren
 
 ## What's new in 3.0
 
-- **Vanilla advancement-style stage map** — `/stage`, `/stages`, `/ps`, `/stage gui`, or the keybind opens a draggable and wheel-scrollable progression graph using vanilla task/goal/challenge frames, dependency connectors, tiled backgrounds, hover cards, search, owned-stage filtering, click-to-pin details, trigger progress, unlock previews, and server-validated purchases.
+- **Vanilla advancement-style stage map** — `/stage`, `/stages`, `/ps`, `/stage gui`, the keybind, or the lock button beside the inventory recipe-book button opens a draggable and wheel-scrollable progression graph using vanilla task/goal/challenge frames, dependency connectors, tiled backgrounds, hover cards, search, owned-stage filtering, click-to-pin details, trigger progress, unlock previews, and server-validated purchases.
 - **Author-controlled map layout** — each stage's `[display]` can set `x`, `y`, `frame`, `background`, `reveal`, and `sort_order`; omit `x` + `y` for automatic dependency-graph layout. Reveal can be `always`, `dependencies`, or `unlocked`.
 - **Named trigger counters** — `type = "custom_counter", counter = "quest_points", count = 10` bridges stage TOML to `/stage counter get|add|set|reset ...` and `ProgressiveStages.counter/addCounter/setCounter/resetCounter(...)` in KubeJS.
 - **Expanded KubeJS API** — actual-change `grant`/`revoke`, plus `toggle`, `exists`, `available`, dependency queries, tag queries/bulk operations, counters, immediate trigger evaluation, and `openGui`.
@@ -312,7 +312,7 @@ Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`,
 
 ## Stage Tree Viewer & Per-Stage `[display]`
 
-Players can open the **vanilla-style progression map** with `/stage`, `/stages`, `/ps`, `/stage gui`, or the "Open Progression Tree" keybind. Drag empty map space to pan, use the wheel or WASD/arrow keys to scroll, hover a framed node for its stage card, and click it to pin prerequisites, live trigger progress, unlock previews, and any purchase button. Search matches stage text and locked item ids; the Owned control filters completed stages.
+Players can open the **vanilla-style progression map** with `/stage`, `/stages`, `/ps`, `/stage gui`, the "Open Progression Tree" keybind, or the lock button beside the recipe-book button in the survival inventory. Drag from empty space or a stage node to pan, use the wheel or WASD/arrow keys to scroll, hover a framed node for its stage card, and click without dragging to pin prerequisites, clearly grouped live trigger routes, unlock previews, and any purchase button. Search matches stage text and locked item ids; the Owned control filters completed stages.
 
 Each stage can override the global tooltip/icon defaults for its own locked items with a `[display]` block — all keys optional, inheriting the global default when omitted:
 
@@ -329,6 +329,9 @@ background = "minecraft:block/deepslate_tiles"
 reveal = "dependencies"               # always | dependencies | unlocked
 sort_order = 20                        # ordering hint for automatic layout
 ```
+
+`background` accepts any client texture resource. For a custom file at
+`assets/mypack/textures/gui/progression.png`, use `background = "mypack:gui/progression"`.
 
 ---
 
@@ -465,6 +468,10 @@ compat/
 ---
 
 ## Changelog
+
+### v3.0.1
+- **Progression-map polish** — menu blur stays below the interface, map node icons no longer overlap the pinned inspector, trigger routes are labeled clearly, dragging may begin on nodes or empty space, and a lock button beside the survival inventory recipe-book button opens the map.
+- **Custom backgrounds documented and tested** — `[display].background` accepts any namespaced client texture such as `mypack:gui/progression`.
 
 ### v3.0
 - **`[rewards]` on grant** — companion to `[cost]`: `items`, `effects` (`id:seconds:amplifier`), `commands`/`command` (run as the player at permission 2, `{player}` substituted), `teleport` (`"[dim] x y z"`), `xp_levels`, `xp_points`. Fires once per real grant (not on login/sync), for every cause.

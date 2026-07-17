@@ -58,6 +58,8 @@ public final class StageTreeScreen extends Screen {
     private int minNodeX, minNodeY, maxNodeX, maxNodeY;
     private boolean centered;
     private boolean draggingMap;
+    private MapNode pressedNode;
+    private double dragDistance;
 
     private final List<MapNode> nodes = new ArrayList<>();
     private final Map<StageId, MapNode> byId = new HashMap<>();
@@ -299,7 +301,12 @@ public final class StageTreeScreen extends Screen {
         renderNodes(g, mouseX, mouseY);
         g.disableScissor();
 
-        if (selected != null) renderInspector(g, mouseX, mouseY);
+        if (selected != null) {
+            g.pose().pushPose();
+            g.pose().translate(0.0F, 0.0F, 200.0F);
+            renderInspector(g, mouseX, mouseY);
+            g.pose().popPose();
+        }
         renderWindowFrame(g, mouseX, mouseY);
         // Screen.render would run the blur pass again. Render widgets directly above the completed map.
         for (var renderable : renderables) {
@@ -566,16 +573,30 @@ public final class StageTreeScreen extends Screen {
 
         if (data.hasTriggers()) {
             float pct = Math.max(0, data.percent());
+            g.drawString(font, Component.translatable("gui.progressivestages.tree.triggers"),
+                x, y, 0xFFFFD45A, false);
+            y += 11;
             g.drawString(font, Component.translatable("gui.progressivestages.tree.progress.percent",
                 Math.round(pct * 100)), x, y, 0xFF55FFFF, false);
             y += 11;
             drawProgressBar(g, x, y, innerW, pct);
             y += 9;
+            int route = 1;
             for (ClientTriggerProgress.Rule rule : data.rules()) {
+                Component routeLabel = Component.translatable(
+                    "any_of".equals(rule.mode())
+                        ? "gui.progressivestages.tree.trigger.any"
+                        : "gui.progressivestages.tree.trigger.all",
+                    route++);
+                g.drawString(font, (rule.satisfied() ? "✔ " : "• ") + routeLabel.getString(), x + 2, y,
+                    rule.satisfied() ? 0xFF55AA55 : 0xFFAAAAAA, false);
+                y += 10;
                 if (!rule.description().isBlank()) {
-                    g.drawString(font, (rule.satisfied() ? "✔ " : "• ") + rule.description(), x + 2, y,
-                        rule.satisfied() ? 0xFF55AA55 : 0xFFAAAAAA, false);
-                    y += 10;
+                    for (FormattedCharSequence wrapped : font.split(
+                            Component.literal(rule.description()), innerW - 7)) {
+                        g.drawString(font, wrapped, x + 5, y, 0xFFCCCCCC, false);
+                        y += 10;
+                    }
                 }
                 for (ClientTriggerProgress.Cond condition : rule.conditions()) {
                     String line = (condition.satisfied() ? "✔ " : "✗ ") + condition.label()
@@ -687,14 +708,10 @@ public final class StageTreeScreen extends Screen {
             if (insideInspector(mouseX, mouseY)) return super.mouseClicked(mouseX, mouseY, button);
         }
         if (inside(mouseX, mouseY, mapLeft, mapTop, mapRight - mapLeft, mapBottom - mapTop)) {
-            MapNode hit = nodeAt(mouseX, mouseY);
-            if (button == 0 && hit != null) {
-                selected = hit.id();
-                panelScroll = 0;
-                return true;
-            }
             if (button == 0) {
+                pressedNode = nodeAt(mouseX, mouseY);
                 draggingMap = true;
+                dragDistance = 0.0;
                 return true;
             }
         }
@@ -704,9 +721,12 @@ public final class StageTreeScreen extends Screen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (button == 0 && draggingMap) {
-            panX += dragX;
-            panY += dragY;
-            clampPan();
+            dragDistance += Math.hypot(dragX, dragY);
+            if (dragDistance >= 2.0) {
+                panX += dragX;
+                panY += dragY;
+                clampPan();
+            }
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
@@ -714,7 +734,16 @@ public final class StageTreeScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        draggingMap = false;
+        if (button == 0 && draggingMap) {
+            if (dragDistance < 2.0 && pressedNode != null) {
+                selected = pressedNode.id();
+                panelScroll = 0;
+            }
+            draggingMap = false;
+            pressedNode = null;
+            dragDistance = 0.0;
+            return true;
+        }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
