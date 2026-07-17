@@ -10,6 +10,22 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ---
 
+## Start here
+
+- **Never configured a stages mod:** follow the zero-assumption
+  [ProgressiveStages 3.0 Beginner Guide](GETTING_STARTED.md).
+- **Need every field, command, integration, and API:** use the
+  [Complete Documentation](DOCUMENTATION.md).
+- **Building or approving a release:** follow the
+  [Testing Handbook](TESTING.md).
+- **Want known-good files to copy:** use the tested
+  [Beginner Pack](examples/beginner_pack/README.md).
+
+The generated `diamond_age.toml` also links directly to the GitHub copies of these guides so a
+pack author who discovers the file without this README can still find the current instructions.
+
+---
+
 ## What's new in 3.0
 
 - **Vanilla advancement-style stage map** — `/stage`, `/stages`, `/ps`, `/stage gui`, or the keybind opens a draggable and wheel-scrollable progression graph using vanilla task/goal/challenge frames, dependency connectors, tiled backgrounds, hover cards, search, owned-stage filtering, click-to-pin details, trigger progress, unlock previews, and server-validated purchases.
@@ -97,7 +113,7 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 2. Drop the jar into `mods/`.
 3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
 4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and three example stages under `config/progressivestages/stages/`.
-5. Edit or add `config/progressivestages/stages/<stage_id>.toml` files. Nested folders are supported. Reload at runtime with `/stage reload`.
+5. Edit or add `config/progressivestages/stages/<stage_id>.toml` files. Nested folders are supported. Reload at runtime with `/progressivestages reload`.
 
 ---
 
@@ -535,9 +551,12 @@ compat/
 
 ## Documentation
 
-Per-feature documentation: [DOCUMENTATION.md](DOCUMENTATION.md). The implemented 3.0 scope and
-remaining real-game release matrix live in
-[ProgressiveStages_3.0_Release_Plan.md](implementation/ProgressiveStages_3.0_Release_Plan.md).
+- Beginner walkthrough: [GETTING_STARTED.md](GETTING_STARTED.md).
+- Complete schema and feature reference: [DOCUMENTATION.md](DOCUMENTATION.md).
+- Build, smoke-test, multiplayer, and integration matrix: [TESTING.md](TESTING.md).
+- Copy-ready tested tutorial stages: [examples/beginner_pack](examples/beginner_pack/README.md).
+- Implemented 3.0 scope and remaining runtime matrix:
+  [ProgressiveStages_3.0_Release_Plan.md](implementation/ProgressiveStages_3.0_Release_Plan.md).
 
 ## License
 

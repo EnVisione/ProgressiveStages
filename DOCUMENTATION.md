@@ -9,6 +9,11 @@
 >
 > **Support & community:** [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires these in too — `displayURL` (Discord) and `issueTrackerURL` (GitHub issues) in `neoforge.mods.toml`.
 
+> **New to stage mods?** Start with [GETTING_STARTED.md](GETTING_STARTED.md), copy the tested
+> [beginner pack](examples/beginner_pack/README.md), and return here when the beginner guide links
+> to a specific advanced feature. Release maintainers should also follow
+> [TESTING.md](TESTING.md). This file is the exhaustive reference, not the shortest learning path.
+
 ---
 
 ## Table of Contents
@@ -78,7 +83,7 @@
 
 ## 1. What ProgressiveStages Is
 
-ProgressiveStages 2.0 is a **stage-based progression and content-locking framework**
+ProgressiveStages 3.0 is a **stage-based progression and content-locking framework**
 for NeoForge 1.21.1 modpacks. Pack authors define **stages** (named milestones such
 as `stone_age`, `iron_age`, `nether_explorer`) in TOML files. Each stage carries:
 
@@ -229,7 +234,7 @@ documentation.
    files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`) appear in
    `config/progressivestages/stages/`.
 
-2. Open `config/progressivestages/stages/iron_age.toml`. The minimum useful 2.0 stage
+2. Open `config/progressivestages/stages/iron_age.toml`. The minimum useful 3.0 stage
    file looks like this:
 
    ```toml
@@ -285,7 +290,7 @@ trigger in depth.
 
 ### 4.1 The Prefix System
 
-ProgressiveStages 2.0 uses a **unified prefix system** for every locked list.
+ProgressiveStages 3.0 uses a **unified prefix system** for every locked list.
 Instead of separate arrays for IDs / tags / mods (the 1.x design), every
 `locked = [...]` list accepts **four prefixes**:
 
@@ -2355,7 +2360,7 @@ permission level 2; authoring/reload/validation operations require level 3.
 | `/stage bulk grant\|revoke <players>` | **New in 3.0.** Grant or revoke the complete defined/owned stage set. |
 | `/stage sync <players>` | **New in 3.0.** Re-send definitions, lock registry, ownership, and bypass state to selected clients. |
 | `/stage simulate [player]` | **New in 3.0.** **Dry-run** of what the player can unlock next: lists their **reachable-next** stages (deps met, not yet owned) sorted by completion %, and for each shows exactly which `[[triggers]]` conditions are still **short** (`current/threshold`, "need N more"). Then lists **dependency-blocked** stages with the prerequisites they're still missing. Player defaults to the caller. Read-only. |
-| `/stage new <id>` | **New in 3.0.** **Scaffold** a new stage TOML at `config/progressivestages/stages/<id>.toml` (a commented template with `[stage]`, `[items]`, a sample `[[triggers]]`, and pointers to the optional sections). Refuses to overwrite an existing file; run `/stage reload` after editing. |
+| `/stage new <id>` | **New in 3.0.** **Scaffold** a new stage TOML at `config/progressivestages/stages/<id>.toml` (a commented template with `[stage]`, `[items]`, a sample `[[triggers]]`, and pointers to the optional sections). Refuses to overwrite an existing file; run `/progressivestages reload` after editing. |
 | `/stage export` | **New in 3.0.** Write a **markdown progression guide** (`progressivestages_guide.md` in the config folder) built from the stage graph — for each stage: description, **Requires** (deps), **Leads to** (dependents), **Unlock by** (`[[triggers]]` conditions), and whether it's purchasable. |
 | `/stage counter get <player> <counter>` | Read a named `custom_counter` value (permission 2). |
 | `/stage counter add <player> <counter> <amount>` | Add to a counter and immediately re-evaluate triggers (permission 2). |
@@ -3268,7 +3273,7 @@ compat/                              ← every soft-dep integration
 The default stage templates are bundled in
 [`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java) —
 specifically `stoneAge()`, `ironAge()`, and `diamondAge()`. The
-`diamondAge()` template is the canonical 2.0 reference file; reading it
+`diamondAge()` template is the canonical 3.0 reference file; reading it
 end-to-end is the fastest way to internalize the schema.
 
 ---

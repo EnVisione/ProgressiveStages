@@ -155,6 +155,7 @@ dependencies {
 
 tasks.named('test', Test) {
     useJUnitPlatform()
+    systemProperty 'progressivestages.projectDir', project.projectDir.absolutePath
 }
 
 tasks.named('compileJava', JavaCompile) {

@@ -1,0 +1,36 @@
+[stage]
+id = "iron_age"
+display_name = "Iron Age"
+description = "Smelt iron to unlock iron tools and basic industrial blocks."
+icon = "minecraft:iron_pickaxe"
+unlock_message = "&6Iron Age unlocked."
+dependency = "stone_age"
+category = "Beginner Tutorial"
+tags = ["beginner", "age"]
+
+[display]
+frame = "task"
+reveal = "dependencies"
+sort_order = 10
+
+[items]
+locked = [
+    "minecraft:iron_pickaxe",
+    "minecraft:iron_axe",
+    "minecraft:iron_sword",
+    "minecraft:shield"
+]
+always_unlocked = []
+
+[blocks]
+locked = [
+    "minecraft:anvil",
+    "minecraft:blast_furnace",
+    "minecraft:smithing_table"
+]
+always_unlocked = []
+
+[[triggers]]
+type = "advancement"
+advancement = "minecraft:story/smelt_iron"
+description = "Smelt an iron ingot."

@@ -1,0 +1,41 @@
+[stage]
+id = "diamond_age"
+display_name = "Diamond Age"
+description = "Mine diamond ore to unlock diamond tools and enchanting."
+icon = "minecraft:diamond_pickaxe"
+unlock_message = "&bDiamond Age unlocked."
+dependency = "iron_age"
+category = "Beginner Tutorial"
+tags = ["beginner", "age"]
+
+[display]
+frame = "goal"
+reveal = "dependencies"
+sort_order = 20
+
+[items]
+locked = [
+    "minecraft:diamond_pickaxe",
+    "minecraft:diamond_axe",
+    "minecraft:diamond_sword",
+    "minecraft:diamond_helmet",
+    "minecraft:diamond_chestplate",
+    "minecraft:diamond_leggings",
+    "minecraft:diamond_boots"
+]
+always_unlocked = []
+
+[blocks]
+locked = [
+    "minecraft:enchanting_table"
+]
+always_unlocked = []
+
+[[triggers]]
+type = "mine"
+block = "minecraft:diamond_ore"
+count = 1
+description = "Mine one diamond ore."
+
+[rewards]
+xp_levels = 1

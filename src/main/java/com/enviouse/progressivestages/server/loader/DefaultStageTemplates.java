@@ -1,7 +1,7 @@
 package com.enviouse.progressivestages.server.loader;
 
 /**
- * Single source of truth for the built-in 2.0 stage-file templates.
+ * Single source of truth for the built-in 3.0 stage-file templates.
  * Used both by {@link com.enviouse.progressivestages.Progressivestages} during mod
  * construction (so the config directory is populated before first world load) and by
  * {@link StageFileLoader} during server start (so a deleted file can be regenerated).
@@ -13,7 +13,7 @@ public final class DefaultStageTemplates {
     public static String stoneAge() {
         return """
             # ============================================================================
-            # Stage definition for Stone Age (v2.0)
+            # Stage definition for Stone Age (v3.0)
             # This is a STARTING STAGE — no dependency, granted to new players.
             # ============================================================================
             #
@@ -53,7 +53,7 @@ public final class DefaultStageTemplates {
             [dimensions]
             locked = []
 
-            # See diamond_age.toml for a complete 2.0 category reference (crops, loot,
+            # See diamond_age.toml for a complete 3.0 category reference (crops, loot,
             # enchants, pets, screens, mobs, regions, structures, etc.).
             """;
     }
@@ -61,7 +61,7 @@ public final class DefaultStageTemplates {
     public static String ironAge() {
         return """
             # ============================================================================
-            # Stage definition for Iron Age (v2.0)
+            # Stage definition for Iron Age (v3.0)
             # Requires stone_age to be unlocked first.
             # ============================================================================
 
@@ -135,7 +135,7 @@ public final class DefaultStageTemplates {
             #  |_|   |_|  \\___/ \\__, |_|  \\___||___/___/_| \\_/ \\___|____/ \\__\\__,_|\\__, |\\___||___/
             #                   |___/                                              |___/
             #
-            #                       D I A M O N D   A G E   (v2.0 reference file)
+            #                       D I A M O N D   A G E   (v3.0 reference file)
             #
             # ============================================================================
             # This is the most exhaustively-documented stage file in the default template
@@ -145,6 +145,18 @@ public final class DefaultStageTemplates {
             # Everything you see below is EDITABLE. Delete sections you don't need, or
             # copy sections into new *.toml files to create more stages.
             # ============================================================================
+            #
+            # BEGINNER GUIDE
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/GETTING_STARTED.md
+            #
+            # COMPLETE DOCUMENTATION
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md
+            #
+            # BUILD AND RELEASE TESTING GUIDE
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/TESTING.md
+            #
+            # This generated reference file is named diamond_age.toml. The [stage].id below
+            # is the authoritative stage identifier used by dependencies and commands.
             #
             # TABLE OF CONTENTS
             #   1.  [stage]              — identity + display + dependencies

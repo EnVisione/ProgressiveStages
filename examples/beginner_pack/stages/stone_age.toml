@@ -1,0 +1,21 @@
+[stage]
+id = "stone_age"
+display_name = "Stone Age"
+description = "The starting point for basic survival and the beginner tutorial pack."
+icon = "minecraft:stone_pickaxe"
+unlock_message = "&7Stone Age unlocked."
+category = "Beginner Tutorial"
+tags = ["beginner", "age"]
+
+[display]
+frame = "task"
+reveal = "always"
+sort_order = 0
+
+[items]
+locked = []
+always_unlocked = []
+
+[blocks]
+locked = []
+always_unlocked = []
