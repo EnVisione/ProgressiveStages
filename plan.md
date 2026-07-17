@@ -1,4 +1,4 @@
-# ProgressiveStages 3.0 Ultimate Stages Plan
+# ProgressiveStages 3.0 Final Plan
 
 ## Purpose
 
@@ -10,6 +10,18 @@ without requesting a new hardcoded feature for every pack design.
 This document is the execution contract for the 15 approved feature groups. It separates
 the architectural foundation from authoring tools and long term progression modes so that
 each phase can ship with migration support, tests, and rollback safety.
+
+## Current status
+
+The 3.0 final baseline has completed its automated Phase A audit, regression tests, clean build,
+artifact inspection, configuration migration, merged trigger, UI, command, KubeJS, and optional
+integration checks. The real client, dedicated server, multiplayer, and optional mod runtime
+matrix remains the final manual Phase A release gate.
+
+Phases B through F are the approved development roadmap. Their registry kernel, universal
+condition tree, transaction engine, policy and action registries, advanced progression modes,
+Author Studio, pack tooling, journal, and performance framework are not marked complete until
+their individual exit gates and verification matrix pass.
 
 ## Product rules
 
@@ -555,13 +567,12 @@ Every phase runs:
 
 ## Immediate next work
 
-1. Finish the current 3.0 audit and repair verified defects.
-2. Add regression tests for every repair.
-3. Build the registry and schema kernel without changing existing stage semantics.
-4. Adapt the current trigger condition types into registry entries.
-5. Introduce immutable candidate snapshots and atomic reload.
-6. Introduce the transaction result model and move one mutation path at a time.
-7. Use the FTB Quests bridge as the first external capability integration test.
+1. Complete the real client, dedicated server, multiplayer, and optional mod Phase A matrix.
+2. Build the registry and schema kernel without changing existing stage semantics.
+3. Adapt the current trigger condition types into registry entries.
+4. Introduce fully immutable compiled snapshots and atomic registry replacement.
+5. Introduce the transaction result model and move one mutation path at a time.
+6. Use the FTB Quests bridge as the first external capability integration test.
 
 The architectural constraint for every new implementation is simple. If a pack author or another
 mod could reasonably need a different behavior, core exposes a registered provider or configured
