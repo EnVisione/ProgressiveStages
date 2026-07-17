@@ -158,6 +158,60 @@ public final class DefaultStageTemplates {
             # This generated reference file is named diamond_age.toml. The [stage].id below
             # is the authoritative stage identifier used by dependencies and commands.
             #
+            # ==========================================================================
+            # READ THIS FIRST. A SAFE FIVE MINUTE EDIT FOR A COMPLETE BEGINNER.
+            # ==========================================================================
+            # 1. Make a backup copy of this file before changing anything.
+            #
+            # 2. Lines beginning with # are explanations. Minecraft ignores them. You may
+            #    leave every explanation in place while learning.
+            #
+            # 3. Lines without # are active settings. Change only one active setting at a
+            #    time. Save the file after each small change.
+            #
+            # 4. Text belongs between quotation marks. Keep both quotation marks. A list
+            #    begins with [ and ends with ]. Put a comma between entries in a list.
+            #
+            # 5. The smallest safe customization is changing display_name, description,
+            #    icon, and unlock_message in [stage]. These change presentation without
+            #    changing the dependency graph or lock rules.
+            #
+            # 6. The next safe customization is adding one registry id to a locked list.
+            #    Example, add "minecraft:diamond_hoe" inside [items].locked. The item then
+            #    stays locked until the player owns diamond_age.
+            #
+            # 7. Do not lock the item or action a player must use to complete this stage.
+            #    For example, a mine diamond ore trigger cannot complete if another rule
+            #    prevents the player from mining every diamond ore block.
+            #
+            # 8. Check the file before reloading it.
+            #       /progressivestages validate
+            #    Validation must report no failed files, duplicate ids, missing
+            #    dependencies, dependency cycles, or invalid registry ids.
+            #
+            # 9. Load a valid edit without restarting the server.
+            #       /progressivestages reload
+            #
+            # 10. Inspect what the server actually loaded.
+            #       /stage info diamond_age
+            #       /stage progress diamond_age YourPlayerName
+            #       /stage simulate YourPlayerName
+            #
+            # 11. Test the lock before granting the stage, after granting it, and after
+            #     revoking it again. This proves both lock and unlock paths work.
+            #       /stage revoke YourPlayerName diamond_age
+            #       /stage grant YourPlayerName diamond_age
+            #
+            # 12. If validation fails, read the first reported error, undo the last small
+            #     edit, save, and validate again. The previous valid configuration remains
+            #     active when a reload candidate is rejected.
+            #
+            # IMPORTANT NAME NOTE.
+            # The repository also exposes this exact text as examples/reference/
+            # diamond_stage.toml so it can be read on GitHub. The installed runtime file
+            # remains diamond_age.toml and its stage id remains diamond_age.
+            # ==========================================================================
+            #
             # TABLE OF CONTENTS
             #   1.  [stage]              — identity + display + dependencies
             #   2.  THE PREFIX SYSTEM    — how locked lists work

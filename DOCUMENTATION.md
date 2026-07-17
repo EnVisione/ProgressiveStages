@@ -13,6 +13,11 @@
 > [beginner pack](examples/beginner_pack/README.md), and return here when the beginner guide links
 > to a specific advanced feature. Release maintainers should also follow
 > [TESTING.md](TESTING.md). This file is the exhaustive reference, not the shortest learning path.
+>
+> **Want one complete file you can read and copy?** Open
+> [`diamond_stage.toml`](examples/reference/diamond_stage.toml). It is the directly browsable,
+> fully commented copy of the generated `diamond_age.toml` reference. Start with its numbered
+> safe five minute edit, then use its table of contents to find every lock category and feature.
 
 ---
 
@@ -21,6 +26,7 @@
 1. [What ProgressiveStages Is](#1-what-progressivestages-is)
 2. [Core Concepts](#2-core-concepts)
 3. [Quick Start — Your First Stage in 90 Seconds](#3-quick-start--your-first-stage-in-90-seconds)
+   - [3.1 How to use the complete Diamond Stage reference](#31-how-to-use-the-complete-diamond-stage-reference)
 4. [Stage Files — The Unified TOML Schema](#4-stage-files--the-unified-toml-schema)
    - [4.1 The Prefix System](#41-the-prefix-system)
    - [4.2 `[stage]` — identity + dependencies](#42-stage--identity--dependencies)
@@ -224,7 +230,8 @@ Three default stage files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`
 are generated on first launch if the directory is empty. The `diamond_age.toml`
 template is the canonical reference file — every category, the `[display]`
 overrides, and a worked `[[triggers]]` example are shown with inline
-documentation.
+documentation. The same file is available in the repository as the directly
+browsable [`diamond_stage.toml`](examples/reference/diamond_stage.toml) reference.
 
 ---
 
@@ -283,6 +290,43 @@ documentation.
 
 That's the entire core loop. Sections 4 and 5 below cover every category and
 trigger in depth.
+
+### 3.1 How to use the complete Diamond Stage reference
+
+The repository contains a real, parseable, directly browsable reference named
+[`examples/reference/diamond_stage.toml`](examples/reference/diamond_stage.toml). This is not a
+short fragment. It is an exact tracked copy of the complete default Diamond Age template returned
+by `DefaultStageTemplates.diamondAge()`. An automated test fails if the tracked file and generated
+default ever differ.
+
+The two filenames have different jobs:
+
+- `examples/reference/diamond_stage.toml` is the friendly GitHub documentation filename. Read it
+  in a browser, download it, or copy sections from it.
+- `config/progressivestages/stages/diamond_age.toml` is the file generated in an installed game.
+  Keep this runtime filename unless you intentionally reorganize the stage directory.
+- `id = "diamond_age"` inside `[stage]` is the authoritative identifier. Commands, dependencies,
+  KubeJS, FTB Quests, saved ownership, and API calls use this ID rather than the documentation
+  filename.
+
+If you have never edited TOML, follow this exact routine:
+
+1. Open [`diamond_stage.toml`](examples/reference/diamond_stage.toml).
+2. Read only the numbered safe five minute edit at the top.
+3. Remember that a line beginning with `#` is an explanation and does not change the mod.
+4. Find `[stage]`. Change only `display_name` or `description` for your first edit.
+5. Keep text inside quotation marks. Keep square brackets around lists. Keep commas between list
+   entries.
+6. Copy the edited file into `config/progressivestages/stages` and name it `diamond_age.toml`.
+7. Run `/progressivestages validate`. Do not reload while validation reports an error.
+8. Run `/progressivestages reload` after validation succeeds.
+9. Run `/stage info diamond_age` to confirm the server loaded the values you expected.
+10. Test one lock before granting the stage, after granting it, and after revoking it.
+
+Every enabled setting in the reference has a nearby explanation. Optional examples remain
+commented out, so they teach the syntax without activating dozens of unrelated rules. To use one,
+copy the relevant example into a small test stage first. This makes mistakes easy to identify and
+keeps an experimental rule from changing the production Diamond Age unexpectedly.
 
 ---
 
@@ -3273,8 +3317,9 @@ compat/                              ← every soft-dep integration
 The default stage templates are bundled in
 [`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java) —
 specifically `stoneAge()`, `ironAge()`, and `diamondAge()`. The
-`diamondAge()` template is the canonical 3.0 reference file; reading it
-end-to-end is the fastest way to internalize the schema.
+`diamondAge()` template is the canonical 3.0 reference file. Read its tracked
+[`diamond_stage.toml`](examples/reference/diamond_stage.toml) copy to see the actual TOML rather
+than a Java text block. The automated documentation test proves that both copies remain identical.
 
 ---
 
