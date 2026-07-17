@@ -24,7 +24,7 @@ public class InventoryScanner {
      * @return number of items dropped
      */
     public static int scanAndDropLockedItems(ServerPlayer player) {
-        if (!StageConfig.isBlockItemInventory()) {
+        if (!StageConfig.isBlockItemInventory() && !LockRegistry.getInstance().hasEnforcementOverrides()) {
             return 0;
         }
 
@@ -94,12 +94,12 @@ public class InventoryScanner {
      * @return number of items moved out of the hotbar
      */
     public static int scanAndMoveLockedItemsFromHotbar(ServerPlayer player) {
-        if (!StageConfig.isBlockItemHotbar()) {
+        if (!StageConfig.isBlockItemHotbar() && !LockRegistry.getInstance().hasEnforcementOverrides()) {
             return 0;
         }
 
         // If block_item_inventory is true, scanAndDropLockedItems handles everything already
-        if (StageConfig.isBlockItemInventory()) {
+        if (StageConfig.isBlockItemInventory() && !LockRegistry.getInstance().hasEnforcementOverrides()) {
             return 0;
         }
 
@@ -118,16 +118,13 @@ public class InventoryScanner {
                 continue;
             }
 
-            // Use isItemLockedForPlayer directly — canHoldItem is gated by block_item_inventory
-            // which may be false when using the softer block_item_hotbar option
-            if (!ItemEnforcer.isItemLockedForPlayer(player, stack.getItem())) {
-                continue;
-            }
-
-            // Check per-stage hotbar exemption
-            if (LockRegistry.getInstance().isExemptFromHotbar(stack.getItem())) {
-                continue;
-            }
+            LockRegistry registry = LockRegistry.getInstance();
+            java.util.Set<com.enviouse.progressivestages.common.api.StageId> missing =
+                registry.missingStagesForItem(player, stack.getItem());
+            if (missing.isEmpty()
+                    || !registry.isCategoryEnforced(missing,
+                        com.enviouse.progressivestages.common.lock.EnforcementCategory.ITEM_HOTBAR)
+                    || registry.isExemptFromHotbar(stack.getItem(), missing)) continue;
 
             // Try to move to main inventory (slots 9-35)
             boolean moved = false;

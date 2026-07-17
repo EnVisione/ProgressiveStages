@@ -71,7 +71,7 @@ public class StageOrder {
      * Get all stages (in registration order)
      */
     public List<StageId> getOrderedStages() {
-        return Collections.unmodifiableList(registeredStages);
+        return List.copyOf(registeredStages);
     }
 
     /**
@@ -96,22 +96,28 @@ public class StageOrder {
         return allDeps;
     }
 
-    private void collectDependencies(StageId stageId, Set<StageId> collected, Set<StageId> visited) {
-        if (visited.contains(stageId)) {
+    private void collectDependencies(StageId stageId, Set<StageId> collected, Set<StageId> activePath) {
+        if (!activePath.add(stageId)) {
             LOGGER.warn("Circular dependency detected involving stage: {}", stageId);
             return;
         }
-        visited.add(stageId);
 
         StageDefinition def = stageDefinitions.get(stageId);
-        if (def == null) return;
+        if (def == null) {
+            activePath.remove(stageId);
+            return;
+        }
 
         for (StageId dep : def.getDependencies()) {
-            if (!collected.contains(dep)) {
-                collected.add(dep);
-                collectDependencies(dep, collected, visited);
+            if (activePath.contains(dep)) {
+                LOGGER.warn("Circular dependency detected involving stage: {}", dep);
+                continue;
+            }
+            if (collected.add(dep)) {
+                collectDependencies(dep, collected, activePath);
             }
         }
+        activePath.remove(stageId);
     }
 
     /**
@@ -171,7 +177,7 @@ public class StageOrder {
     /** v3.0: all stages that declare {@code tag} in their {@code [stage].tags} (case-insensitive). */
     public List<StageId> getStagesWithTag(String tag) {
         if (tag == null || tag.isEmpty()) return Collections.emptyList();
-        String needle = tag.toLowerCase();
+        String needle = tag.toLowerCase(Locale.ROOT);
         List<StageId> out = new ArrayList<>();
         for (StageDefinition def : stageDefinitions.values()) {
             if (def.getTags().contains(needle)) out.add(def.getId());
@@ -199,12 +205,14 @@ public class StageOrder {
         }
 
         List<StageId> missing = new ArrayList<>();
+        int owned = 0;
         for (StageId dep : def.getDependencies()) {
-            if (!playerStages.contains(dep)) {
-                missing.add(dep);
-            }
+            if (playerStages.contains(dep)) owned++;
+            else missing.add(dep);
         }
-        return missing;
+        if (def.dependenciesSatisfied(playerStages)) return Collections.emptyList();
+        int needed = Math.max(1, def.getDependencyCount() - owned);
+        return missing.size() <= needed ? missing : new ArrayList<>(missing.subList(0, needed));
     }
 
     /**
@@ -279,26 +287,49 @@ public class StageOrder {
             errors.add("Circular dependency: " + sb);
         }
 
-        // 3. Transitively unreachable stages — depend (directly or transitively) on a cycle member
-        //    or a non-existent stage, so the dependency closure can never be fully satisfied. We
-        //    skip stages already named above to keep the report focused on the blast radius.
+        // 3. Transitively unreachable stages. Dependency policies matter here: an `any` branch is
+        //    still viable if one alternative is healthy, while `at_least` requires enough healthy
+        //    alternatives to reach its configured quorum.
         Set<StageId> tainted = new HashSet<>(cycleMembers);
         tainted.addAll(hasDeadDep);
+        Map<StageId, Boolean> viability = new HashMap<>();
         for (StageDefinition def : stageDefinitions.values()) {
             StageId id = def.getId();
             if (tainted.contains(id)) continue;
-            Set<StageId> closure = new LinkedHashSet<>();
-            collectDependencies(id, closure, new HashSet<>());
-            for (StageId dep : closure) {
-                if (cycleMembers.contains(dep) || !stageDefinitions.containsKey(dep)) {
-                    errors.add("Stage '" + id + "' is unreachable — its prerequisite '" + dep
-                        + "' can never be obtained (cycle or missing stage upstream)");
-                    break;
-                }
+            if (!canEverResolve(id, cycleMembers, viability, new HashSet<>())) {
+                errors.add("Stage '" + id + "' is unreachable — its dependency policy cannot be "
+                    + "satisfied because too many prerequisite branches are cyclic or missing");
             }
         }
 
         return errors;
+    }
+
+    public static List<String> validateDefinitions(Collection<StageDefinition> definitions) {
+        StageOrder candidate = new StageOrder();
+        for (StageDefinition definition : definitions) candidate.registerStage(definition);
+        return candidate.validateDependencies();
+    }
+
+    private boolean canEverResolve(StageId id, Set<StageId> cycleMembers,
+                                   Map<StageId, Boolean> memo, Set<StageId> visiting) {
+        Boolean cached = memo.get(id);
+        if (cached != null) return cached;
+        if (cycleMembers.contains(id) || !visiting.add(id)) return false;
+        StageDefinition def = stageDefinitions.get(id);
+        if (def == null) {
+            visiting.remove(id);
+            return false;
+        }
+        int viable = 0;
+        for (StageId dependency : def.getDependencies()) {
+            if (canEverResolve(dependency, cycleMembers, memo, visiting)) viable++;
+        }
+        visiting.remove(id);
+        boolean result = viable >= def.getDependencyMode().requiredCount(
+            def.getDependencies().size(), def.getDependencyCount());
+        memo.put(id, result);
+        return result;
     }
 
     /**

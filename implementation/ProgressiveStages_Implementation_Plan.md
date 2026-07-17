@@ -1,5 +1,9 @@
 # ProgressiveStages - NeoForge 1.21.1 Implementation Plan
 
+> **Archived:** this was the original 1.0 design document and is retained for project
+> history. The current, executable release plan is
+> [`ProgressiveStages_3.0_Release_Plan.md`](ProgressiveStages_3.0_Release_Plan.md).
+
 ## **Mod Identity**
 - **Mod ID**: `progressivestages`
 - **Display Name**: "ProgressiveStages"
@@ -111,16 +115,16 @@ src/main/resources/
 │       └── en_us.json                         // Translations
 └── data/progressivestages/
     └── stages/
-        └── .gitkeep                           // Empty (stages go in minecraft/ProgressiveStages/)
+        └── .gitkeep                           // Empty (config stages live in config/progressivestages/stages/)
 ```
 
 ---
 
 ## **2. Stage File Format (TOML)**
 
-**Location**: `minecraft/ProgressiveStages/<stage_id>.toml`
+**Location**: `config/progressivestages/stages/<stage_id>.toml`
 
-**Example**: `minecraft/ProgressiveStages/diamond_age.toml`
+**Example**: `config/progressivestages/stages/diamond_age.toml`
 
 ```toml
 # Stage definition for Diamond Age
@@ -304,7 +308,7 @@ Generated on first run with extensive comments:
 # ProgressiveStages - Main Configuration
 # ============================================================================
 # This config controls the core behavior of ProgressiveStages.
-# Stage definitions are loaded from: minecraft/ProgressiveStages/*.toml
+# Stage definitions are loaded from: config/progressivestages/stages/*.toml
 
 [general]
 
@@ -513,7 +517,7 @@ batch_stage_updates = true
 
 ## **4. Example Stage Files (Auto-Generated)**
 
-On first run, generate these in `minecraft/ProgressiveStages/`:
+On first run, generate these in `config/progressivestages/stages/`:
 
 ### **stone_age.toml**
 ```toml
@@ -631,7 +635,7 @@ names = []
 
 2. **Stage definition system**
    - `StageDefinition` data class
-   - `StageFileLoader` (loads TOML from `minecraft/ProgressiveStages/`)
+   - `StageFileLoader` (loads TOML from `config/progressivestages/stages/`)
    - `StageFileParser` (parse TOML using Forge ConfigSpec or TOML4J)
    - `StageOrder` (linear ordering system based on "order" field)
    - `ValidationEngine` (validate stage files: unique IDs, unique orders, valid item/block IDs)
@@ -670,11 +674,11 @@ names = []
    - Generate default config with extensive comments
 
 9. **File generation**
-   - On first run, create `minecraft/ProgressiveStages/` directory
+   - On first run, create `config/progressivestages/stages/` directory
    - Generate `stone_age.toml`, `iron_age.toml`, `diamond_age.toml`
 
 **Testing**:
-- Start server, verify `minecraft/ProgressiveStages/` created with example files
+- Start server, verify `config/progressivestages/stages/` created with example files
 - Join as player, verify auto-granted starting stage (stone_age)
 - `/stage grant @s iron_age` → verify both stone_age and iron_age granted (prerequisite logic)
 - `/stage list` → verify stages shown
@@ -1308,7 +1312,7 @@ if (api.hasStage(player, new ResourceLocation("progressivestages", "diamond_age"
 
 ### **Phase 1 Tests**
 - [ ] Server starts without errors
-- [ ] `minecraft/ProgressiveStages/` directory created
+- [ ] `config/progressivestages/stages/` directory created
 - [ ] Example stage files generated (stone_age, iron_age, diamond_age)
 - [ ] Config file generated with comments
 - [ ] Player joins, auto-granted starting stage
@@ -1460,7 +1464,7 @@ Target server specs: 10-30 players, ~12-14 GB RAM
 - [ ] Achievement system (grant stages via advancements, not just commands)
 
 ### **Version 1.3**
-- [ ] Datapack-driven stage files (in addition to `minecraft/ProgressiveStages/`)
+- [ ] Datapack-driven stage files (in addition to `config/progressivestages/stages/`)
 - [ ] Stage presets (one-click install of common progressions: SkyFactory, SevTech, etc.)
 - [ ] API for KubeJS (direct scripting support without Java API calls)
 

@@ -26,7 +26,7 @@ public class StageConfig {
                  "List of stage IDs to auto-grant on first join",
                  "Example: [\"stone_age\", \"tutorial_complete\"]",
                  "Set to empty list [] for no starting stages")
-        .defineListAllowEmpty("general.starting_stages", List.of("stone_age"), obj -> obj instanceof String);
+        .defineList("general.starting_stages", List.of("stone_age"), () -> "", obj -> obj instanceof String);
 
     private static final ModConfigSpec.ConfigValue<String> TEAM_MODE = BUILDER
         .comment("Team mode: \"ftb_teams\" (requires FTB Teams mod) or \"solo\" (each player is their own team)",

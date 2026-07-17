@@ -6,7 +6,6 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,14 +33,30 @@ public class ClientLockCache {
     // v2.0 multi-stage variants — populated alongside the single-stage maps; an item with N gating stages
     // has N entries in the per-item Set. Same shape mirrors the recipe families.
     private static final Map<ResourceLocation, java.util.Set<StageId>> itemMultiLocks = new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, java.util.Set<StageId>> blockMultiLocks = new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, java.util.Set<StageId>> fluidMultiLocks = new ConcurrentHashMap<>();
+    private static final Map<String, java.util.Set<StageId>> modMultiLocks = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, java.util.Set<StageId>> recipeMultiLocks = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, java.util.Set<StageId>> recipeItemMultiLocks = new ConcurrentHashMap<>();
     /** v3.0: entity id → gating stages (for the Jade/WTHIT overlay on locked mobs). */
     private static final Map<ResourceLocation, java.util.Set<StageId>> entityMultiLocks = new ConcurrentHashMap<>();
 
+    private static <K> Map<K, java.util.Set<StageId>> copyMultiLocks(
+            Map<K, java.util.Set<StageId>> locks) {
+        if (locks == null || locks.isEmpty()) return Map.of();
+        Map<K, java.util.Set<StageId>> copy = new java.util.LinkedHashMap<>();
+        locks.forEach((key, stages) -> {
+            if (key != null && stages != null && !stages.isEmpty()) {
+                copy.put(key, java.util.Set.copyOf(stages));
+            }
+        });
+        return copy;
+    }
+
     public static void setEntityMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        Map<ResourceLocation, java.util.Set<StageId>> copy = copyMultiLocks(locks);
         entityMultiLocks.clear();
-        if (locks != null) entityMultiLocks.putAll(locks);
+        entityMultiLocks.putAll(copy);
     }
 
     /** Gating stages for an entity id ({@link java.util.Set#of()} when not gated or creative-bypassing). */
@@ -95,6 +110,7 @@ public class ClientLockCache {
      * Set all item locks (replaces existing)
      */
     public static void setItemLocks(Map<ResourceLocation, StageId> locks) {
+        if (locks == null) locks = Map.of();
         boolean changed = !itemLocks.equals(locks);
         itemLocks.clear();
         itemLocks.putAll(locks);
@@ -104,25 +120,52 @@ public class ClientLockCache {
         }
 
         // Trigger EMI reload when lock data changes
-        if (changed && !locks.isEmpty()) {
+        if (changed) {
             triggerEmiReload();
         }
     }
 
     /** v2.0: replace the multi-stage view of item locks. */
     public static void setItemMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        Map<ResourceLocation, java.util.Set<StageId>> copy = copyMultiLocks(locks);
         itemMultiLocks.clear();
-        if (locks != null) itemMultiLocks.putAll(locks);
+        itemMultiLocks.putAll(copy);
+    }
+
+    public static void setBlockMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        Map<ResourceLocation, java.util.Set<StageId>> copy = copyMultiLocks(locks);
+        blockMultiLocks.clear();
+        blockMultiLocks.putAll(copy);
+    }
+
+    public static void setFluidMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        Map<ResourceLocation, java.util.Set<StageId>> copy = copyMultiLocks(locks);
+        boolean changed = !fluidMultiLocks.equals(copy);
+        fluidMultiLocks.clear();
+        fluidMultiLocks.putAll(copy);
+        if (changed) triggerEmiReload();
+    }
+
+    public static void setModMultiLocks(Map<String, java.util.Set<StageId>> locks) {
+        Map<String, java.util.Set<StageId>> normalized = new java.util.LinkedHashMap<>();
+        copyMultiLocks(locks).forEach((key, stages) ->
+            normalized.put(key.toLowerCase(java.util.Locale.ROOT), stages));
+        boolean changed = !modMultiLocks.equals(normalized);
+        modMultiLocks.clear();
+        modMultiLocks.putAll(normalized);
+        if (changed) triggerEmiReload();
     }
 
     public static void setRecipeMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        Map<ResourceLocation, java.util.Set<StageId>> copy = copyMultiLocks(locks);
         recipeMultiLocks.clear();
-        if (locks != null) recipeMultiLocks.putAll(locks);
+        recipeMultiLocks.putAll(copy);
     }
 
     public static void setRecipeItemMultiLocks(Map<ResourceLocation, java.util.Set<StageId>> locks) {
+        Map<ResourceLocation, java.util.Set<StageId>> copy = copyMultiLocks(locks);
         recipeItemMultiLocks.clear();
-        if (locks != null) recipeItemMultiLocks.putAll(locks);
+        recipeItemMultiLocks.putAll(copy);
     }
 
     /** v2.0: every gating stage for the item, or empty set if not gated. */
@@ -132,6 +175,48 @@ public class ClientLockCache {
         if (set != null) return set;
         StageId single = itemLocks.get(itemId);
         return single != null ? java.util.Set.of(single) : java.util.Set.of();
+    }
+
+    public static java.util.Set<StageId> getRequiredStagesForBlock(ResourceLocation blockId) {
+        if (creativeBypass || blockId == null) return java.util.Set.of();
+        java.util.Set<StageId> set = blockMultiLocks.get(blockId);
+        if (set != null) return set;
+        StageId single = blockLocks.get(blockId);
+        return single != null ? java.util.Set.of(single) : java.util.Set.of();
+    }
+
+    public static java.util.Set<StageId> getRequiredStagesForFluid(ResourceLocation fluidId) {
+        if (creativeBypass || fluidId == null) return java.util.Set.of();
+        return fluidMultiLocks.getOrDefault(fluidId, java.util.Set.of());
+    }
+
+    public static java.util.Set<StageId> getRequiredStagesForMod(String modId) {
+        if (creativeBypass || modId == null) return java.util.Set.of();
+        return modMultiLocks.getOrDefault(modId.toLowerCase(java.util.Locale.ROOT), java.util.Set.of());
+    }
+
+    public static boolean isModLocked(String modId) {
+        for (StageId stage : getRequiredStagesForMod(modId)) {
+            if (!ClientStageCache.hasStage(stage)) return true;
+        }
+        return false;
+    }
+
+    public static java.util.Set<String> getLockedModIds() {
+        if (creativeBypass) return java.util.Set.of();
+        java.util.Set<String> out = new java.util.HashSet<>();
+        for (String modId : modMultiLocks.keySet()) if (isModLocked(modId)) out.add(modId);
+        return java.util.Set.copyOf(out);
+    }
+
+    /** Complete server-resolved block lock view. Values are immutable snapshots per entry. */
+    public static Map<ResourceLocation, java.util.Set<StageId>> getAllBlockMultiLocks() {
+        return Map.copyOf(blockMultiLocks);
+    }
+
+    /** Complete server-resolved fluid lock view. Values are immutable snapshots per entry. */
+    public static Map<ResourceLocation, java.util.Set<StageId>> getAllFluidMultiLocks() {
+        return Map.copyOf(fluidMultiLocks);
     }
 
     public static java.util.Set<StageId> getRequiredStagesForRecipeByOutput(ResourceLocation itemId) {
@@ -204,7 +289,11 @@ public class ClientLockCache {
             // and make EMI behave like a hard dependency.
         }
         try {
-            com.enviouse.progressivestages.client.jei.ProgressiveStagesJEIPlugin.refreshJei();
+            // Coalesce: scheduleRefresh() dedupes multiple calls fired during a single lock_sync
+            // packet (setItemLocks + setRecipeItemLocks + ... each call here) into ONE deferred
+            // two-pass refresh on the next client tick, instead of running the heavy synchronous
+            // refreshJei() N times back-to-back.
+            com.enviouse.progressivestages.client.jei.ProgressiveStagesJEIPlugin.scheduleRefresh();
         } catch (NoClassDefFoundError e) {
             // JEI not installed - ignore
         } catch (Exception e) {
@@ -216,6 +305,7 @@ public class ClientLockCache {
      * Set all block locks (replaces existing)
      */
     public static void setBlockLocks(Map<ResourceLocation, StageId> locks) {
+        if (locks == null) locks = Map.of();
         blockLocks.clear();
         blockLocks.putAll(locks);
 
@@ -228,12 +318,15 @@ public class ClientLockCache {
      * Set all recipe locks (replaces existing)
      */
     public static void setRecipeLocks(Map<ResourceLocation, StageId> locks) {
+        if (locks == null) locks = Map.of();
+        boolean changed = !recipeLocks.equals(locks);
         recipeLocks.clear();
         recipeLocks.putAll(locks);
 
         if (StageConfig.isDebugLogging()) {
             LOGGER.info("[ProgressiveStages] Client received {} recipe locks", locks.size());
         }
+        if (changed) triggerEmiReload();
     }
 
     /**
@@ -288,7 +381,12 @@ public class ClientLockCache {
         if (creativeBypass) {
             return false;
         }
-        // Check LockRegistry for fluid locks (mods, fluid_mods, direct fluid locks)
+        java.util.Set<StageId> synced = getRequiredStagesForFluid(fluidId);
+        if (!synced.isEmpty()) {
+            for (StageId stage : synced) if (!ClientStageCache.hasStage(stage)) return true;
+            return false;
+        }
+        // Integrated-server fallback before the initial sync packet arrives.
         try {
             var requiredStage = com.enviouse.progressivestages.common.lock.LockRegistry.getInstance()
                 .getRequiredStageForFluid(fluidId);
@@ -306,14 +404,14 @@ public class ClientLockCache {
      * Get all item locks
      */
     public static Map<ResourceLocation, StageId> getAllItemLocks() {
-        return Collections.unmodifiableMap(itemLocks);
+        return Map.copyOf(itemLocks);
     }
 
     /**
      * Get all recipe locks (for EMI recipe hiding)
      */
     public static Map<ResourceLocation, StageId> getAllRecipeLocks() {
-        return Collections.unmodifiableMap(recipeLocks);
+        return Map.copyOf(recipeLocks);
     }
 
     /**
@@ -321,6 +419,7 @@ public class ClientLockCache {
      * recipe_items = [...] locks ALL recipes whose output matches the item ID.
      */
     public static void setRecipeItemLocks(Map<ResourceLocation, StageId> locks) {
+        if (locks == null) locks = Map.of();
         boolean changed = !recipeItemLocks.equals(locks);
         recipeItemLocks.clear();
         recipeItemLocks.putAll(locks);
@@ -341,7 +440,7 @@ public class ClientLockCache {
      * Get all recipe-item locks (for EMI recipe hiding by output item)
      */
     public static Map<ResourceLocation, StageId> getAllRecipeItemLocks() {
-        return Collections.unmodifiableMap(recipeItemLocks);
+        return Map.copyOf(recipeItemLocks);
     }
 
     /**
@@ -359,15 +458,22 @@ public class ClientLockCache {
      * Clear all cached data (on disconnect)
      */
     public static void clear() {
+        boolean changed = creativeBypass || !itemLocks.isEmpty() || !recipeLocks.isEmpty()
+            || !recipeItemLocks.isEmpty() || !fluidMultiLocks.isEmpty() || !modMultiLocks.isEmpty();
         itemLocks.clear();
         blockLocks.clear();
         recipeLocks.clear();
         recipeItemLocks.clear();
         itemMultiLocks.clear();
+        blockMultiLocks.clear();
+        fluidMultiLocks.clear();
+        modMultiLocks.clear();
         recipeMultiLocks.clear();
         recipeItemMultiLocks.clear();
         entityMultiLocks.clear();
         creativeBypass = false;
+
+        if (changed) triggerEmiReload();
 
         if (StageConfig.isDebugLogging()) {
             LOGGER.debug("[ProgressiveStages] Cleared client lock cache");

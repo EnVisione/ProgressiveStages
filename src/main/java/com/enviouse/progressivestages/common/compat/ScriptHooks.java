@@ -25,12 +25,22 @@ public final class ScriptHooks {
     /** A script reaction to a stage being granted/revoked: {@code (player, stageId) -> {}}. */
     @FunctionalInterface public interface StageCallback { void accept(ServerPlayer player, String stage); }
 
+    /** Rich lifecycle callback: player, stage, change type, cause, and concrete storage/team id. */
+    @FunctionalInterface public interface StageChangeCallback {
+        void accept(ServerPlayer player, String stage, String change, String cause, String teamId);
+    }
+
     /** A script-evaluated trigger condition: returns true when the stage's {@code script:<id>} is met. */
     @FunctionalInterface public interface StagePredicate { boolean test(ServerPlayer player); }
 
+    /** A script-supplied numeric progress source for {@code type = "script_value"}. */
+    @FunctionalInterface public interface StageProgressProvider { long get(ServerPlayer player); }
+
     private static final CopyOnWriteArrayList<StageCallback> GRANTED = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<StageCallback> REVOKED = new CopyOnWriteArrayList<>();
+    private static final CopyOnWriteArrayList<StageChangeCallback> CHANGED = new CopyOnWriteArrayList<>();
     private static final Map<String, StagePredicate> CONDITIONS = new ConcurrentHashMap<>();
+    private static final Map<String, StageProgressProvider> PROGRESS = new ConcurrentHashMap<>();
     private static volatile boolean active = false;
 
     private ScriptHooks() {}
@@ -39,14 +49,25 @@ public final class ScriptHooks {
     public static void reset() {
         GRANTED.clear();
         REVOKED.clear();
+        CHANGED.clear();
         CONDITIONS.clear();
+        PROGRESS.clear();
         active = false;
     }
 
     public static void onGranted(StageCallback cb) { if (cb != null) { GRANTED.add(cb); active = true; } }
     public static void onRevoked(StageCallback cb) { if (cb != null) { REVOKED.add(cb); active = true; } }
+    public static void onChanged(StageChangeCallback cb) { if (cb != null) { CHANGED.add(cb); active = true; } }
     public static void registerCondition(String id, StagePredicate pred) {
-        if (id != null && !id.isEmpty() && pred != null) { CONDITIONS.put(id, pred); active = true; }
+        String key = normalizeId(id);
+        if (!key.isEmpty() && pred != null) { CONDITIONS.put(key, pred); active = true; }
+    }
+    public static void registerProgress(String id, StageProgressProvider provider) {
+        String key = normalizeId(id);
+        if (!key.isEmpty() && provider != null) {
+            PROGRESS.put(key, provider);
+            active = true;
+        }
     }
 
     /** True if a script registered any callback or condition (cheap fast-path gate). */
@@ -60,9 +81,20 @@ public final class ScriptHooks {
         for (StageCallback cb : REVOKED) invoke(cb, player, stage);
     }
 
+    public static void fireChanged(ServerPlayer player, String stage, String change,
+                                   String cause, String teamId) {
+        for (StageChangeCallback cb : CHANGED) {
+            try {
+                cb.accept(player, stage, change, cause, teamId);
+            } catch (Throwable t) {
+                LOGGER.error("[ProgressiveStages] KubeJS rich stage callback threw", t);
+            }
+        }
+    }
+
     /** Evaluate a {@code script:<id>} trigger condition; false if no script registered that id. */
     public static boolean evalCondition(String id, ServerPlayer player) {
-        StagePredicate pred = CONDITIONS.get(id);
+        StagePredicate pred = CONDITIONS.get(normalizeId(id));
         if (pred == null) return false;
         try {
             return pred.test(player);
@@ -72,11 +104,27 @@ public final class ScriptHooks {
         }
     }
 
+    /** Evaluate a numeric script progress provider; returns zero if it is absent or throws. */
+    public static long evalProgress(String id, ServerPlayer player) {
+        StageProgressProvider provider = PROGRESS.get(normalizeId(id));
+        if (provider == null) return 0L;
+        try {
+            return Math.max(0L, provider.get(player));
+        } catch (Throwable t) {
+            LOGGER.error("[ProgressiveStages] KubeJS progress provider '{}' threw", id, t);
+            return 0L;
+        }
+    }
+
     private static void invoke(StageCallback cb, ServerPlayer player, String stage) {
         try {
             cb.accept(player, stage);
         } catch (Throwable t) {
             LOGGER.error("[ProgressiveStages] KubeJS stage callback threw", t);
         }
+    }
+
+    private static String normalizeId(String id) {
+        return id == null ? "" : id.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

@@ -32,6 +32,8 @@ public final class StageRegressionHandler {
 
     private StageRegressionHandler() {}
 
+    public static void resetRuntimeState() { lastCheck.clear(); }
+
     /** Record/clear the grant time of temporary stages as they're granted/revoked. */
     @SubscribeEvent
     public static void onStageChange(StageChangeEvent event) {

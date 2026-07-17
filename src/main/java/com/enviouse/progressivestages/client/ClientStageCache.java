@@ -37,11 +37,14 @@ public class ClientStageCache {
      * auto-grant triggers — everything the tooltip handler and GUI tree viewer need.
      */
     public record StageDefinitionData(StageId id, String displayName, List<StageId> dependencies,
+                                      String dependencyMode, int dependencyCount,
                                       String description, Optional<ResourceLocation> icon,
                                       boolean displayAsUnknownItem, boolean obscureIcon,
                                       boolean showTooltip, boolean showDescriptionOnTooltip,
                                       boolean hasTriggers,
-                                      boolean hidden, String color, String category) {
+                                      boolean hidden, String color, String category,
+                                      Integer uiX, Integer uiY, String uiFrame,
+                                      String uiBackground, String uiReveal, int uiSortOrder) {
     }
 
     /** v2.5: true if the stage opted out of the GUI tree via {@code [stage].hidden = true}. */
@@ -60,6 +63,36 @@ public class ClientStageCache {
     public static String getCategory(StageId stageId) {
         StageDefinitionData def = stageDefinitions.get(stageId);
         return def != null ? def.category() : "";
+    }
+
+    public static Optional<Integer> getUiX(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? Optional.ofNullable(def.uiX()) : Optional.empty();
+    }
+
+    public static Optional<Integer> getUiY(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? Optional.ofNullable(def.uiY()) : Optional.empty();
+    }
+
+    public static String getUiFrame(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.uiFrame() : "task";
+    }
+
+    public static String getUiBackground(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.uiBackground() : "";
+    }
+
+    public static String getUiReveal(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.uiReveal() : "always";
+    }
+
+    public static int getUiSortOrder(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.uiSortOrder() : 0;
     }
 
     /**
@@ -84,6 +117,16 @@ public class ClientStageCache {
     public static List<StageId> getDependencies(StageId stageId) {
         StageDefinitionData def = stageDefinitions.get(stageId);
         return def != null ? def.dependencies() : Collections.emptyList();
+    }
+
+    public static String getDependencyMode(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.dependencyMode() : "all";
+    }
+
+    public static int getDependencyCount(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.dependencyCount() : getDependencies(stageId).size();
     }
 
     /** v2.3: every stage id the client knows a definition for (for the GUI tree viewer). */
@@ -233,9 +276,10 @@ public class ClientStageCache {
             // Ignore other errors
         }
 
-        // Trigger JEI refresh
+        // Trigger JEI refresh (coalesced — scheduleRefresh dedupes rapid stage changes into one
+        // deferred two-pass refresh on the next client tick instead of N synchronous refreshJei()).
         try {
-            com.enviouse.progressivestages.client.jei.ProgressiveStagesJEIPlugin.refreshJei();
+            com.enviouse.progressivestages.client.jei.ProgressiveStagesJEIPlugin.scheduleRefresh();
         } catch (NoClassDefFoundError e) {
             // JEI not installed - ignore
         } catch (Exception e) {

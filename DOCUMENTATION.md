@@ -38,7 +38,7 @@
    - [4.16 `[structures]` — entry, rules, chest locking](#416-structures--entry-rules-chest-locking)
    - [4.17 `[[regions]]` — fixed 3D boxes with flags + debuffs](#417-regions--fixed-3d-boxes-with-flags--debuffs)
    - [4.18 `[curios]` — per-slot gating when Curios is installed](#418-curios--per-slot-gating-when-curios-is-installed)
-   - [4.19 `[[ores.overrides]]` — parsed but deferred post-2.0](#419-oresoverrides--parsed-but-deferred-post-20)
+   - [4.19 `[[ores.overrides]]` — ore masquerade](#419-oresoverrides--ore-masquerade)
    - [4.20 `[unlocks]` — per-stage carve-outs](#420-unlocks--per-stage-carve-outs)
    - [4.21 `[enforcement]` — per-stage exemptions + toggle overrides](#421-enforcement--per-stage-exemptions--toggle-overrides)
    - [4.22 `[display]` — per-stage tooltip + icon overrides](#422-display--per-stage-tooltip--icon-overrides)
@@ -157,7 +157,7 @@ interchangeable in commands, config, and code.
 ProgressiveStages stores stage state at the **team** level. In solo mode each
 player IS their own team (single-member). In FTB Teams mode the stage set is
 shared across every member of the FTB team. This is controlled by
-`general.team_mode` in `config/progressivestages.toml`:
+`general.team_mode` in `config/progressivestages/progressivestages.toml`:
 
 - `"ftb_teams"` (default) — uses FTB Teams' team membership. Falls back to
   solo automatically if FTB Teams is not installed.
@@ -203,14 +203,14 @@ on a stage with missing dependencies prompts a second confirmation:
 Stage TOMLs live in the **global config directory** (NOT per-world):
 
 ```
-config/ProgressiveStages/<stage>.toml
-config/progressivestages.toml         (global mod config — note: outside ProgressiveStages/)
+config/progressivestages/stages/<stage>.toml
+config/progressivestages/progressivestages.toml
 ```
 
 This means stage definitions are **shared across all worlds** on the same
 server/instance. Per-world stage state lives inside each world's saved data.
 
-> **Changed in 2.1.** The global `config/ProgressiveStages/triggers.toml` is
+> **Changed in 2.1.** The global legacy `triggers.toml` is
 > **gone**. Auto-grant triggers are now declared **per-stage** inside each
 > stage file's `[[triggers]]` block (see §5). A leftover legacy `triggers.toml`
 > is simply ignored.
@@ -227,9 +227,9 @@ documentation.
 
 1. Launch the game once with ProgressiveStages installed. The default stage
    files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`) appear in
-   `config/ProgressiveStages/`.
+   `config/progressivestages/stages/`.
 
-2. Open `config/ProgressiveStages/iron_age.toml`. The minimum useful 2.0 stage
+2. Open `config/progressivestages/stages/iron_age.toml`. The minimum useful 2.0 stage
    file looks like this:
 
    ```toml
@@ -1103,19 +1103,20 @@ leave in place.
 The implementation is
 [`CuriosCompat`](src/main/java/com/enviouse/progressivestages/compat/curios/CuriosCompat.java).
 
-### 4.19 `[[ores.overrides]]` — parsed but deferred post-2.0
+### 4.19 `[[ores.overrides]]` — ore masquerade
 
 ```toml
-# [[ores.overrides]]
-# target = "id:minecraft:diamond_ore"
-# display_as = "id:minecraft:stone"
-# drop_as = "id:minecraft:cobblestone"
+[[ores.overrides]]
+target = "id:minecraft:diamond_ore"
+display_as = "id:minecraft:stone"
+drop_as = "id:minecraft:cobblestone"
 ```
 
-The TOML schema is parsed for forward compatibility, but **enforcement is on
-hold post-2.0**. Visual masquerade requires client-side chunk packet
-rewriting, which is scoped as a separate release. You can leave entries in
-your stage files — they won't error, they just won't do anything yet.
+Until the player owns the stage, matching ore blocks are rewritten to the
+`display_as` block for that client and yield `drop_as` through the guarded
+harvest/drop path. Unlocking refreshes the affected client view. Per-stage
+spoof radius and the 3.0 `[display].encrypt_blocks` shorthand use the same
+pipeline.
 
 Tracked in
 [`OreOverride`](src/main/java/com/enviouse/progressivestages/common/lock/LockDefinition.java)
@@ -1567,6 +1568,8 @@ tags     = ["combat", "tier2"]   # New in 3.0 — labels for /stage tag ... (§7
 | `scope` | string | `"team"` (default) or `"server"`. A **`"server"`-scoped stage is SERVER-WIDE**: the **first team** to satisfy it unlocks it for the **whole server** (everyone, including future joiners). Use for global milestones ("someone has beaten the dragon → the End gate opens for all"). |
 | `duration` | string | Temporary-stage lifetime — see §4.25. |
 | `tags` | list | **New in 3.0.** Free-form **labels** for this stage (lower-cased on load). They group stages for the bulk `/stage tag grant\|revoke\|list <tag>` commands (§7.1) — e.g. tag every combat-tier stage `"combat"` and grant them all at once. Tags have **no** gating effect on their own; they're purely an authoring/admin convenience. |
+| `dependency_mode` | string | **New in 3.0.** `"all"` (default), `"any"`, or `"at_least"`. This enables alternate branches and quorum progression without scripts. |
+| `dependency_count` | integer | Required direct-dependency count for `dependency_mode = "at_least"`; clamped to the declared dependency list. |
 
 > **Activated in 2.5.** Prior to 2.5, `hidden` / `color` / `category` were
 > **parsed but inert**. As of 2.5 they take effect in the Stage Tree GUI exactly
@@ -1592,7 +1595,7 @@ category, `[[triggers]]`, `[unlocks]`, etc.). Datapack stages are loaded by a
 **`/reload`**, and merged with the config-folder stages.
 
 **Merge rule: config always wins.** If a stage id is defined **both** in a datapack
-**and** in `config/ProgressiveStages/<id>.toml`, the **config file wins** — the
+**and** in `config/progressivestages/stages/<id>.toml`, the **config file wins** — the
 datapack copy is overridden. This makes datapacks an ideal way to ship
 **overridable defaults**: a content/quest datapack can bundle a baseline
 progression that a pack author or server admin can then tweak locally **without
@@ -1879,6 +1882,13 @@ omitted).
 | `ride` | *(none)* | **New in 3.0.** Blocks ridden on **any** vehicle (minecart/boat/pig/horse/strider distance stats, summed) — retroactive (aliases `riding`, `ride_distance`) | yes |
 | `biome_time` | `biome` = `<id\|#tag>` | **New in 3.0.** **Seconds** spent in the target biome / tag. `count` = seconds, or a friendly `duration = "5m"` | yes (mod counter, event-polled) |
 | `stage_held_for` | `stage` = `<stageId>` | **New in 3.0.** Held another stage for **≥ `count` seconds** (`count` = seconds, or `duration = "3d"`) | state (time since grant) |
+| `custom_counter` | `counter` = `<name>` | **New in 3.0.** Named counter managed by `/stage counter ...`, KubeJS, or the Java API | yes (mod counter) |
+| `scoreboard` | `objective` = `<name>` | **New in 3.0.** Live value of a vanilla scoreboard objective for this player | state/counter |
+| `health` | *(none)* | **New in 3.0.** Current health points (`20` at normal full health) | state |
+| `food` | *(none)* | **New in 3.0.** Current hunger/food level (`20` at full hunger) | state |
+| `stage_count` | *(none)* | **New in 3.0.** Number of effective team/server stages currently owned | state |
+| `online_team_size` | *(none)* | **New in 3.0.** Number of team members currently online | state |
+| `script_value` | `id` = `<providerId>` | **New in 3.0.** Numeric progress returned by `ProgressiveStages.progressCondition(...)` | state/counter |
 
 **New in 2.4 condition details:**
 
@@ -2126,57 +2136,48 @@ rule/condition breakdown. See §7.
 
 ### 5.6 The Stage Tree viewer + keybind
 
-ProgressiveStages 2.3 ships an in-game **Stage Tree / Progression viewer** — a
-**read-only, two-pane master/detail screen**. It only *displays* progression; it
-never grants or edits stages.
+ProgressiveStages 3.0 ships an in-game progression map built in vanilla's
+**advancement-screen visual language**: task/goal/challenge frames, elbow
+dependency connectors, a tiled background, hover cards, and a pinned inspector.
 
 - **Open it** with the **"Open Progression Tree"** keybind (category
   *ProgressiveStages* in Controls). It is **UNBOUND by default** — players
-  assign a key in Options → Controls. You can also open it with the command
-  `/stage gui`.
+  assign a key in Options → Controls. You can also use `/stage`, `/stages`,
+  `/ps`, or `/stage gui`.
 
-**Left pane — the stage tree.** Lists **every stage**, indented by dependency
-depth and **colour-coded by status**:
+**Navigation.** Drag empty map space with the left mouse button. The mouse wheel
+scrolls vertically; Shift+wheel scrolls horizontally. WASD and the arrow keys
+also pan. The header home button returns to the most relevant available stage.
+The in-map category selector cycles with left/right click; `C` and Shift+`C`
+cycle it from the keyboard.
 
-- **unlocked** — owned,
-- **ready to unlock** — all dependencies met, not yet granted, and
-- **locked** — at least one dependency still missing.
+**Nodes and details.** Hover a framed node for its name, id, status,
+description, category, and trigger completion. Click it to pin an inspector with
+its prerequisites, full live `[[triggers]]` condition breakdown, unlock item
+preview, and purchase control. Search matches display name, id, description,
+category, and locked item ids. The Owned button hides completed nodes.
 
-Selecting a stage in the left pane fills the right pane with its detail.
+**Author layout (`[display]`).** Omit coordinates for automatic dependency-DAG
+layout, or specify both `x` and `y` (pixels). `frame` is `task`, `goal`, or
+`challenge`; `background` is a tiled texture id; `reveal` is `always`,
+`dependencies`, or `unlocked`; and `sort_order` stabilizes automatic lane order.
 
-**Search + hide — New in 3.0.** Above the stage list sits a **search box** and an
-**"☑ owned" toggle**:
-
-- **Search box** — typing filters the list. It matches a stage by its **display
-  name OR id**, *and* by **any locked item id** the stage gates — so typing an
-  item (e.g. `create:wrench`) surfaces the stage(s) that gate it. When a search
-  term (or the hide-owned toggle) is active, the list switches from the indented
-  tree to a **flat filtered list** (the tree shape only makes sense for the full
-  set).
-- **"☑ owned" toggle** — click it to **hide already-unlocked stages** from the
-  list, so only stages you don't yet own remain.
-
-**Right pane — the selected stage's detail.** Shows, top to bottom:
-
-- the stage's **icon, display name, and status**;
-- its **description**;
-- a **"Gates mods:" breakdown — New in 3.0** — for the selected stage, the mods
-  whose items it locks, each with a count (e.g. `create ×42  •  mekanism ×18`),
-  sorted by lock count (top mods shown). Derived from the synced item-lock map,
-  grouped by namespace;
-- the **PREREQUISITES needed to advance** — the dependency checklist, each
-  marked **✓** (owned) or **✗** (missing);
-- a **"% to unlock" progress bar** with the **live per-condition `[[triggers]]`
-  breakdown** (current vs. required for each rule/condition); and
-- an **icon-grid preview of the items this stage UNLOCKS**, with a **total
-  count**.
+```toml
+[display]
+x = 168
+y = -46
+frame = "challenge"
+background = "minecraft:block/deepslate_tiles"
+reveal = "dependencies"
+sort_order = 20
+```
 
 **Skill-tree Unlock button — New in 2.4.** When a stage declares a `[cost]`
 table (§4.26), its detail pane shows an **Unlock** button: the GUI doubles as a
 **skill tree** where players *buy* stages. The button appears according to the
 stage's `[cost].bypass_requirements` setting, and clicking it runs a
 **server-validated purchase** (consuming the `xp_levels` / `items`) that grants
-the stage with `StageCause.PURCHASE`. The viewer is otherwise read-only; the
+the stage with `StageCause.PURCHASE`. The map is otherwise read-only; the
 Unlock button is the **only** way it mutates stages, and only for `[cost]`
 stages. There is **no new command** for purchasing — it happens inside
 `/stage gui`.
@@ -2199,10 +2200,15 @@ Implementation pointers:
 
 ## 6. Global Configuration — `progressivestages.toml`
 
-The main mod config lives at `config/progressivestages.toml` (NOT inside the
-`ProgressiveStages/` directory — it's a NeoForge `ModConfigSpec` registered
-during mod construction). Every key has an inline comment in the generated
-file; this section summarizes them.
+The main mod config lives at `config/progressivestages/progressivestages.toml`.
+Stage definitions live in its sibling `config/progressivestages/stages/`
+directory. Version 3 migrates the legacy root config and `config/ProgressiveStages/*.toml`
+layout without overwriting files already present at the new destination. Every
+key has an inline comment in the generated file; this section summarizes them.
+
+Stage files may be organized in nested folders under `stages/`. A reload is compiled and
+validated as a candidate snapshot first. If parsing, duplicate IDs, or dependency validation
+fails, the server keeps the previous valid stage and lock snapshot active and reports the errors.
 
 The authoritative source is
 [`StageConfig`](src/main/java/com/enviouse/progressivestages/common/config/StageConfig.java).
@@ -2322,8 +2328,8 @@ gating-stage description on its tooltip when `emi.show_stage_description_on_tool
 
 ## 7. Commands
 
-All `/stage` and `/progressivestages` commands require **permission level 2**
-unless otherwise noted.
+Player-facing `/stage` queries and the map are public. Mutations require
+permission level 2; authoring/reload/validation operations require level 3.
 
 ### 7.1 `/stage` — player stage operations
 
@@ -2336,6 +2342,7 @@ unless otherwise noted.
 | `/stage info <stage>` | Print stage metadata: id, dependencies, description, lock count. |
 | `/stage tree` | ASCII dependency tree of every loaded stage. |
 | `/stage gui` | Open the in-game Stage Tree / Progression viewer for yourself (see §5.6). |
+| `/stage`, `/stages`, `/ps` | Friendly aliases that open the progression map. |
 | `/stage progress` | Shortcut for `/stage progress next` — what the caller can unlock right now. |
 | `/stage progress next [player]` | Lists every stage the player can currently unlock (deps met, not yet granted) with the full `[[triggers]]` rule/condition breakdown for each one. Player defaults to the caller. |
 | `/stage progress all [player]` | Lists **every** stage the player doesn't yet have — including those still locked behind unmet dependencies — in registration order. Useful for pack-author audits and "show me the whole roadmap" queries. |
@@ -2343,9 +2350,17 @@ unless otherwise noted.
 | `/stage tag grant <players> <tag>` | **New in 3.0.** Grant **every stage tagged `<tag>`** to each selected player. **Bypasses dependencies** and **skips stages already owned** (only un-owned tagged stages are granted). Reports the change count across stages × players. |
 | `/stage tag revoke <players> <tag>` | **New in 3.0.** Revoke every stage tagged `<tag>` from each player (skips stages they don't have). |
 | `/stage tag list <tag>` | **New in 3.0.** List every stage that declares `<tag>` in its `[stage].tags`. Tab-completes from all declared tags. |
+| `/stage category grant\|revoke <players> <category>` | **New in 3.0.** Bulk-change every stage assigned to a GUI category. Quote category names containing spaces. |
+| `/stage category list <category>` | **New in 3.0.** List every stage in a category. |
+| `/stage bulk grant\|revoke <players>` | **New in 3.0.** Grant or revoke the complete defined/owned stage set. |
+| `/stage sync <players>` | **New in 3.0.** Re-send definitions, lock registry, ownership, and bypass state to selected clients. |
 | `/stage simulate [player]` | **New in 3.0.** **Dry-run** of what the player can unlock next: lists their **reachable-next** stages (deps met, not yet owned) sorted by completion %, and for each shows exactly which `[[triggers]]` conditions are still **short** (`current/threshold`, "need N more"). Then lists **dependency-blocked** stages with the prerequisites they're still missing. Player defaults to the caller. Read-only. |
-| `/stage new <id>` | **New in 3.0.** **Scaffold** a new stage TOML at `config/ProgressiveStages/<id>.toml` (a commented template with `[stage]`, `[items]`, a sample `[[triggers]]`, and pointers to the optional sections). Refuses to overwrite an existing file; run `/stage reload` after editing. |
+| `/stage new <id>` | **New in 3.0.** **Scaffold** a new stage TOML at `config/progressivestages/stages/<id>.toml` (a commented template with `[stage]`, `[items]`, a sample `[[triggers]]`, and pointers to the optional sections). Refuses to overwrite an existing file; run `/stage reload` after editing. |
 | `/stage export` | **New in 3.0.** Write a **markdown progression guide** (`progressivestages_guide.md` in the config folder) built from the stage graph — for each stage: description, **Requires** (deps), **Leads to** (dependents), **Unlock by** (`[[triggers]]` conditions), and whether it's purchasable. |
+| `/stage counter get <player> <counter>` | Read a named `custom_counter` value (permission 2). |
+| `/stage counter add <player> <counter> <amount>` | Add to a counter and immediately re-evaluate triggers (permission 2). |
+| `/stage counter set <player> <counter> <value>` | Set a counter and immediately re-evaluate triggers (permission 2). |
+| `/stage counter reset <player> <counter>` | Clear a named counter (permission 2). |
 
 > **Using `/stage progress`.** Three views, one rendering:
 >
@@ -2643,6 +2658,9 @@ ProgressiveStages.onGranted((player, stage) => {
 ProgressiveStages.onRevoked((player, stage) => {
     player.tell("Lost " + stage)
 })
+ProgressiveStages.onChanged((player, stage, change, cause, teamId) => {
+    console.info(`${stage} ${change}; cause=${cause}; owner=${teamId}`)
+})
 ```
 
 **Custom trigger conditions — the `script` condition type (§5.2):** register a
@@ -2653,6 +2671,9 @@ predicate by id, then reference it from any stage's `[[triggers]]` with
 // stage TOML:  [[triggers]]  type = "script"  id = "rich"
 ProgressiveStages.condition('rich', player =>
     player.getMainHandItem().id == 'minecraft:diamond')
+
+// stage TOML: type = "script_value", id = "reputation", count = 100
+ProgressiveStages.progressCondition('reputation', player => getReputation(player))
 ```
 
 **Imperative control / queries** from any KubeJS event:
@@ -2660,10 +2681,32 @@ ProgressiveStages.condition('rich', player =>
 | Call | Returns | Notes |
 |------|---------|-------|
 | `ProgressiveStages.has(player, 'stage')` | boolean | Does the player (team) own the stage |
-| `ProgressiveStages.grant(player, 'stage')` | boolean | Grant the stage (cause `COMMAND`) |
-| `ProgressiveStages.revoke(player, 'stage')` | boolean | Revoke the stage (cause `COMMAND`) |
-| `ProgressiveStages.list(player)` | string[] | All owned stage ids |
+| `ProgressiveStages.grant(player, 'stage')` | boolean | Grant with cause `SCRIPT`; true only when ownership changes |
+| `ProgressiveStages.revoke(player, 'stage')` | boolean | Revoke with cause `SCRIPT`; true only when ownership changes |
+| `ProgressiveStages.toggle(player, 'stage')` | boolean | Toggle and return the new ownership state |
+| `ProgressiveStages.grantBypass(player, 'stage')` | boolean | Grant one stage while intentionally ignoring prerequisites |
+| `ProgressiveStages.grantMany/revokeMany(player, stages)` | int | Bulk requested-target change count |
+| `ProgressiveStages.grantAll/revokeAll(player)` | int | Bulk change every defined/owned stage |
+| `ProgressiveStages.exists('stage')` | boolean | Does the definition exist |
+| `ProgressiveStages.available(player, 'stage')` | boolean | Exists, unowned, dependencies satisfied |
+| `ProgressiveStages.hasAll/hasAny(player, stages)` | boolean | Collection ownership tests |
+| `ProgressiveStages.dependencies('stage')` | string[] | Declared dependencies |
+| `ProgressiveStages.missingDependencies(player, 'stage')` | string[] | Dependencies still needed |
+| `ProgressiveStages.allDependencies/dependents/allDependents('stage')` | string[] | Dependency graph traversal |
+| `ProgressiveStages.withTag('tag')` | string[] | All stages with a tag |
+| `ProgressiveStages.grantTag/revokeTag(player, 'tag')` | int | Bulk change count |
+| `ProgressiveStages.withCategory/categories()` | string[] | Category lookup/discovery |
+| `ProgressiveStages.list/owned(player)` | string[] | All owned stage ids |
+| `ProgressiveStages.all/locked/availableStages(...)` | string[] | Definition and player-state lists |
+| `ProgressiveStages.info('stage')` | object | Script-friendly definition snapshot |
+| `ProgressiveStages.progress(player, 'stage')` | object | Full rule and condition progress snapshot |
 | `ProgressiveStages.percent(player, 'stage')` | int `0..100` | The stage's `[[triggers]]` completion % |
+| `ProgressiveStages.counter(player, 'name')` | long | Read a named `custom_counter` |
+| `ProgressiveStages.addCounter/setCounter(player, 'name', value)` | long | Mutate, evaluate triggers, and return the value |
+| `ProgressiveStages.resetCounter(player, 'name')` | void | Clear a named counter |
+| `ProgressiveStages.evaluate(player)` | void | Immediately evaluate declarative triggers |
+| `ProgressiveStages.sync(player)` | void | Force a complete authoritative client-cache refresh |
+| `ProgressiveStages.openGui(player)` | void | Open/refresh the player's stage map |
 
 ```javascript
 ServerEvents.tick(e => e.server.players.forEach(p => {
@@ -2672,7 +2715,7 @@ ServerEvents.tick(e => e.server.players.forEach(p => {
 }))
 ```
 
-> **Reset per reload.** All `onGranted` / `onRevoked` callbacks and `condition`
+> **Reset per reload.** All lifecycle callbacks and boolean/numeric condition
 > registrations are **cleared at the start of each server-script reload**, so a
 > `/reload` re-registers them cleanly instead of stacking duplicate handlers
 > ([`ScriptHooks.reset()`](src/main/java/com/enviouse/progressivestages/common/compat/ScriptHooks.java)).
@@ -2802,7 +2845,7 @@ Implementation: [`CuriosCompat`](src/main/java/com/enviouse/progressivestages/co
     [`StageLockWthitProvider`](src/main/java/com/enviouse/progressivestages/compat/wthit/StageLockWthitProvider.java).
   - **Sourced from the Modrinth Maven, not bundled jars.** `build.gradle` adds a
     **Modrinth** repository (`https://api.modrinth.com/maven`, `maven.modrinth`
-    group) plus a **CurseMaven** fallback, and pulls Jade and WTHIT as
+    group) and pulls Jade and WTHIT as
     `compileOnly` dev jars
     (`compileOnly "maven.modrinth:jade:15.10.5+neoforge"`,
     `compileOnly "maven.modrinth:wthit:neo-12.10.2"`). They are **compile-only**:
@@ -2822,7 +2865,8 @@ Package: `com.enviouse.progressivestages.common.api`
 ### 15.1 ProgressiveStagesAPI
 
 Static facade in [`ProgressiveStagesAPI.java`](src/main/java/com/enviouse/progressivestages/common/api/ProgressiveStagesAPI.java).
-Thread-safe; callable from any context.
+Mutation methods must run on the logical server thread; queries should normally
+be made there because they read live world/team state.
 
 ```java
 // Existence checks
@@ -2832,14 +2876,18 @@ Set<StageId> all = ProgressiveStagesAPI.getAllStageIds();
 // Per-player queries
 boolean has = ProgressiveStagesAPI.hasStage(player, "diamond_age");
 Set<StageId> stages = ProgressiveStagesAPI.getStages(player);
+List<StageId> available = ProgressiveStagesAPI.getAvailableStages(player);
 
 // Mutations (fire StageChangeEvent / StagesBulkChangedEvent)
 ProgressiveStagesAPI.grantStage(player, StageId.parse("iron_age"), StageCause.QUEST_REWARD);
 ProgressiveStagesAPI.revokeStage(player, StageId.parse("stone_age"), StageCause.COMMAND);
+ProgressiveStagesAPI.grantStages(player, ids, StageCause.API);
+ProgressiveStagesAPI.grantStageBypass(player, id, StageCause.API);
 
 // Definitions
 Optional<StageDefinition> def = ProgressiveStagesAPI.getDefinition("iron_age");
 Collection<StageDefinition> defs = ProgressiveStagesAPI.getAllDefinitions();
+List<StageTriggerEvaluator.RuleProgress> progress = ProgressiveStagesAPI.getTriggerProgress(player, id);
 ```
 
 ### 15.2 StageId
@@ -3044,7 +3092,7 @@ Documented in
 
 `/progressivestages reload` does:
 
-- Reload every `*.toml` in `config/ProgressiveStages/` (stage files, including
+- Reload every `*.toml` in `config/progressivestages/stages/` (stage files, including
   each stage's `[[triggers]]` rules and `[display]` overrides).
 - Re-evaluate `[[triggers]]` against online players — retroactive counter
   conditions can grant a stage immediately on reload.
@@ -3219,7 +3267,7 @@ compat/                              ← every soft-dep integration
 
 The default stage templates are bundled in
 [`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java) —
-specifically `stoneAge()`, `ironAge()`, `diamondAge()`, and `triggers()`. The
+specifically `stoneAge()`, `ironAge()`, and `diamondAge()`. The
 `diamondAge()` template is the canonical 2.0 reference file; reading it
 end-to-end is the fastest way to internalize the schema.
 

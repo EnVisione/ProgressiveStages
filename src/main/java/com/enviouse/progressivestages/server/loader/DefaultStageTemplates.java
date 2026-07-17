@@ -38,6 +38,9 @@ public final class DefaultStageTemplates {
             #   dependency = "tutorial_complete"
             # or multiple:
             #   dependency = ["tutorial_complete", "spawn_visit"]
+            # Alternate branches / quorums:
+            #   dependency_mode = "any"       # all (default) | any | at_least
+            #   dependency_count = 2          # only used by at_least
 
             [items]
             locked = []
@@ -157,7 +160,7 @@ public final class DefaultStageTemplates {
             #  11.  [[interactions]]     — "player does X to Y" rules (Create-style)
             #  12.  [loot]               — GLM that filters chests/fishing/drops
             #  13.  [mobs]               — spawn gating + dynamic replacement
-            #  14.  [[ores.overrides]]   — (on hold for 2.0, parsed for forward compat)
+            #  14.  [[ores.overrides]]   — client ore masquerade + guarded drops
             #  15.  [pets]               — taming / breeding / commanding / riding
             #  16.  [screens]            — block OR item GUI opens (incl. shulkers/lootr)
             #  16a. [trades]             — villager / wandering-trader trade gating (by result)
@@ -207,6 +210,8 @@ public final class DefaultStageTemplates {
             # Prerequisite stage(s). Can be a single string or a list.
             #   dependency = "iron_age"
             #   dependency = ["iron_age", "nether_explorer"]
+            # Set dependency_mode = "any" for alternate branches, or "at_least" plus
+            # dependency_count = N for a quorum. The default remains "all".
             # Omit entirely for starting stages. When linear_progression is enabled in
             # progressivestages.toml, missing dependencies are auto-granted recursively.
             dependency = "iron_age"
@@ -1012,7 +1017,7 @@ public final class DefaultStageTemplates {
             # ============================================================================
             # 23. [[triggers]] — AUTO-GRANT THIS STAGE WHEN CONDITIONS ARE MET  (NEW IN v2.3)
             # ============================================================================
-            # v2.3 replaced the old global config/ProgressiveStages/triggers.toml with this
+            # v2.3 replaced the old global triggers.toml with this
             # per-stage [[triggers]] section: define the conditions that AUTO-GRANT this stage
             # right here, alongside everything else the stage controls.
             #
@@ -1062,6 +1067,9 @@ public final class DefaultStageTemplates {
             #   type = "advancement" advancement = "<id>"   (earned; vanilla-persisted)
             #   type = "dimension"   dimension = "<id>"     (entered at least once)
             #   type = "biome"       biome = "<id|tag>"     (visited at least once)
+            #   type = "scoreboard"  objective = "<name>"   count = N
+            #   type = "health" / "food" / "stage_count" / "online_team_size"  count = N
+            #   type = "script_value" id = "<provider>"      count = N (KubeJS numeric source)
             #
             #   Tags: write the subject as "#namespace:path" or "tag:namespace:path" to count
             #   across every member of the tag. `count` defaults to 1 when omitted.
@@ -1148,12 +1156,24 @@ public final class DefaultStageTemplates {
             #   show_description_on_tooltip  append THIS stage's [stage].description to a locked
             #                                item's tooltip (a hint about what unlocks it).
             #                                global default: emi.show_stage_description_on_tooltip
+            #   x / y                       explicit pixel position in the advancement-style map.
+            #                               Omit BOTH to use automatic dependency-graph layout.
+            #   frame                       vanilla frame: "task", "goal", or "challenge".
+            #   background                  tiled map texture, e.g. "minecraft:block/stone".
+            #   reveal                      "always", "dependencies", or "unlocked".
+            #   sort_order                  stable ordering hint inside auto-layout layers.
             # ----------------------------------------------------------------------------
             # [display]
             # display_as_unknown_item = true
             # obscure_icon = true
             # show_tooltip = true
             # show_description_on_tooltip = true
+            # x = 168
+            # y = 0
+            # frame = "challenge"
+            # background = "minecraft:block/deepslate_tiles"
+            # reveal = "dependencies"
+            # sort_order = 20
 
 
             # ============================================================================
@@ -1255,7 +1275,8 @@ public final class DefaultStageTemplates {
             #   ProgressiveStages.onRevoked((player, stage) => player.tell('Lost ' + stage))
             #   ProgressiveStages.condition('rich', player =>
             #       player.getMainHandItem().id == 'minecraft:diamond')   // use: type="script", id="rich"
-            #   // also: ProgressiveStages.has / grant / revoke / list / percent(player, 'stage')
+            #   // also: has/grant/revoke/toggle/list/available/dependencies/missingDependencies
+            #   //       withTag/grantTag/revokeTag/percent/openGui and named counter helpers.
 
 
             # ============================================================================
@@ -1365,6 +1386,9 @@ public final class DefaultStageTemplates {
             #   biome_time       biome="minecraft:desert" | "#tag"    duration="10m" | count=<seconds>    [v3.0]
             #   stage_held_for   stage="iron_age"                     duration="2d"  | count=<seconds>    [v3.0]
             #   script           id="my_custom_check"                          (KubeJS predicate; see §11) [v3.0]
+            #   custom_counter   counter="factory_quests"             count=N   (command/KubeJS-managed) [v3.0]
+            #                    /stage counter add <player> factory_quests 1
+            #                    ProgressiveStages.addCounter(player, 'factory_quests', 1)
             #
             # ─────────────────────────────────────────────────────────────────────────
             # 27.2  [rewards] — handed out the moment this stage is granted (v3.0)
@@ -1450,6 +1474,12 @@ public final class DefaultStageTemplates {
             # show_description_on_tooltip = true # append this stage's description to locked tooltips
             # encrypt_blocks          = true     # v3.0: masquerade this stage's locked blocks...
             # encrypt_as              = "minecraft:stone"   # ...as this block until the stage is owned
+            # x                       = 168      # map position (omit x+y for automatic DAG layout)
+            # y                       = 0
+            # frame                   = "challenge" # task | goal | challenge
+            # background              = "minecraft:block/deepslate_tiles"
+            # reveal                  = "dependencies" # always | dependencies | unlocked
+            # sort_order              = 20
             #
             # ─────────────────────────────────────────────────────────────────────────
             # 27.8  [structures] — entry gating with bounce-back + padding (v2.0 / v3.0)

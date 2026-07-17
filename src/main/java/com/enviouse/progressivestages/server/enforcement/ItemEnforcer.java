@@ -61,15 +61,11 @@ public class ItemEnforcer {
             return true;
         }
 
-        // Check enforcement exemption before blocking
-        if (reg.isExemptFromUse(stack.getItem())) {
-            return true;
-        }
-
         // v2.3: per-stage override — enforce ITEM_USE only if a missing gating stage requires it.
         java.util.Set<StageId> missing = reg.missingStagesForItem(player, stack.getItem());
         if (missing.isEmpty()) return true;
-        return !reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_USE);
+        if (!reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_USE)) return true;
+        return reg.isExemptFromUse(stack.getItem(), missing);
     }
 
     /**
@@ -96,14 +92,10 @@ public class ItemEnforcer {
             return true;
         }
 
-        // Check enforcement exemption before blocking
-        if (reg.isExemptFromPickup(stack.getItem())) {
-            return true;
-        }
-
         java.util.Set<StageId> missing = reg.missingStagesForItem(player, stack.getItem());
         if (missing.isEmpty()) return true;
-        return !reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_PICKUP);
+        if (!reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_PICKUP)) return true;
+        return reg.isExemptFromPickup(stack.getItem(), missing);
     }
 
     /**
@@ -130,14 +122,10 @@ public class ItemEnforcer {
             return true;
         }
 
-        // Check enforcement exemption before blocking
-        if (reg.isExemptFromInventory(stack.getItem())) {
-            return true;
-        }
-
         java.util.Set<StageId> missing = reg.missingStagesForItem(player, stack.getItem());
         if (missing.isEmpty()) return true;
-        return !reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_INVENTORY);
+        if (!reg.isCategoryEnforced(missing, EnforcementCategory.ITEM_INVENTORY)) return true;
+        return reg.isExemptFromInventory(stack.getItem(), missing);
     }
 
     /**
@@ -278,5 +266,9 @@ public class ItemEnforcer {
      */
     public static void clearCooldowns(UUID playerId) {
         messageCooldowns.remove(playerId);
+    }
+
+    public static void clearAllCooldowns() {
+        messageCooldowns.clear();
     }
 }

@@ -33,8 +33,28 @@ public class StageCounterData extends SavedData {
     }
 
     public void increment(UUID player, String counterKey, long amount) {
+        if (counterKey == null || counterKey.isBlank() || amount == 0) return;
         counters.merge(key(player, counterKey), amount, Long::sum);
         setDirty();
+    }
+
+    public void set(UUID player, String counterKey, long value) {
+        if (counterKey == null || counterKey.isBlank()) return;
+        String key = key(player, counterKey);
+        if (value == 0) counters.remove(key);
+        else counters.put(key, value);
+        setDirty();
+    }
+
+    public void reset(UUID player, String counterKey) {
+        if (counterKey != null && !counterKey.isBlank() && counters.remove(key(player, counterKey)) != null) {
+            setDirty();
+        }
+    }
+
+    public void resetPlayer(UUID player) {
+        String prefix = player + "|";
+        if (counters.keySet().removeIf(k -> k.startsWith(prefix))) setDirty();
     }
 
     public long get(UUID player, String counterKey) {

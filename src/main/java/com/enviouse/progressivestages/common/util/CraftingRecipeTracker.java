@@ -39,5 +39,9 @@ public final class CraftingRecipeTracker {
     public static void clearLastRecipe(UUID playerId) {
         LAST_RECIPE_BY_PLAYER.remove(playerId);
     }
-}
 
+    /** Clear all transient recipe matches when the logical server stops. */
+    public static void clearAll() {
+        LAST_RECIPE_BY_PLAYER.clear();
+    }
+}

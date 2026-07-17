@@ -37,8 +37,12 @@ public final class Constants {
     public static final ResourceLocation UNLOCK_TOAST_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "unlock_toast");
     public static final ResourceLocation ACTIVE_GOAL_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "active_goal");
 
-    // Stage file directory name (inside config folder)
-    public static final String STAGE_FILES_DIRECTORY = "ProgressiveStages";
+    // v3.0 unified config layout:
+    // config/progressivestages/progressivestages.toml
+    // config/progressivestages/stages/*.toml
+    public static final String CONFIG_DIRECTORY = "progressivestages";
+    public static final String STAGES_DIRECTORY = "stages";
+    public static final String MAIN_CONFIG_FILE = CONFIG_DIRECTORY + "/progressivestages.toml";
 
     // Attachment type names
     public static final ResourceLocation TEAM_STAGE_ATTACHMENT = ResourceLocation.fromNamespaceAndPath(MOD_ID, "team_stages");

@@ -119,9 +119,12 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
         for (String modId : _reg.getAllLockedMods()) {
             var requiredStage = _reg.getModLockStage(modId);
             if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
-                blockedModIds.add(modId.toLowerCase());
+                blockedModIds.add(modId.toLowerCase(java.util.Locale.ROOT));
             }
         }
+        // Dedicated servers do not share their LockRegistry with the client. The synced,
+        // server-resolved view is authoritative there (and already honors per-stage unlocks).
+        blockedModIds.addAll(ClientLockCache.getLockedModIds());
 
         // Use predicate-based removal to catch ALL NBT variants of each locked item
         // This is crucial for mods like Mekanism that register multiple stacks per item type
@@ -150,13 +153,13 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             if (!finalBlockedModIds.isEmpty()) {
                 try {
                     var stackOwner = com.enviouse.progressivestages.compat.recipeviewer.RecipeViewerModHints.owningModIdForClass(stack.getClass());
-                    if (stackOwner.isPresent() && finalBlockedModIds.contains(stackOwner.get().toLowerCase())) {
+                    if (stackOwner.isPresent() && finalBlockedModIds.contains(stackOwner.get().toLowerCase(java.util.Locale.ROOT))) {
                         return true;
                     }
                     Object key = stack.getKey();
                     if (key != null) {
                         var keyOwner = com.enviouse.progressivestages.compat.recipeviewer.RecipeViewerModHints.owningModIdForClass(key.getClass());
-                        if (keyOwner.isPresent() && finalBlockedModIds.contains(keyOwner.get().toLowerCase())) {
+                        if (keyOwner.isPresent() && finalBlockedModIds.contains(keyOwner.get().toLowerCase(java.util.Locale.ROOT))) {
                             return true;
                         }
                     }
@@ -195,12 +198,20 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
                 directFluidLocks.add(entry.getKey());
             }
         }
+        for (var entry : ClientLockCache.getAllFluidMultiLocks().entrySet()) {
+            for (StageId required : entry.getValue()) {
+                if (!playerStages.contains(required)) {
+                    directFluidLocks.add(entry.getKey());
+                    break;
+                }
+            }
+        }
 
         // Fluid mod locks (fluid_mods = ["..."])
         for (String modId : lockRegistry.getAllLockedFluidMods()) {
             var requiredStage = lockRegistry.getFluidModLockStage(modId);
             if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
-                lockedFluidMods.add(modId.toLowerCase());
+                lockedFluidMods.add(modId.toLowerCase(java.util.Locale.ROOT));
             }
         }
 
@@ -208,15 +219,16 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
         for (String modId : lockRegistry.getAllLockedMods()) {
             var requiredStage = lockRegistry.getModLockStage(modId);
             if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
-                lockedMods.add(modId.toLowerCase());
+                lockedMods.add(modId.toLowerCase(java.util.Locale.ROOT));
             }
         }
+        lockedMods.addAll(ClientLockCache.getLockedModIds());
 
         // Name patterns also lock fluids (names = ["diamond"])
         for (String pattern : lockRegistry.getAllNamePatterns()) {
             var requiredStage = lockRegistry.getNamePatternStage(pattern);
             if (requiredStage.isPresent() && !playerStages.contains(requiredStage.get())) {
-                namePatterns.put(pattern.toLowerCase(), requiredStage.get());
+                namePatterns.put(pattern.toLowerCase(java.util.Locale.ROOT), requiredStage.get());
             }
         }
 
@@ -252,13 +264,13 @@ public class ProgressiveStagesEMIPlugin implements EmiPlugin {
             }
 
             // Check fluid mod lock and general mod lock
-            String modId = id.getNamespace().toLowerCase();
+            String modId = id.getNamespace().toLowerCase(java.util.Locale.ROOT);
             if (lockedFluidMods.contains(modId) || lockedMods.contains(modId)) {
                 return true;
             }
 
             // Check name patterns (names = ["diamond"] locks fluids containing "diamond")
-            String fluidIdStr = id.toString().toLowerCase();
+            String fluidIdStr = id.toString().toLowerCase(java.util.Locale.ROOT);
             for (String pattern : namePatterns.keySet()) {
                 if (fluidIdStr.contains(pattern)) {
                     return true;

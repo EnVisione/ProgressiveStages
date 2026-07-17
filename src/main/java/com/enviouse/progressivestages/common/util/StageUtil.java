@@ -77,14 +77,14 @@ public final class StageUtil {
      * Check if a string matches a name pattern (case-insensitive substring)
      */
     public static boolean matchesName(String itemId, String pattern) {
-        return itemId.toLowerCase().contains(pattern.toLowerCase());
+        return itemId.toLowerCase(java.util.Locale.ROOT).contains(pattern.toLowerCase(java.util.Locale.ROOT));
     }
 
     /**
      * Check if a string matches a name pattern against display name
      */
     public static boolean matchesDisplayName(ItemStack stack, String pattern) {
-        String displayName = stack.getHoverName().getString().toLowerCase();
-        return displayName.contains(pattern.toLowerCase());
+        String displayName = stack.getHoverName().getString().toLowerCase(java.util.Locale.ROOT);
+        return displayName.contains(pattern.toLowerCase(java.util.Locale.ROOT));
     }
 }

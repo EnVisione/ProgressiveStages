@@ -15,6 +15,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
 
@@ -177,6 +178,15 @@ public class FTBTeamsIntegration {
         // Note: don't remove lastKnownFtbTeamStages here — it's keyed by teamId,
         // and other team members may still be online.
         LOGGER.debug("Player {} logged out, tracking removed", event.getEntity().getName().getString());
+    }
+
+    /** Reset world-specific snapshots while keeping the event listener registered once. */
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        initialized = false;
+        initChecked = false;
+        lastKnownTeams.clear();
+        lastKnownFtbTeamStages.clear();
     }
 
     /**

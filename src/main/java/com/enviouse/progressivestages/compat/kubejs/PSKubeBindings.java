@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.compat.kubejs;
 
 import com.enviouse.progressivestages.common.api.StageCause;
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.api.ProgressiveStagesAPI;
 import com.enviouse.progressivestages.common.compat.ScriptHooks;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator;
@@ -9,7 +10,10 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * v2.5: the global {@code ProgressiveStages} object bound into KubeJS scripts. Gives packs deep,
@@ -35,8 +39,12 @@ public final class PSKubeBindings {
 
     public void onGranted(ScriptHooks.StageCallback cb) { ScriptHooks.onGranted(cb); }
     public void onRevoked(ScriptHooks.StageCallback cb) { ScriptHooks.onRevoked(cb); }
+    public void onChanged(ScriptHooks.StageChangeCallback cb) { ScriptHooks.onChanged(cb); }
     public void condition(String id, ScriptHooks.StagePredicate predicate) {
         ScriptHooks.registerCondition(id, predicate);
+    }
+    public void progressCondition(String id, ScriptHooks.StageProgressProvider provider) {
+        ScriptHooks.registerProgress(id, provider);
     }
 
     // ---- imperative stage control / queries ----
@@ -49,15 +57,138 @@ public final class PSKubeBindings {
     public boolean grant(Player player, String stage) {
         StageId id = parse(stage);
         if (!(player instanceof ServerPlayer sp) || id == null) return false;
-        StageManager.getInstance().grantStageWithCause(sp, id, StageCause.COMMAND);
-        return true;
+        return ProgressiveStagesAPI.grantStage(sp, id, StageCause.SCRIPT);
     }
 
     public boolean revoke(Player player, String stage) {
         StageId id = parse(stage);
         if (!(player instanceof ServerPlayer sp) || id == null) return false;
-        StageManager.getInstance().revokeStageWithCause(sp, id, StageCause.COMMAND);
-        return true;
+        return ProgressiveStagesAPI.revokeStage(sp, id, StageCause.SCRIPT);
+    }
+
+    /** Administrative/scripted grant that intentionally ignores dependency requirements. */
+    public boolean grantBypass(Player player, String stage) {
+        StageId id = parse(stage);
+        return player instanceof ServerPlayer sp && id != null
+            && ProgressiveStagesAPI.grantStageBypass(sp, id, StageCause.SCRIPT);
+    }
+
+    public int grantMany(Player player, Collection<?> stages) {
+        return player instanceof ServerPlayer sp
+            ? ProgressiveStagesAPI.grantStages(sp, parseMany(stages), StageCause.SCRIPT) : 0;
+    }
+
+    public int revokeMany(Player player, Collection<?> stages) {
+        return player instanceof ServerPlayer sp
+            ? ProgressiveStagesAPI.revokeStages(sp, parseMany(stages), StageCause.SCRIPT) : 0;
+    }
+
+    public int grantAll(Player player) {
+        if (!(player instanceof ServerPlayer sp)) return 0;
+        int changed = 0;
+        for (StageId id : ProgressiveStagesAPI.getAllStageIds()) {
+            if (ProgressiveStagesAPI.grantStageBypass(sp, id, StageCause.SCRIPT)) changed++;
+        }
+        return changed;
+    }
+
+    public int revokeAll(Player player) {
+        return player instanceof ServerPlayer sp
+            ? ProgressiveStagesAPI.revokeStages(sp, new ArrayList<>(ProgressiveStagesAPI.getStages(sp)), StageCause.SCRIPT) : 0;
+    }
+
+    /** Toggle a stage and return the player's new ownership state. */
+    public boolean toggle(Player player, String stage) {
+        StageId id = parse(stage);
+        if (!(player instanceof ServerPlayer sp) || id == null) return false;
+        if (ProgressiveStagesAPI.hasStage(sp, id)) {
+            ProgressiveStagesAPI.revokeStage(sp, id, StageCause.SCRIPT);
+            return false;
+        }
+        ProgressiveStagesAPI.grantStage(sp, id, StageCause.SCRIPT);
+        return ProgressiveStagesAPI.hasStage(sp, id);
+    }
+
+    public boolean exists(String stage) {
+        StageId id = parse(stage);
+        return id != null && ProgressiveStagesAPI.stageExists(id);
+    }
+
+    public boolean available(Player player, String stage) {
+        StageId id = parse(stage);
+        return player instanceof ServerPlayer sp && id != null && ProgressiveStagesAPI.isAvailable(sp, id);
+    }
+
+    public boolean hasAll(Player player, Collection<?> stages) {
+        List<StageId> parsed = parseMany(stages);
+        return player instanceof ServerPlayer sp && stages != null && parsed.size() == stages.size()
+            && ProgressiveStagesAPI.hasAllStages(sp, parsed);
+    }
+
+    public boolean hasAny(Player player, Collection<?> stages) {
+        List<StageId> parsed = parseMany(stages);
+        return player instanceof ServerPlayer sp && stages != null && parsed.size() == stages.size()
+            && ProgressiveStagesAPI.hasAnyStage(sp, parsed);
+    }
+
+    public List<String> dependencies(String stage) {
+        StageId id = parse(stage);
+        if (id == null) return List.of();
+        return ProgressiveStagesAPI.getDefinition(id).stream()
+            .flatMap(def -> def.getDependencies().stream()).map(StageId::toString).toList();
+    }
+
+    public List<String> missingDependencies(Player player, String stage) {
+        StageId id = parse(stage);
+        if (!(player instanceof ServerPlayer sp) || id == null) return List.of();
+        return ProgressiveStagesAPI.getMissingDependencies(sp, id).stream().map(StageId::toString).toList();
+    }
+
+    public List<String> allDependencies(String stage) {
+        StageId id = parse(stage);
+        return id == null ? List.of() : strings(ProgressiveStagesAPI.getAllDependencies(id));
+    }
+
+    public List<String> dependents(String stage) {
+        StageId id = parse(stage);
+        return id == null ? List.of() : strings(ProgressiveStagesAPI.getDependents(id));
+    }
+
+    public List<String> allDependents(String stage) {
+        StageId id = parse(stage);
+        return id == null ? List.of() : strings(ProgressiveStagesAPI.getAllDependents(id));
+    }
+
+    public List<String> withTag(String tag) {
+        return ProgressiveStagesAPI.getStagesWithTag(tag).stream().map(StageId::toString).toList();
+    }
+
+    public List<String> withCategory(String category) {
+        return strings(ProgressiveStagesAPI.getStagesInCategory(category));
+    }
+
+    public List<String> categories() {
+        return ProgressiveStagesAPI.getAllDefinitions().stream()
+            .map(def -> def.getCategory().trim()).filter(s -> !s.isEmpty())
+            .distinct().sorted(String.CASE_INSENSITIVE_ORDER).toList();
+    }
+
+    public int grantTag(Player player, String tag) {
+        if (!(player instanceof ServerPlayer sp)) return 0;
+        int changed = 0;
+        for (StageId id : ProgressiveStagesAPI.getStagesWithTag(tag)) {
+            if (ProgressiveStagesAPI.grantStage(sp, id, StageCause.SCRIPT)) changed++;
+        }
+        return changed;
+    }
+
+    public int revokeTag(Player player, String tag) {
+        if (!(player instanceof ServerPlayer sp)) return 0;
+        int changed = 0;
+        for (StageId id : ProgressiveStagesAPI.getStagesWithTag(tag)) {
+            if (ProgressiveStagesAPI.revokeStage(sp, id, StageCause.SCRIPT)) changed++;
+        }
+        return changed;
     }
 
     public List<String> list(Player player) {
@@ -68,6 +199,21 @@ public final class PSKubeBindings {
         return out;
     }
 
+    /** Alias with a clearer name for scripts that also use {@link #all()}. */
+    public List<String> owned(Player player) { return list(player); }
+
+    public List<String> all() { return strings(ProgressiveStagesAPI.getAllStageIds()); }
+
+    public List<String> locked(Player player) {
+        return player instanceof ServerPlayer sp
+            ? strings(ProgressiveStagesAPI.getLockedStages(sp)) : List.of();
+    }
+
+    public List<String> availableStages(Player player) {
+        return player instanceof ServerPlayer sp
+            ? strings(ProgressiveStagesAPI.getAvailableStages(sp)) : List.of();
+    }
+
     /** Completion percent (0..100) of a stage's {@code [[triggers]]} for the player. */
     public int percent(Player player, String stage) {
         StageId id = parse(stage);
@@ -75,7 +221,110 @@ public final class PSKubeBindings {
         return Math.round(StageTriggerEvaluator.stagePercent(sp, id) * 100f);
     }
 
+    /** A script-friendly definition snapshot; missing IDs return an empty map. */
+    public Map<String, Object> info(String stage) {
+        StageId id = parse(stage);
+        if (id == null) return Map.of();
+        return ProgressiveStagesAPI.getDefinition(id).map(def -> {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("id", def.getId().toString());
+            out.put("displayName", def.getDisplayName());
+            out.put("description", def.getDescription());
+            out.put("icon", def.getIcon().map(Object::toString).orElse(""));
+            out.put("dependencies", strings(def.getDependencies()));
+            out.put("dependencyMode", def.getDependencyMode().configName());
+            out.put("dependencyCount", def.getDependencyCount());
+            out.put("category", def.getCategory());
+            out.put("tags", List.copyOf(def.getTags()));
+            out.put("scope", def.getScope());
+            out.put("hidden", def.isHidden());
+            out.put("temporary", def.isTemporary());
+            out.put("durationMillis", def.getDurationMillis());
+            out.put("purchasable", def.isPurchasable());
+            out.put("hasTriggers", def.hasTriggers());
+            return out;
+        }).orElseGet(Map::of);
+    }
+
+    /** Full rule/condition progress snapshot, useful for custom KubeJS UIs and quest logic. */
+    public Map<String, Object> progress(Player player, String stage) {
+        StageId id = parse(stage);
+        if (!(player instanceof ServerPlayer sp) || id == null) return Map.of();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("stage", id.toString());
+        out.put("percent", percent(player, stage));
+        List<Map<String, Object>> rules = new ArrayList<>();
+        for (var rule : ProgressiveStagesAPI.getTriggerProgress(sp, id)) {
+            Map<String, Object> ruleData = new LinkedHashMap<>();
+            ruleData.put("mode", rule.mode().name().toLowerCase(java.util.Locale.ROOT));
+            ruleData.put("description", rule.description());
+            ruleData.put("satisfied", rule.satisfied());
+            List<Map<String, Object>> conditions = new ArrayList<>();
+            for (var condition : rule.conditions()) {
+                Map<String, Object> conditionData = new LinkedHashMap<>();
+                conditionData.put("type", condition.condition().type().name().toLowerCase(java.util.Locale.ROOT));
+                conditionData.put("target", condition.condition().target());
+                conditionData.put("current", condition.current());
+                conditionData.put("threshold", condition.threshold());
+                conditionData.put("satisfied", condition.satisfied());
+                conditions.add(conditionData);
+            }
+            ruleData.put("conditions", conditions);
+            rules.add(ruleData);
+        }
+        out.put("rules", rules);
+        return out;
+    }
+
+    public long counter(Player player, String counter) {
+        return player instanceof ServerPlayer sp ? ProgressiveStagesAPI.getCounter(sp, counter) : 0L;
+    }
+
+    public long addCounter(Player player, String counter, long amount) {
+        return player instanceof ServerPlayer sp ? ProgressiveStagesAPI.addCounter(sp, counter, amount) : 0L;
+    }
+
+    public long setCounter(Player player, String counter, long value) {
+        return player instanceof ServerPlayer sp ? ProgressiveStagesAPI.setCounter(sp, counter, value) : 0L;
+    }
+
+    public void resetCounter(Player player, String counter) {
+        if (player instanceof ServerPlayer sp) ProgressiveStagesAPI.resetCounter(sp, counter);
+    }
+
+    /** Re-run all declarative trigger rules immediately after a script-side state change. */
+    public void evaluate(Player player) {
+        if (player instanceof ServerPlayer sp) ProgressiveStagesAPI.evaluateTriggers(sp);
+    }
+
+    /** Force a complete authoritative client cache refresh after unusual script-side changes. */
+    public void sync(Player player) {
+        if (player instanceof ServerPlayer sp) ProgressiveStagesAPI.syncPlayer(sp);
+    }
+
+    /** Open the vanilla-style stage map for a player. */
+    public void openGui(Player player) {
+        if (player instanceof ServerPlayer sp) {
+            com.enviouse.progressivestages.common.network.NetworkHandler.sendStageGuiData(sp);
+        }
+    }
+
     private static StageId parse(String stage) {
         try { return StageId.parse(stage); } catch (Exception e) { return null; }
+    }
+
+    private static List<StageId> parseMany(Collection<?> stages) {
+        if (stages == null) return List.of();
+        List<StageId> out = new ArrayList<>();
+        for (Object value : stages) {
+            if (value == null) continue;
+            StageId id = parse(String.valueOf(value));
+            if (id != null) out.add(id);
+        }
+        return out;
+    }
+
+    private static List<String> strings(Collection<StageId> ids) {
+        return ids.stream().map(StageId::toString).toList();
     }
 }

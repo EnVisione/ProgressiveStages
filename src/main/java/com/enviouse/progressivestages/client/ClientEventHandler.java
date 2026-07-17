@@ -14,6 +14,7 @@ import net.minecraft.world.item.Item;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 
 import java.util.List;
@@ -145,6 +146,15 @@ public class ClientEventHandler {
         if (event.getLevel() instanceof net.minecraft.client.multiplayer.ClientLevel) {
             OreSpoofClientState.clear();
         }
+    }
+
+    /** Prevent lock and progression snapshots from leaking between multiplayer servers/worlds. */
+    @SubscribeEvent
+    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        ClientStageCache.clear();
+        ClientTriggerProgress.clear();
+        ClientUnlockJuice.clear();
+        OreSpoofClientState.clear();
     }
 
     /** v2.3: poll the stage-tree keybind; request a progress snapshot, which opens the GUI. */

@@ -56,7 +56,7 @@ public final class PrefixEntry {
      */
     public static PrefixEntry fromMod(String modId) {
         if (modId == null) return null;
-        String normalized = modId.trim().toLowerCase();
+        String normalized = modId.trim().toLowerCase(java.util.Locale.ROOT);
         if (normalized.isEmpty()) return null;
         return new PrefixEntry(Kind.MOD, "mod:" + normalized, normalized, null);
     }
@@ -79,7 +79,7 @@ public final class PrefixEntry {
 
         int colon = trimmed.indexOf(':');
         if (colon > 0) {
-            String prefix = trimmed.substring(0, colon).toLowerCase();
+            String prefix = trimmed.substring(0, colon).toLowerCase(java.util.Locale.ROOT);
             String rest = trimmed.substring(colon + 1).trim();
 
             switch (prefix) {
@@ -89,7 +89,7 @@ public final class PrefixEntry {
                 }
                 case "mod": {
                     if (rest.isEmpty()) return null;
-                    return new PrefixEntry(Kind.MOD, trimmed, rest.toLowerCase(), null);
+                    return new PrefixEntry(Kind.MOD, trimmed, rest.toLowerCase(java.util.Locale.ROOT), null);
                 }
                 case "tag": {
                     ResourceLocation tagId = tryParse(rest);
@@ -97,7 +97,7 @@ public final class PrefixEntry {
                 }
                 case "name": {
                     if (rest.isEmpty()) return null;
-                    return new PrefixEntry(Kind.NAME, trimmed, rest.toLowerCase(), null);
+                    return new PrefixEntry(Kind.NAME, trimmed, rest.toLowerCase(java.util.Locale.ROOT), null);
                 }
                 // No recognized prefix → fall through to default-id handling.
             }
@@ -145,7 +145,7 @@ public final class PrefixEntry {
                 TagKey<T> tagKey = TagKey.create(registryKey, id);
                 return holder.is(tagKey);
             case NAME:
-                return elementId.toString().toLowerCase().contains(value);
+                return elementId.toString().toLowerCase(java.util.Locale.ROOT).contains(value);
         }
         return false;
     }
@@ -160,7 +160,7 @@ public final class PrefixEntry {
         return switch (kind) {
             case ID   -> elementId.equals(id);
             case MOD  -> elementId.getNamespace().equalsIgnoreCase(value);
-            case NAME -> elementId.toString().toLowerCase().contains(value);
+            case NAME -> elementId.toString().toLowerCase(java.util.Locale.ROOT).contains(value);
             case TAG  -> false;
         };
     }

@@ -65,7 +65,11 @@ public class FTBQuestsCompat {
      * Should be called during ServerStartingEvent.
      */
     public static void init() {
-        if (initialized) return;
+        if (initialized) {
+            if (ftbQuestsAvailable && StageConfig.isFtbQuestsIntegrationEnabled()) activateProvider();
+            else serverRunning = false;
+            return;
+        }
         initialized = true;
 
         // Check for FTB Quests
@@ -82,16 +86,18 @@ public class FTBQuestsCompat {
             return;
         }
 
-        // Check config - allow pack devs to disable FTB integration
+        NeoForge.EVENT_BUS.register(FTBQuestsCompat.class);
+
         if (!StageConfig.isFtbQuestsIntegrationEnabled()) {
             LOGGER.info("[ProgressiveStages] FTB Quests integration disabled by config");
             return;
         }
 
-        // Register lifecycle event handlers for ongoing events (stage changes, server tick, stopping)
-        NeoForge.EVENT_BUS.register(FTBQuestsCompat.class);
+        activateProvider();
+        LOGGER.info("[ProgressiveStages] FTB Quests integration initialized");
+    }
 
-        // Register our stage provider NOW (since we're in ServerStartingEvent)
+    private static void activateProvider() {
         try {
             LOGGER.info("[ProgressiveStages] Attempting to register FTB Library stage provider...");
             FtbQuestsHooks.registerStageProvider();
@@ -106,8 +112,6 @@ public class FTBQuestsCompat {
             LOGGER.error("[ProgressiveStages] Failed to activate FTB Quests integration: {}", e.getMessage());
             LOGGER.error("[ProgressiveStages] Full exception:", e);
         }
-
-        LOGGER.info("[ProgressiveStages] FTB Quests integration initialized");
     }
 
     /**
@@ -118,7 +122,11 @@ public class FTBQuestsCompat {
     public static void onServerStarting(ServerStartingEvent event) {
         // Provider registration is now done in init() - this is just a fallback
         if (!serverRunning && ftbQuestsAvailable && StageConfig.isFtbQuestsIntegrationEnabled()) {
-            if (!FtbQuestsHooks.isProviderRegistered()) {
+            if (FtbQuestsHooks.isProviderRegistered()) {
+                // The provider is process-global, while serverRunning is reset for each logical
+                // server. Re-activate event processing on the next integrated-server run.
+                serverRunning = true;
+            } else {
                 LOGGER.info("[ProgressiveStages] Late provider registration in ServerStartingEvent...");
                 try {
                     FtbQuestsHooks.registerStageProvider();
@@ -143,8 +151,7 @@ public class FTBQuestsCompat {
         lateRegistrationAttempted = false;
         pendingRechecks.clear();
         FtbQuestsHooks.clearRecheckGuards();
-        // Clear previous provider to prevent restoring stale references on next startup
-        FtbQuestsHooks.clearPreviousProvider();
+        if (!FtbQuestsHooks.restorePreviousProvider()) FtbQuestsHooks.clearPreviousProvider();
         LOGGER.debug("[ProgressiveStages] FTB Quests integration deactivated, cleared all state");
     }
 
@@ -306,4 +313,3 @@ public class FTBQuestsCompat {
         return pendingRechecks.size();
     }
 }
-

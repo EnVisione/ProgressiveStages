@@ -2,22 +2,21 @@ package com.enviouse.progressivestages.server.loader;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.config.ConfigPaths;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.tags.StageTagRegistry;
-import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
-import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Stream;
 
 /**
  * Loads stage definition files from the ProgressiveStages directory in config folder
@@ -30,7 +29,9 @@ public class StageFileLoader {
     /** v2.5: stages parsed from datapacks (data/&lt;ns&gt;/progressivestages/stages/*.toml). Config wins on id conflict. */
     private final Map<StageId, StageDefinition> datapackStages = new LinkedHashMap<>();
     private Path stagesDirectory;
+    private MinecraftServer server;
     private boolean initialized = false;
+    private List<String> lastReloadErrors = List.of();
 
     private static StageFileLoader INSTANCE;
 
@@ -47,9 +48,12 @@ public class StageFileLoader {
      * Initialize the loader and create default files if needed
      */
     public void initialize(MinecraftServer server) {
-        // Get the config folder path
-        Path configFolder = FMLPaths.CONFIGDIR.get();
-        stagesDirectory = configFolder.resolve(Constants.STAGE_FILES_DIRECTORY);
+        // Integrated servers share one JVM. Always rebuild runtime registries so opening a second
+        // world can never inherit definitions or locks from the previous world.
+        clearRuntimeRegistries();
+        this.server = server;
+        ConfigPaths.prepareAndMigrate(LOGGER);
+        stagesDirectory = ConfigPaths.stagesDirectory();
 
         // Create directory if it doesn't exist
         if (!Files.exists(stagesDirectory)) {
@@ -61,22 +65,49 @@ public class StageFileLoader {
             }
         }
 
-        // Generate default stage files if none exist
-        if (countStageFiles() == 0) {
+        FileDiscovery discovery = discoverStageFiles();
+        if (discovery.error() != null) {
+            LOGGER.error("[ProgressiveStages] {}", discovery.error());
+        } else if (discovery.files().isEmpty()) {
             LOGGER.info("No stage files found, generating defaults...");
             generateDefaultStageFiles();
         }
 
-        // Load all stage files
-        loadAllStages();
-
-        // Register with lock registry
-        registerLocksFromStages();
-
-        // v2.3: build the per-stage trigger registry from the loaded definitions
-        com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
-        com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(loadedStages.values());
+        LoadCandidate candidate = readCandidateStages();
+        lastReloadErrors = List.copyOf(candidate.errors());
+        for (String error : candidate.errors()) LOGGER.error("[ProgressiveStages] Stage load error: {}", error);
+        if (candidate.errors().isEmpty()) {
+            try {
+                applyCandidate(candidate.stages());
+            } catch (RuntimeException applicationFailure) {
+                clearRuntimeRegistries();
+                lastReloadErrors = List.of("Could not apply the initial stage snapshot. "
+                    + applicationFailure.getMessage());
+                LOGGER.error("[ProgressiveStages] Could not apply the initial stage snapshot", applicationFailure);
+            }
+        } else {
+            LOGGER.error("[ProgressiveStages] No stage definitions were activated because the initial snapshot is invalid");
+        }
         initialized = true;
+    }
+
+    private void clearRuntimeRegistries() {
+        loadedStages.clear();
+        LockRegistry.getInstance().clear();
+        StageOrder.getInstance().clear();
+        StageTagRegistry.clear();
+        com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.resetRuntimeState();
+        com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(java.util.List.of());
+    }
+
+    /** Release all world-specific state when a server stops. Event handlers remain registered once. */
+    public void shutdown() {
+        clearRuntimeRegistries();
+        datapackStages.clear();
+        stagesDirectory = null;
+        server = null;
+        initialized = false;
+        lastReloadErrors = List.of();
     }
 
     /**
@@ -85,91 +116,120 @@ public class StageFileLoader {
      * id conflict). Called from the datapack reload listener.
      */
     public void setDatapackStages(Map<StageId, StageDefinition> stages) {
+        Map<StageId, StageDefinition> previous = new LinkedHashMap<>(datapackStages);
         datapackStages.clear();
         if (stages != null) datapackStages.putAll(stages);
         LOGGER.info("[ProgressiveStages] Loaded {} datapack stage definition(s)", datapackStages.size());
-        if (initialized) reload();
+        if (initialized) {
+            if (reload()) {
+                syncPlayersAfterReload();
+            } else {
+                datapackStages.clear();
+                datapackStages.putAll(previous);
+            }
+        }
     }
 
     /**
      * Reload all stage files from disk
      */
-    public void reload() {
-        loadedStages.clear();
-        LockRegistry.getInstance().clear();
-        StageOrder.getInstance().clear();
-        StageTagRegistry.clear();
+    public boolean reload() {
+        LoadCandidate candidate = readCandidateStages();
+        if (!candidate.errors().isEmpty()) {
+            lastReloadErrors = List.copyOf(candidate.errors());
+            for (String error : candidate.errors()) LOGGER.error("[ProgressiveStages] Reload rejected: {}", error);
+            LOGGER.error("[ProgressiveStages] Kept the previous stage snapshot because the candidate reload is invalid");
+            return false;
+        }
 
-        loadAllStages();
-        registerLocksFromStages();
-
-        // v2.3: rebuild the per-stage trigger registry from the reloaded definitions
-        com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
-        com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(loadedStages.values());
-
+        com.enviouse.progressivestages.server.enforcement.OreSpoofManager.get().prepareForReload(server);
+        Map<StageId, StageDefinition> previous = new LinkedHashMap<>(loadedStages);
+        try {
+            applyCandidate(candidate.stages());
+        } catch (RuntimeException applicationFailure) {
+            String error = "Could not apply the candidate stage snapshot. " + applicationFailure.getMessage();
+            LOGGER.error("[ProgressiveStages] Reload rejected while applying the candidate snapshot", applicationFailure);
+            try {
+                applyCandidate(previous);
+            } catch (RuntimeException rollbackFailure) {
+                LOGGER.error("[ProgressiveStages] Failed to restore the previous stage snapshot", rollbackFailure);
+                error += ". The previous snapshot could not be restored. " + rollbackFailure.getMessage();
+            }
+            lastReloadErrors = List.of(error);
+            return false;
+        }
+        lastReloadErrors = List.of();
         LOGGER.info("Reloaded {} stages", loadedStages.size());
+        return true;
     }
 
-    /**
-     * Load all .toml files from the stages directory
-     */
-    private void loadAllStages() {
-        // Config files load first so they win on id conflict with datapack stages.
-        if (stagesDirectory != null && Files.exists(stagesDirectory)) {
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
-                for (Path file : stream) {
-                    String fileName = file.getFileName().toString().toLowerCase();
-                    if (fileName.equals("triggers.toml")) {
-                        LOGGER.debug("Skipping triggers.toml - not a stage definition file");
-                        continue;
-                    }
-                    loadStageFile(file);
-                }
-            } catch (IOException e) {
-                LOGGER.error("Failed to list stage files", e);
-            }
-        } else {
-            LOGGER.warn("Stages directory not found");
-        }
+    private LoadCandidate readCandidateStages() {
+        Map<StageId, StageDefinition> candidate = new LinkedHashMap<>();
+        List<String> errors = new ArrayList<>();
 
-        // v2.5: merge datapack-provided stages for any id a config file didn't already define.
-        for (Map.Entry<StageId, StageDefinition> e : datapackStages.entrySet()) {
-            if (loadedStages.putIfAbsent(e.getKey(), e.getValue()) != null) {
-                LOGGER.info("[ProgressiveStages] Datapack stage {} overridden by a config file", e.getKey());
-            } else {
-                LOGGER.debug("Loaded datapack stage: {}", e.getKey());
+        FileDiscovery discovery = discoverStageFiles();
+        if (discovery.error() != null) errors.add(discovery.error());
+        for (Path file : discovery.files()) {
+            StageFileParser.ParseResult result = StageFileParser.parseWithErrors(file);
+            if (!result.isSuccess()) {
+                errors.add(relativeStagePath(file) + ". " + result.getErrorMessage());
+                continue;
+            }
+            StageDefinition stage = result.getStageDefinition();
+            StageDefinition existing = candidate.putIfAbsent(stage.getId(), stage);
+            if (existing != null) {
+                errors.add(relativeStagePath(file) + ". Duplicate stage ID. " + stage.getId());
             }
         }
 
-        for (StageDefinition stage : loadedStages.values()) {
-            StageOrder.getInstance().registerStage(stage);
+        for (Map.Entry<StageId, StageDefinition> entry : datapackStages.entrySet()) {
+            if (candidate.putIfAbsent(entry.getKey(), entry.getValue()) != null) {
+                LOGGER.info("[ProgressiveStages] Datapack stage {} overridden by a config file", entry.getKey());
+            }
         }
 
-        List<String> validationErrors = StageOrder.getInstance().validateDependencies();
-        for (String error : validationErrors) {
-            LOGGER.error("[ProgressiveStages] Dependency validation error: {}", error);
-        }
+        errors.addAll(StageOrder.validateDefinitions(candidate.values()));
+        return new LoadCandidate(Collections.unmodifiableMap(new LinkedHashMap<>(candidate)), List.copyOf(errors));
+    }
 
+    private void applyCandidate(Map<StageId, StageDefinition> candidate) {
+        clearRuntimeRegistries();
+        loadedStages.putAll(candidate);
+        for (StageDefinition stage : loadedStages.values()) StageOrder.getInstance().registerStage(stage);
+        registerLocksFromStages();
+        com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
+        com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(loadedStages.values());
         LOGGER.info("Loaded {} stage definitions", loadedStages.size());
     }
 
-    private void loadStageFile(Path file) {
-        Optional<StageDefinition> stageOpt = StageFileParser.parse(file);
-
-        if (stageOpt.isPresent()) {
-            StageDefinition stage = stageOpt.get();
-
-            if (loadedStages.containsKey(stage.getId())) {
-                LOGGER.warn("Duplicate stage ID: {} in file {}", stage.getId(), file);
-                return;
-            }
-
-            loadedStages.put(stage.getId(), stage);
-            LOGGER.debug("Loaded stage: {} with {} dependencies", stage.getId(), stage.getDependencies().size());
-        } else {
-            LOGGER.warn("Failed to parse stage file: {}", file);
+    private FileDiscovery discoverStageFiles() {
+        if (stagesDirectory == null || !Files.isDirectory(stagesDirectory)) {
+            return new FileDiscovery(List.of(), null);
+        }
+        try (Stream<Path> paths = Files.walk(stagesDirectory)) {
+            return new FileDiscovery(paths
+                .filter(Files::isRegularFile)
+                .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".toml"))
+                .filter(path -> !path.getFileName().toString().equalsIgnoreCase("triggers.toml"))
+                .sorted(Comparator.comparing(this::relativeStagePath))
+                .toList(), null);
+        } catch (IOException e) {
+            LOGGER.error("Failed to list stage files", e);
+            return new FileDiscovery(List.of(), "Could not scan the stages directory. " + e.getMessage());
         }
     }
+
+    private String relativeStagePath(Path file) {
+        if (stagesDirectory == null) return file.toString();
+        try {
+            return stagesDirectory.relativize(file).toString();
+        } catch (IllegalArgumentException ignored) {
+            return file.toString();
+        }
+    }
+
+    private record LoadCandidate(Map<StageId, StageDefinition> stages, List<String> errors) {}
+    private record FileDiscovery(List<Path> files, String error) {}
 
     private void registerLocksFromStages() {
         LockRegistry registry = LockRegistry.getInstance();
@@ -210,23 +270,19 @@ public class StageFileLoader {
             return results;
         }
 
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
-            for (Path file : stream) {
-                String fileName = file.getFileName().toString().toLowerCase();
-                if (fileName.equals("triggers.toml")) {
-                    continue;
-                }
-                results.add(validateStageFile(file));
-            }
-        } catch (IOException e) {
-            LOGGER.error("Failed to list stage files for validation", e);
+        FileDiscovery discovery = discoverStageFiles();
+        if (discovery.error() != null) {
+            results.add(new FileValidationResult(stagesDirectory.toString(), false, false,
+                discovery.error(), null));
+            return results;
         }
+        for (Path file : discovery.files()) results.add(validateStageFile(file));
 
         return results;
     }
 
     private FileValidationResult validateStageFile(Path file) {
-        String fileName = file.getFileName().toString();
+        String fileName = relativeStagePath(file);
 
         StageFileParser.ParseResult parseResult = StageFileParser.parseWithErrors(file);
 
@@ -310,7 +366,7 @@ public class StageFileLoader {
                     if (reg != null) {
                         var id = net.minecraft.resources.ResourceLocation.tryParse(c.targetBody());
                         if (id == null || !reg.containsKey(id)) {
-                            invalidItems.add("Trigger(" + c.type().name().toLowerCase()
+                            invalidItems.add("Trigger(" + c.type().name().toLowerCase(java.util.Locale.ROOT)
                                 + "): unknown target " + c.targetBody());
                         }
                     }
@@ -348,21 +404,8 @@ public class StageFileLoader {
     }
 
     public int countStageFiles() {
-        if (stagesDirectory == null || !Files.exists(stagesDirectory)) {
-            return 0;
-        }
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(stagesDirectory, "*.toml")) {
-            int count = 0;
-            for (Path file : stream) {
-                String fileName = file.getFileName().toString().toLowerCase();
-                if (!fileName.equals("triggers.toml")) {
-                    count++;
-                }
-            }
-            return count;
-        } catch (IOException e) {
-            return 0;
-        }
+        FileDiscovery discovery = discoverStageFiles();
+        return discovery.error() == null ? discovery.files().size() : 0;
     }
 
     public Optional<StageDefinition> getStage(StageId id) {
@@ -370,11 +413,29 @@ public class StageFileLoader {
     }
 
     public Collection<StageDefinition> getAllStages() {
-        return Collections.unmodifiableCollection(loadedStages.values());
+        return List.copyOf(loadedStages.values());
     }
 
     public Set<StageId> getAllStageIds() {
-        return Collections.unmodifiableSet(loadedStages.keySet());
+        return Collections.unmodifiableSet(new LinkedHashSet<>(loadedStages.keySet()));
+    }
+
+    public List<String> getLastReloadErrors() {
+        return lastReloadErrors;
+    }
+
+    public int syncPlayersAfterReload() {
+        if (server == null) return 0;
+        int count = 0;
+        for (var player : server.getPlayerList().getPlayers()) {
+            com.enviouse.progressivestages.common.api.ProgressiveStagesAPI.syncPlayer(player);
+            com.enviouse.progressivestages.server.enforcement.StageAttributeApplier.reconcile(player);
+            com.enviouse.progressivestages.server.enforcement.AdvancementHider.resyncIfNeeded(player);
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance().fireBulkChangedEvent(
+                player, com.enviouse.progressivestages.common.api.StagesBulkChangedEvent.Reason.RELOAD);
+            count++;
+        }
+        return count;
     }
 
     // ============================================================================

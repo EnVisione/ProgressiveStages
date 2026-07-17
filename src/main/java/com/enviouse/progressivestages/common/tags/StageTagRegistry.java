@@ -81,7 +81,7 @@ public final class StageTagRegistry {
                         if (entry.id() == null) break;
                         TagKey<Item> tagKey = TagKey.create(Registries.ITEM, entry.id());
                         for (Item item : BuiltInRegistries.ITEM) {
-                            if (item.builtInRegistryHolder().is(tagKey)) {
+                            if (BuiltInRegistries.ITEM.wrapAsHolder(item).is(tagKey)) {
                                 items.add(item);
                                 itemToStage.putIfAbsent(item, stageId);
                             }
@@ -103,7 +103,7 @@ public final class StageTagRegistry {
                         String needle = entry.value();
                         for (Item item : BuiltInRegistries.ITEM) {
                             ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-                            if (id != null && id.toString().toLowerCase().contains(needle)) {
+                            if (id != null && id.toString().toLowerCase(java.util.Locale.ROOT).contains(needle)) {
                                 items.add(item);
                                 itemToStage.putIfAbsent(item, stageId);
                             }

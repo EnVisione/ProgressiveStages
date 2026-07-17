@@ -7,6 +7,7 @@ import com.enviouse.progressivestages.common.config.RevokeRule;
 import com.enviouse.progressivestages.common.config.StageAttribute;
 import com.enviouse.progressivestages.common.config.StageCost;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.config.StageRewards;
 import com.enviouse.progressivestages.common.config.UnlockEffects;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
@@ -54,7 +55,7 @@ import java.util.Optional;
  * [[regions]]     dimension, pos1, pos2, prevent_entry, ...
  * [structures]    locked_entry
  *   [structures.rules]      prevent_block_break, ... disable_mob_spawning
- * [[ores.overrides]]        target, display_as, drop_as   (parsed, enforcement deferred)
+ * [[ores.overrides]]        target, display_as, drop_as
  *
  * [enforcement]   allowed_use, allowed_pickup, allowed_hotbar,
  *                 allowed_mouse_pickup, allowed_inventory
@@ -93,7 +94,13 @@ public final class StageFileParser {
         } catch (Exception e) {
             return ParseResult.syntaxError("Parse error: " + e.getMessage());
         }
-        return parseConfig(config, filePath.getFileName().toString());
+        try {
+            return parseConfig(config, filePath.getFileName().toString());
+        } catch (RuntimeException e) {
+            String message = e.getMessage();
+            if (message == null || message.isBlank()) message = e.getClass().getSimpleName();
+            return ParseResult.validationError("Invalid stage definition. " + message);
+        }
     }
 
     /**
@@ -124,13 +131,26 @@ public final class StageFileParser {
         if (id == null || id.isEmpty()) {
             id = fileName.endsWith(".toml") ? fileName.substring(0, fileName.length() - 5) : fileName;
         }
-        StageId stageId = StageId.of(id);
+        StageId stageId = StageId.parse(id);
 
         String displayName = stageSection.getOrElse("display_name", id);
         String description = stageSection.getOrElse("description", "");
         String icon = stageSection.get("icon");
         String unlockMessage = stageSection.get("unlock_message");
         List<StageId> dependencies = parseDependencies(stageSection);
+        String dependencyModeRaw = stageSection.getOrElse("dependency_mode", "all");
+        DependencyMode dependencyMode = DependencyMode.tryParse(dependencyModeRaw);
+        if (dependencyMode == null) {
+            throw new IllegalArgumentException("Invalid dependency mode. " + dependencyModeRaw);
+        }
+        int dependencyCount = (int) readLong(stageSection, "dependency_count", 1L);
+        if (new java.util.LinkedHashSet<>(dependencies).size() != dependencies.size()) {
+            throw new IllegalArgumentException("A stage cannot declare the same dependency more than once");
+        }
+        if (dependencyMode == DependencyMode.AT_LEAST && !dependencies.isEmpty()
+                && (dependencyCount < 1 || dependencyCount > dependencies.size())) {
+            throw new IllegalArgumentException("Dependency count is outside the dependency list size");
+        }
 
         LockDefinition locks = parseLocks(config);
         if (locks.minecraftNamespace()) {
@@ -141,6 +161,7 @@ public final class StageFileParser {
             .displayName(displayName)
             .description(description)
             .dependencies(dependencies)
+            .dependencyPolicy(dependencyMode, dependencyCount)
             .locks(locks);
         if (icon != null && !icon.isEmpty()) builder.icon(icon);
         if (unlockMessage != null && !unlockMessage.isEmpty()) builder.unlockMessage(unlockMessage);
@@ -156,10 +177,18 @@ public final class StageFileParser {
         String category = stageSection.get("category");
         if (category != null) builder.category(category);
         List<String> tags = new ArrayList<>();
-        for (String t : stringList(stageSection, "tags")) if (t != null && !t.isBlank()) tags.add(t.trim().toLowerCase());
+        for (String t : stringList(stageSection, "tags")) {
+            if (t != null && !t.isBlank()) tags.add(t.trim().toLowerCase(java.util.Locale.ROOT));
+        }
         builder.tags(tags);
         String scope = stageSection.get("scope");
-        if (scope != null) builder.scope(scope);
+        if (scope != null) {
+            String normalizedScope = scope.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!normalizedScope.equals("team") && !normalizedScope.equals("server")) {
+                throw new IllegalArgumentException("Invalid stage scope. " + scope);
+            }
+            builder.scope(normalizedScope);
+        }
         builder.durationMillis(parseDuration(stageSection.get("duration")));
         builder.attributes(parseAttributes(config));
         builder.revoke(parseRevoke(config));
@@ -175,8 +204,9 @@ public final class StageFileParser {
 
     /** Parse a real-time duration like {@code "30m"} / {@code "2h"} / {@code "1d"} / {@code "90s"} to millis (-1 = permanent). */
     private static long parseDuration(Object raw) {
-        if (!(raw instanceof String s)) return -1L;
-        s = s.trim().toLowerCase();
+        if (raw == null) return -1L;
+        if (!(raw instanceof String s)) throw new IllegalArgumentException("A duration must be a string");
+        s = s.trim().toLowerCase(java.util.Locale.ROOT);
         if (s.isEmpty()) return -1L;
         long mult = 60_000L; // default unit = minutes
         char last = s.charAt(s.length() - 1);
@@ -188,15 +218,14 @@ public final class StageFileParser {
                 case 'm' -> 60_000L;
                 case 'h' -> 3_600_000L;
                 case 'd' -> 86_400_000L;
-                default -> 60_000L;
+                default -> throw new IllegalArgumentException("Invalid duration unit. " + s);
             };
         }
         try {
             double v = Double.parseDouble(num.trim());
             return v <= 0 ? -1L : (long) (v * mult);
         } catch (NumberFormatException e) {
-            LOGGER.warn("[ProgressiveStages] Invalid [stage].duration '{}' — ignoring", s);
-            return -1L;
+            throw new IllegalArgumentException("Invalid duration. " + s, e);
         }
     }
 
@@ -205,10 +234,14 @@ public final class StageFileParser {
         if (raw == null) raw = config.get("attributes");
         List<StageAttribute> out = new ArrayList<>();
         if (raw instanceof List<?> list) {
-            for (Object o : list) if (o instanceof Config c) { StageAttribute a = parseAttribute(c); if (a != null) out.add(a); }
+            for (Object o : list) {
+                if (!(o instanceof Config c)) throw new IllegalArgumentException("An attribute entry must be a table");
+                out.add(parseAttribute(c));
+            }
         } else if (raw instanceof Config single) {
-            StageAttribute a = parseAttribute(single);
-            if (a != null) out.add(a);
+            out.add(parseAttribute(single));
+        } else if (raw != null) {
+            throw new IllegalArgumentException("The attribute section has an invalid shape");
         }
         return out;
     }
@@ -217,9 +250,11 @@ public final class StageFileParser {
         String idStr = c.get("id");
         if (idStr == null) idStr = c.get("attribute");
         if (idStr == null) idStr = c.get("name");
-        if (idStr == null || idStr.trim().isEmpty()) return null;
+        if (idStr == null || idStr.trim().isEmpty()) {
+            throw new IllegalArgumentException("An attribute entry is missing its ID");
+        }
         ResourceLocation id = ResourceLocation.tryParse(idStr.trim());
-        if (id == null) { LOGGER.warn("[ProgressiveStages] Invalid [attribute] id '{}'", idStr); return null; }
+        if (id == null) throw new IllegalArgumentException("Invalid attribute ID. " + idStr);
         double amount = readDouble(c, "amount", 0.0);
         return new StageAttribute(id, StageAttribute.parseOperation(c.get("operation")), amount);
     }
@@ -243,7 +278,8 @@ public final class StageFileParser {
         List<StageCost.ItemCost> items = new ArrayList<>();
         for (String raw : stringList(sec, "items")) {
             StageCost.ItemCost ic = parseItemCost(raw);
-            if (ic != null) items.add(ic);
+            if (ic == null) throw new IllegalArgumentException("Invalid cost item. " + raw);
+            items.add(ic);
         }
         // v3.0: optional purchase cooldown (seconds, or a friendly `cooldown = "5m"`) + revoke refund %.
         int cooldown = (int) readLong(sec, "cooldown_seconds", 0L);
@@ -277,7 +313,7 @@ public final class StageFileParser {
         if (sec == null) return java.util.Set.of();
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
         for (String s : stringList(sec, "locked")) {
-            if (s != null && !s.trim().isEmpty()) out.add(s.trim().toLowerCase());
+            if (s != null && !s.trim().isEmpty()) out.add(s.trim().toLowerCase(java.util.Locale.ROOT));
         }
         return out;
     }
@@ -288,12 +324,14 @@ public final class StageFileParser {
         List<StageCost.ItemCost> items = new ArrayList<>();
         for (String raw : stringList(sec, "items")) {
             StageCost.ItemCost ic = parseItemCost(raw);
-            if (ic != null) items.add(ic);
+            if (ic == null) throw new IllegalArgumentException("Invalid reward item. " + raw);
+            items.add(ic);
         }
         List<StageRewards.EffectReward> effects = new ArrayList<>();
         for (String raw : stringList(sec, "effects")) {
             StageRewards.EffectReward er = parseEffectReward(raw);
-            if (er != null) effects.add(er);
+            if (er == null) throw new IllegalArgumentException("Invalid reward effect. " + raw);
+            effects.add(er);
         }
         List<String> commands = new ArrayList<>(stringList(sec, "commands"));
         Object single = sec.get("command");
@@ -362,23 +400,24 @@ public final class StageFileParser {
         if (raw instanceof List<?> list) {
             for (Object o : list) {
                 if (o instanceof Config ruleCfg) {
-                    TriggerRule r = parseTriggerRule(ruleCfg);
-                    if (r != null) rules.add(r);
+                    rules.add(parseTriggerRule(ruleCfg));
                 } else {
-                    LOGGER.warn("[ProgressiveStages] [[triggers]] entry is not a table — skipped");
+                    throw new IllegalArgumentException("A triggers entry must be a table");
                 }
             }
         } else if (raw instanceof Config single) {
-            TriggerRule r = parseTriggerRule(single);
-            if (r != null) rules.add(r);
+            rules.add(parseTriggerRule(single));
         } else {
-            LOGGER.warn("[ProgressiveStages] [triggers] section has an unexpected shape — skipped");
+            throw new IllegalArgumentException("The triggers section has an invalid shape");
         }
         return rules;
     }
 
     private static TriggerRule parseTriggerRule(Config c) {
-        TriggerMode mode = TriggerMode.fromString(c.get("mode"));
+        Object rawMode = c.get("mode");
+        TriggerMode mode = rawMode == null ? TriggerMode.ALL_OF
+            : TriggerMode.tryParse(rawMode instanceof String value ? value : null);
+        if (mode == null) throw new IllegalArgumentException("Invalid trigger mode. " + rawMode);
         String description = c.get("description");
 
         List<TriggerCondition> conditions = new ArrayList<>();
@@ -386,31 +425,30 @@ public final class StageFileParser {
         if (condRaw instanceof List<?> list) {
             for (Object o : list) {
                 if (o instanceof Config cc) {
-                    TriggerCondition tc = parseCondition(cc);
-                    if (tc != null) conditions.add(tc);
+                    conditions.add(parseCondition(cc));
+                } else {
+                    throw new IllegalArgumentException("A trigger condition must be a table");
                 }
             }
         } else if (condRaw instanceof Config cc) {
-            TriggerCondition tc = parseCondition(cc);
-            if (tc != null) conditions.add(tc);
+            conditions.add(parseCondition(cc));
         } else if (c.get("type") != null) {
             // Shorthand: a rule with no `conditions` list but a `type` IS a single condition.
-            TriggerCondition tc = parseCondition(c);
-            if (tc != null) conditions.add(tc);
+            conditions.add(parseCondition(c));
         }
 
         if (conditions.isEmpty()) {
-            LOGGER.warn("[ProgressiveStages] [[triggers]] rule has no valid conditions — skipped");
-            return null;
+            throw new IllegalArgumentException("A triggers rule must contain at least one condition");
         }
         return new TriggerRule(mode, conditions, description);
     }
 
     private static TriggerCondition parseCondition(Config c) {
-        TriggerConditionType type = TriggerConditionType.fromString(c.get("type"));
+        Object rawType = c.get("type");
+        TriggerConditionType type = TriggerConditionType.fromString(
+            rawType instanceof String value ? value : null);
         if (type == null) {
-            LOGGER.warn("[ProgressiveStages] Unknown trigger condition type '{}' — skipped", String.valueOf(c.get("type")));
-            return null;
+            throw new IllegalArgumentException("Unknown trigger condition type. " + rawType);
         }
         long count = readLong(c, "count", 1L);
         // v3.0: time-based conditions accept a friendly `duration` (e.g. "3d") in place of raw seconds.
@@ -423,9 +461,8 @@ public final class StageFileParser {
         }
         String target = readTriggerTarget(c, type);
         if (target.isEmpty() && type.requiresTarget()) {
-            LOGGER.warn("[ProgressiveStages] Trigger condition '{}' is missing its target — skipped",
-                type.name().toLowerCase());
-            return null;
+            throw new IllegalArgumentException("Trigger condition is missing its target. "
+                + type.name().toLowerCase(java.util.Locale.ROOT));
         }
         if (target.isEmpty() && type == TriggerConditionType.DISTANCE) {
             target = "all"; // default movement kind
@@ -438,8 +475,7 @@ public final class StageFileParser {
             if (w == null) w = c.get("item");
             if (w instanceof String s) with = s.trim();
             if (with.isEmpty()) {
-                LOGGER.warn("[ProgressiveStages] kill_with condition is missing its 'with' item — skipped");
-                return null;
+                throw new IllegalArgumentException("The kill with condition is missing its item");
             }
         }
         // v2.5: tame/breed/kill_with build counter keys from canonical registry ids on the write side
@@ -488,8 +524,12 @@ public final class StageFileParser {
             case SCRIPT                                      -> new String[]{"id", "condition", "script", "target"};
             case BIOME_TIME                                  -> new String[]{"biome", "id", "target"};
             case STAGE_HELD_FOR                              -> new String[]{"stage", "id", "target"};
+            case CUSTOM_COUNTER                              -> new String[]{"counter", "key", "id", "target"};
+            case SCOREBOARD                                  -> new String[]{"objective", "scoreboard", "id", "target"};
+            case SCRIPT_VALUE                                -> new String[]{"id", "provider", "script", "target"};
             case PLAY_TIME, LEVEL, XP, DAY_COUNT, WORLD_TIME,
-                 REACH_Y, FISH, SLEEP, RIDE                  -> new String[]{};
+                 REACH_Y, FISH, SLEEP, RIDE, HEALTH, FOOD,
+                 STAGE_COUNT, ONLINE_TEAM_SIZE               -> new String[]{};
         };
         for (String k : keys) {
             Object v = c.get(k);
@@ -521,10 +561,42 @@ public final class StageFileParser {
         builder.obscureIcon(readOptionalBool(sec, "obscure_icon"));
         builder.showTooltip(readOptionalBool(sec, "show_tooltip"));
         builder.showDescriptionOnTooltip(readOptionalBool(sec, "show_description_on_tooltip"));
+        Integer x = readOptionalInt(sec, "x", "ui_x", "layout_x");
+        Integer y = readOptionalInt(sec, "y", "ui_y", "layout_y");
+        if ((x == null) != (y == null)) {
+            throw new IllegalArgumentException("Display coordinates must provide both x and y");
+        }
+        builder.uiPosition(x, y);
+        String frame = stringValue(sec, "frame", "type");
+        if (frame != null) builder.uiFrame(normalizeEnum(frame, java.util.Set.of("task", "goal", "challenge"), "task"));
+        String background = stringValue(sec, "background", "background_texture");
+        if (background != null) {
+            if (ResourceLocation.tryParse(background.trim()) == null) {
+                throw new IllegalArgumentException("Invalid display background. " + background);
+            }
+            builder.uiBackground(background.trim());
+        }
+        String reveal = stringValue(sec, "reveal", "reveal_policy");
+        if (reveal != null) {
+            String normalized = reveal.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+            if (normalized.equals("dependency") || normalized.equals("prerequisites") || normalized.equals("available")) {
+                normalized = "dependencies";
+            } else if (normalized.equals("owned")) {
+                normalized = "unlocked";
+            }
+            builder.uiReveal(normalizeEnum(normalized, java.util.Set.of("always", "dependencies", "unlocked"), "always"));
+        }
+        Integer sortOrder = readOptionalInt(sec, "sort_order", "order");
+        if (sortOrder != null) builder.uiSortOrder(sortOrder);
         // v3.0: encrypted-block visual — masquerade this stage's locked blocks until owned.
         builder.encryptBlocks(readBool(sec, "encrypt_blocks"));
         String encryptAs = sec.get("encrypt_as");
-        if (encryptAs != null && !encryptAs.isBlank()) builder.encryptAs(encryptAs.trim());
+        if (encryptAs != null && !encryptAs.isBlank()) {
+            if (ResourceLocation.tryParse(encryptAs.trim()) == null) {
+                throw new IllegalArgumentException("Invalid encrypted block substitute. " + encryptAs);
+            }
+            builder.encryptAs(encryptAs.trim());
+        }
     }
 
     /** Returns the boolean if explicitly present, else {@code null} (inherit global default). */
@@ -532,11 +604,36 @@ public final class StageFileParser {
         Object v = c.get(key);
         if (v instanceof Boolean b) return b;
         if (v instanceof String s) {
-            String t = s.trim().toLowerCase();
+            String t = s.trim().toLowerCase(java.util.Locale.ROOT);
             if (t.equals("true"))  return Boolean.TRUE;
             if (t.equals("false")) return Boolean.FALSE;
         }
         return null;
+    }
+
+    private static Integer readOptionalInt(Config c, String... keys) {
+        for (String key : keys) {
+            Object v = c.get(key);
+            if (v instanceof Number n) return n.intValue();
+            if (v instanceof String s) {
+                try { return Integer.parseInt(s.trim()); } catch (NumberFormatException ignored) {}
+            }
+        }
+        return null;
+    }
+
+    private static String stringValue(Config c, String... keys) {
+        for (String key : keys) {
+            Object v = c.get(key);
+            if (v instanceof String s && !s.isBlank()) return s;
+        }
+        return null;
+    }
+
+    private static String normalizeEnum(String value, java.util.Set<String> allowed, String fallback) {
+        String normalized = value == null ? fallback : value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!allowed.contains(normalized)) throw new IllegalArgumentException("Invalid value. " + value);
+        return normalized;
     }
 
     // -------------------- [stage].dependency --------------------
@@ -559,7 +656,7 @@ public final class StageFileParser {
         try {
             out.add(StageId.parse(s));
         } catch (Exception e) {
-            LOGGER.warn("Invalid dependency ID: {}", s);
+            throw new IllegalArgumentException("Invalid dependency ID. " + s, e);
         }
     }
 
@@ -587,11 +684,11 @@ public final class StageFileParser {
         // pets: two named lists in the same table
         Config petsSection = config.get("pets");
         b.petsTaming(petsSection == null ? CategoryLocks.EMPTY
-            : CategoryLocks.builder().addLocked(stringList(petsSection, "locked_taming")).build());
+            : parseCategoryLists(petsSection, "locked_taming", null));
         b.petsBreeding(petsSection == null ? CategoryLocks.EMPTY
-            : CategoryLocks.builder().addLocked(stringList(petsSection, "locked_breeding")).build());
+            : parseCategoryLists(petsSection, "locked_breeding", null));
         b.petsCommanding(petsSection == null ? CategoryLocks.EMPTY
-            : CategoryLocks.builder().addLocked(stringList(petsSection, "locked_commanding")).build());
+            : parseCategoryLists(petsSection, "locked_commanding", null));
 
         // [curios].locked_slots — slot identifiers (plain strings, not prefix entries)
         Config curiosSection = config.get("curios");
@@ -602,9 +699,9 @@ public final class StageFileParser {
         // recipes: two named lists
         Config recipesSection = config.get("recipes");
         b.recipeIds(recipesSection == null ? CategoryLocks.EMPTY
-            : CategoryLocks.builder().addLocked(stringList(recipesSection, "locked_ids")).build());
+            : parseCategoryLists(recipesSection, "locked_ids", null));
         b.recipeOutputs(recipesSection == null ? CategoryLocks.EMPTY
-            : CategoryLocks.builder().addLocked(stringList(recipesSection, "locked_items")).build());
+            : parseCategoryLists(recipesSection, "locked_items", null));
 
         b.lockedDimensions(parseLockedDimensions(config));
         b.interactions(parseInteractions(config));
@@ -653,11 +750,10 @@ public final class StageFileParser {
         if (raw.isEmpty()) return java.util.Collections.emptySet();
         java.util.Set<ResourceLocation> out = new java.util.LinkedHashSet<>();
         for (String s : raw) {
-            try {
-                // Accept "id:..." prefix (skip) or bare "ns:path"
-                String body = s.startsWith("id:") ? s.substring(3) : s;
-                out.add(ResourceLocation.parse(body));
-            } catch (Exception ignored) {}
+            String body = s.startsWith("id:") ? s.substring(3) : s;
+            ResourceLocation id = ResourceLocation.tryParse(body);
+            if (id == null) throw new IllegalArgumentException("Invalid resource ID. " + s);
+            out.add(id);
         }
         return out;
     }
@@ -668,7 +764,11 @@ public final class StageFileParser {
         java.util.Set<String> out = new java.util.LinkedHashSet<>();
         for (String s : raw) {
             String body = s.startsWith("mod:") ? s.substring(4) : s;
-            if (!body.isEmpty()) out.add(body.toLowerCase());
+            body = body.trim().toLowerCase(java.util.Locale.ROOT);
+            if (body.isEmpty() || !body.matches("[a-z0-9_.-]+")) {
+                throw new IllegalArgumentException("Invalid mod ID. " + s);
+            }
+            out.add(body);
         }
         return out;
     }
@@ -679,16 +779,22 @@ public final class StageFileParser {
         if (sec == null) return Collections.emptyList();
         List<LockDefinition.EnchantCap> out = new ArrayList<>();
         for (String raw : stringList(sec, "max_levels")) {
-            if (raw == null) continue;
+            if (raw == null) throw new IllegalArgumentException("Invalid enchantment level cap");
             int idx = raw.lastIndexOf(':');
-            if (idx <= 0 || idx >= raw.length() - 1) continue;
+            if (idx <= 0 || idx >= raw.length() - 1) {
+                throw new IllegalArgumentException("Invalid enchantment level cap. " + raw);
+            }
             String lvlPart = raw.substring(idx + 1);
-            if (!lvlPart.chars().allMatch(Character::isDigit)) continue;
+            if (!lvlPart.chars().allMatch(Character::isDigit)) {
+                throw new IllegalArgumentException("Invalid enchantment level cap. " + raw);
+            }
             ResourceLocation id = ResourceLocation.tryParse(raw.substring(0, idx));
-            if (id == null) continue;
+            if (id == null) throw new IllegalArgumentException("Invalid enchantment ID. " + raw);
             try {
                 out.add(new LockDefinition.EnchantCap(id, Math.max(0, Integer.parseInt(lvlPart))));
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid enchantment level cap. " + raw, e);
+            }
         }
         return out;
     }
@@ -696,17 +802,33 @@ public final class StageFileParser {
     private static CategoryLocks parseCategory(Config config, String sectionName) {
         Config section = config.get(sectionName);
         if (section == null) return CategoryLocks.EMPTY;
-        return CategoryLocks.builder()
-            .addLocked(stringList(section, "locked"))
-            .addAlwaysUnlocked(stringList(section, "always_unlocked"))
-            .build();
+        return parseCategoryLists(section, "locked", "always_unlocked");
     }
 
     /** Build a CategoryLocks from a single named field inside a section (no always_unlocked). */
     private static CategoryLocks parseCategoryField(Config config, String sectionName, String fieldName) {
         Config section = config.get(sectionName);
         if (section == null) return CategoryLocks.EMPTY;
-        return CategoryLocks.builder().addLocked(stringList(section, fieldName)).build();
+        return parseCategoryLists(section, fieldName, null);
+    }
+
+    private static CategoryLocks parseCategoryLists(Config section, String lockedField,
+                                                     String alwaysUnlockedField) {
+        List<String> locked = stringList(section, lockedField);
+        for (String raw : locked) {
+            if (PrefixEntry.parse(raw) == null) {
+                throw new IllegalArgumentException("Invalid lock entry. " + raw);
+            }
+        }
+        List<String> alwaysUnlocked = alwaysUnlockedField == null
+            ? List.of() : stringList(section, alwaysUnlockedField);
+        for (String raw : alwaysUnlocked) {
+            PrefixEntry entry = PrefixEntry.parse(raw);
+            if (entry == null || entry.kind() != PrefixEntry.Kind.ID || entry.id() == null) {
+                throw new IllegalArgumentException("Invalid always unlocked entry. " + raw);
+            }
+        }
+        return CategoryLocks.builder().addLocked(locked).addAlwaysUnlocked(alwaysUnlocked).build();
     }
 
     private static List<ResourceLocation> parseLockedDimensions(Config config) {
@@ -718,7 +840,7 @@ public final class StageFileParser {
             if (entry != null && entry.kind() == PrefixEntry.Kind.ID && entry.id() != null) {
                 out.add(entry.id());
             } else {
-                LOGGER.warn("Invalid dimension ID (must be exact, no mod:/tag:/name:): {}", raw);
+                throw new IllegalArgumentException("Invalid dimension ID. " + raw);
             }
         }
         return out;
@@ -730,9 +852,16 @@ public final class StageFileParser {
         List<LockDefinition.InteractionLock> out = new ArrayList<>();
         for (Config c : entries) {
             String type = c.getOrElse("type", "item_on_block");
+            type = type.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!java.util.Set.of("item_on_block", "block_right_click", "item_on_entity").contains(type)) {
+                throw new IllegalArgumentException("Invalid interaction type. " + type);
+            }
             String heldItem = c.get("held_item");
             String description = c.get("description");
             String target = "item_on_entity".equals(type) ? c.get("target_entity") : c.get("target_block");
+            if (target == null || target.isBlank()) {
+                throw new IllegalArgumentException("An interaction entry is missing its target");
+            }
             out.add(new LockDefinition.InteractionLock(type, heldItem, target, description));
         }
         return out;
@@ -751,8 +880,7 @@ public final class StageFileParser {
             PrefixEntry target = PrefixEntry.parse(targetRaw);
             PrefixEntry replace = PrefixEntry.parse(replaceRaw);
             if (target == null || replace == null || replace.kind() != PrefixEntry.Kind.ID || replace.id() == null) {
-                LOGGER.warn("Invalid [[mobs.replacements]] entry — target={}, replace_with={}", targetRaw, replaceRaw);
-                continue;
+                throw new IllegalArgumentException("Invalid mob replacement entry");
             }
             out.add(new LockDefinition.MobReplacement(target, replace.id()));
         }
@@ -769,15 +897,13 @@ public final class StageFileParser {
             int[] pos1 = parsePos(c, "pos1");
             int[] pos2 = parsePos(c, "pos2");
             if (dimRaw == null || pos1 == null || pos2 == null) {
-                LOGGER.warn("Invalid [[regions]] entry (missing dimension/pos1/pos2)");
-                continue;
+                throw new IllegalArgumentException("Invalid region entry");
             }
             ResourceLocation dim;
             try {
                 dim = ResourceLocation.parse(dimRaw);
             } catch (Exception e) {
-                LOGGER.warn("Invalid [[regions]] dimension: {}", dimRaw);
-                continue;
+                throw new IllegalArgumentException("Invalid region dimension. " + dimRaw, e);
             }
             out.add(new LockDefinition.RegionLock(
                 dim, pos1, pos2,
@@ -806,9 +932,7 @@ public final class StageFileParser {
     private static LockDefinition.StructureRules parseStructures(Config config) {
         Config section = config.get("structures");
         if (section == null) return LockDefinition.StructureRules.EMPTY;
-        CategoryLocks lockedEntry = CategoryLocks.builder()
-            .addLocked(stringList(section, "locked_entry"))
-            .build();
+        CategoryLocks lockedEntry = parseCategoryLists(section, "locked_entry", null);
         Config rules = section.get("rules");
         boolean pbb = rules != null && rules.getOrElse("prevent_block_break", false);
         boolean pbp = rules != null && rules.getOrElse("prevent_block_place", false);
@@ -833,8 +957,7 @@ public final class StageFileParser {
             ResourceLocation display = parseExactId(c.get("display_as"));
             ResourceLocation drop = parseExactId(c.get("drop_as"));
             if (target == null || display == null || drop == null) {
-                LOGGER.warn("Invalid [[ores.overrides]] entry — target/display_as/drop_as must all be exact IDs");
-                continue;
+                throw new IllegalArgumentException("Invalid ore override entry");
             }
             out.add(new LockDefinition.OreOverride(target, display, drop));
         }
@@ -873,7 +996,7 @@ public final class StageFileParser {
             if (v instanceof Boolean bool) {
                 b.enforcementOverride(cat, bool);
             } else if (v instanceof String s) {
-                String t = s.trim().toLowerCase();
+                String t = s.trim().toLowerCase(java.util.Locale.ROOT);
                 if (t.equals("true")) b.enforcementOverride(cat, Boolean.TRUE);
                 else if (t.equals("false")) b.enforcementOverride(cat, Boolean.FALSE);
             }

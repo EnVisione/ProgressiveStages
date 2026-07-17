@@ -189,7 +189,7 @@ public class NetworkHandler {
                         (int) Math.min(Integer.MAX_VALUE, cp.threshold()),
                         cp.satisfied()));
                 }
-                ruleLines.add(new RuleLine(rp.mode().name().toLowerCase(), rp.description(), rp.satisfied(), conds));
+                ruleLines.add(new RuleLine(rp.mode().name().toLowerCase(java.util.Locale.ROOT), rp.description(), rp.satisfied(), conds));
             }
             out.add(new StageProgress(
                 stageId.getResourceLocation(),
@@ -214,6 +214,7 @@ public class NetworkHandler {
             sb.append(ic.count()).append("x ").append(ic.item().getPath());
         }
         if (sb.length() == 0) sb.append("free");
+        if (cost.cooldownSeconds() > 0) sb.append(", ").append(cost.cooldownSeconds()).append("s cooldown");
         return new CostInfo(true, cost.xpLevels(), sb.toString(), canPurchase(player, defOpt.get()));
     }
 
@@ -232,7 +233,7 @@ public class NetworkHandler {
         for (var ic : cost.items()) {
             if (countItem(player, ic.item()) < ic.count()) return false;
         }
-        return true;
+        return purchaseCooldownRemainingMillis(player, cost) <= 0L;
     }
 
     private static int countItem(ServerPlayer player, ResourceLocation itemId) {
@@ -250,41 +251,72 @@ public class NetworkHandler {
     /** v3.0: per-player skill-tree purchase cooldown tracking (transient, in-memory). */
     private static final java.util.Map<java.util.UUID, Long> lastPurchase = new java.util.concurrent.ConcurrentHashMap<>();
 
+    public static void clearServerRuntimeState() { lastPurchase.clear(); }
+
+    private static long purchaseCooldownRemainingMillis(ServerPlayer player,
+                                                         com.enviouse.progressivestages.common.config.StageCost cost) {
+        if (cost.cooldownSeconds() <= 0) return 0L;
+        Long last = lastPurchase.get(player.getUUID());
+        if (last == null) return 0L;
+        long elapsed = Math.max(0L, System.currentTimeMillis() - last);
+        return Math.max(0L, cost.cooldownSeconds() * 1000L - elapsed);
+    }
+
     private static void handlePurchaseServer(RequestPurchasePayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
             StageId stageId = StageId.fromResourceLocation(payload.stageId());
             StageDefinition def = StageOrder.getInstance().getStageDefinition(stageId).orElse(null);
-            if (def == null || !canPurchase(player, def)) {
-                // Re-sync so the client reflects the true (unchanged) state.
+            if (def == null || !def.isPurchasable()) {
                 sendStageGuiData(player);
                 return;
             }
             com.enviouse.progressivestages.common.config.StageCost cost = def.getCost();
-            // v3.0: enforce the purchase cooldown (server-authoritative).
-            if (cost.cooldownSeconds() > 0) {
-                long now = System.currentTimeMillis();
-                Long last = lastPurchase.get(player.getUUID());
-                if (last != null && now - last < cost.cooldownSeconds() * 1000L) {
-                    long remain = (cost.cooldownSeconds() * 1000L - (now - last)) / 1000L;
-                    player.sendSystemMessage(com.enviouse.progressivestages.common.util.TextUtil
-                        .parseColorCodes("&cPurchase on cooldown — &f" + remain + "s&c left."));
-                    sendStageGuiData(player);
-                    return;
-                }
+            long cooldownRemaining = purchaseCooldownRemainingMillis(player, cost);
+            if (cooldownRemaining > 0L) {
+                long remain = Math.max(1L, (cooldownRemaining + 999L) / 1000L);
+                player.sendSystemMessage(com.enviouse.progressivestages.common.util.TextUtil
+                    .parseColorCodes("&cPurchase on cooldown. &f" + remain + "s&c left."));
+                sendStageGuiData(player);
+                return;
             }
-            // Consume cost.
+            if (!canPurchase(player, def)) {
+                sendStageGuiData(player);
+                return;
+            }
             if (cost.xpLevels() > 0) player.giveExperienceLevels(-cost.xpLevels());
             for (var ic : cost.items()) consumeItem(player, ic.item(), ic.count());
-            // Grant (bypass dependency auto-grant since prereqs are already satisfied).
             StageManager.getInstance().grantStageWithCause(player, stageId,
                 com.enviouse.progressivestages.common.api.StageCause.PURCHASE);
-            // v3.0: record the purchase so refund_percent only ever refunds what was actually paid for.
+            if (!StageManager.getInstance().hasStage(player, stageId)) {
+                restoreCost(player, cost);
+                player.sendSystemMessage(com.enviouse.progressivestages.common.util.TextUtil
+                    .parseColorCodes("&cThe purchase could not be completed. Your cost was restored."));
+                sendStageGuiData(player);
+                return;
+            }
             StageManager.getInstance().markPurchased(player, stageId);
             if (cost.cooldownSeconds() > 0) lastPurchase.put(player.getUUID(), System.currentTimeMillis());
-            // Refresh the GUI snapshot.
             sendStageGuiData(player);
         });
+    }
+
+    private static void restoreCost(ServerPlayer player,
+                                    com.enviouse.progressivestages.common.config.StageCost cost) {
+        if (cost.xpLevels() > 0) player.giveExperienceLevels(cost.xpLevels());
+        for (var itemCost : cost.items()) {
+            Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getOptional(itemCost.item()).orElse(null);
+            if (item == null) continue;
+            int remaining = itemCost.count();
+            int maximum = Math.max(1, new net.minecraft.world.item.ItemStack(item).getMaxStackSize());
+            while (remaining > 0) {
+                int count = Math.min(remaining, maximum);
+                var stack = new net.minecraft.world.item.ItemStack(item, count);
+                if (!player.getInventory().add(stack) || !stack.isEmpty()) player.drop(stack, false);
+                remaining -= count;
+            }
+        }
     }
 
     private static void consumeItem(ServerPlayer player, ResourceLocation itemId, int count) {
@@ -304,7 +336,7 @@ public class NetworkHandler {
     }
 
     private static String conditionLabel(com.enviouse.progressivestages.common.trigger.TriggerCondition c) {
-        String type = c.type().name().toLowerCase().replace('_', ' ');
+        String type = c.type().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ');
         String base = c.target().isEmpty() ? type : (type + " " + c.target());
         return c.with().isEmpty() ? base : (base + " with " + c.with());
     }
@@ -402,7 +434,36 @@ public class NetworkHandler {
             }
         }
 
-        PacketDistributor.sendToPlayer(player, new LockSyncPayload(itemLocks, recipeLocks, recipeItemLocks, entityLocks));
+        List<LockEntry> blockLocks = new ArrayList<>();
+        for (var block : net.minecraft.core.registries.BuiltInRegistries.BLOCK) {
+            ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(block);
+            if (id == null) continue;
+            for (StageId stage : registry.getRequiredStagesForBlock(block)) {
+                blockLocks.add(new LockEntry(id, stage.getResourceLocation()));
+            }
+        }
+
+        List<LockEntry> fluidLocks = new ArrayList<>();
+        for (var fluid : net.minecraft.core.registries.BuiltInRegistries.FLUID) {
+            ResourceLocation id = net.minecraft.core.registries.BuiltInRegistries.FLUID.getKey(fluid);
+            if (id == null) continue;
+            for (StageId stage : registry.getRequiredStagesForFluid(id)) {
+                fluidLocks.add(new LockEntry(id, stage.getResourceLocation()));
+            }
+        }
+
+        // Pseudo id namespace carries the mod id; this supports abstract EMI/JEI ingredients whose
+        // concrete registry id does not identify the implementation mod (e.g. chemicals).
+        List<LockEntry> modLocks = new ArrayList<>();
+        for (String modId : registry.getAllLockedMods()) {
+            ResourceLocation pseudo = ResourceLocation.fromNamespaceAndPath(modId, "__mod__");
+            for (StageId stage : registry.getRequiredStagesForMod(modId)) {
+                modLocks.add(new LockEntry(pseudo, stage.getResourceLocation()));
+            }
+        }
+
+        PacketDistributor.sendToPlayer(player, new LockSyncPayload(
+            itemLocks, blockLocks, fluidLocks, recipeLocks, recipeItemLocks, entityLocks, modLocks));
     }
 
     /**
@@ -422,6 +483,8 @@ public class NetworkHandler {
                     stageId.getResourceLocation(),
                     def.getDisplayName(),
                     deps,
+                    def.getDependencyMode().configName(),
+                    def.getDependencyCount(),
                     def.getDescription() == null ? "" : def.getDescription(),
                     def.getIcon().map(ResourceLocation::toString).orElse(""),
                     resolveFlag(def.getDisplayAsUnknownItem(),
@@ -435,7 +498,14 @@ public class NetworkHandler {
                     def.hasTriggers(),
                     def.isHidden(),
                     def.getColor(),
-                    def.getCategory()
+                    def.getCategory(),
+                    def.getUiX().isPresent() && def.getUiY().isPresent(),
+                    def.getUiX().orElse(0),
+                    def.getUiY().orElse(0),
+                    def.getUiFrame(),
+                    def.getUiBackground(),
+                    def.getUiReveal(),
+                    def.getUiSortOrder()
                 ));
             });
         }
@@ -503,6 +573,30 @@ public class NetworkHandler {
             ClientLockCache.setItemLocks(itemLocks);
             ClientLockCache.setItemMultiLocks(itemMulti);
 
+            Map<ResourceLocation, StageId> blockLocks = new HashMap<>();
+            Map<ResourceLocation, java.util.Set<StageId>> blockMulti = new HashMap<>();
+            for (LockEntry entry : payload.blockLocks()) {
+                StageId sid = StageId.fromResourceLocation(entry.stageId());
+                blockLocks.putIfAbsent(entry.itemId(), sid);
+                blockMulti.computeIfAbsent(entry.itemId(), k -> new java.util.LinkedHashSet<>()).add(sid);
+            }
+            ClientLockCache.setBlockLocks(blockLocks);
+            ClientLockCache.setBlockMultiLocks(blockMulti);
+
+            Map<ResourceLocation, java.util.Set<StageId>> fluidMulti = new HashMap<>();
+            for (LockEntry entry : payload.fluidLocks()) {
+                fluidMulti.computeIfAbsent(entry.itemId(), k -> new java.util.LinkedHashSet<>())
+                    .add(StageId.fromResourceLocation(entry.stageId()));
+            }
+            ClientLockCache.setFluidMultiLocks(fluidMulti);
+
+            Map<String, java.util.Set<StageId>> modMulti = new HashMap<>();
+            for (LockEntry entry : payload.modLocks()) {
+                modMulti.computeIfAbsent(entry.itemId().getNamespace(), k -> new java.util.LinkedHashSet<>())
+                    .add(StageId.fromResourceLocation(entry.stageId()));
+            }
+            ClientLockCache.setModMultiLocks(modMulti);
+
             // v3.0: entity locks → multi-stage map for the Jade/WTHIT overlay.
             Map<ResourceLocation, java.util.Set<StageId>> entityMulti = new HashMap<>();
             for (LockEntry entry : payload.entityLocks()) {
@@ -550,6 +644,8 @@ public class NetworkHandler {
                     stageId,
                     entry.displayName(),
                     deps,
+                    entry.dependencyMode(),
+                    entry.dependencyCount(),
                     entry.description(),
                     icon,
                     entry.displayAsUnknownItem(),
@@ -559,7 +655,13 @@ public class NetworkHandler {
                     entry.hasTriggers(),
                     entry.hidden(),
                     entry.color(),
-                    entry.category()
+                    entry.category(),
+                    entry.hasUiPosition() ? entry.uiX() : null,
+                    entry.hasUiPosition() ? entry.uiY() : null,
+                    entry.uiFrame(),
+                    entry.uiBackground(),
+                    entry.uiReveal(),
+                    entry.uiSortOrder()
                 ));
             }
             ClientStageCache.setStageDefinitions(definitions);
@@ -646,20 +748,29 @@ public class NetworkHandler {
      * Lock registry sync payload.
      * Includes item locks, recipe locks (by recipe ID), and recipe-item locks (by output item ID).
      */
-    public record LockSyncPayload(List<LockEntry> itemLocks, List<LockEntry> recipeLocks,
-                                  List<LockEntry> recipeItemLocks, List<LockEntry> entityLocks) implements CustomPacketPayload {
+    public record LockSyncPayload(List<LockEntry> itemLocks, List<LockEntry> blockLocks,
+                                  List<LockEntry> fluidLocks, List<LockEntry> recipeLocks,
+                                  List<LockEntry> recipeItemLocks, List<LockEntry> entityLocks,
+                                  List<LockEntry> modLocks) implements CustomPacketPayload {
         public static final Type<LockSyncPayload> TYPE = new Type<>(Constants.LOCK_SYNC_PACKET);
 
-        public static final StreamCodec<FriendlyByteBuf, LockSyncPayload> STREAM_CODEC = StreamCodec.composite(
-            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
-            LockSyncPayload::itemLocks,
-            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
-            LockSyncPayload::recipeLocks,
-            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
-            LockSyncPayload::recipeItemLocks,
-            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
-            LockSyncPayload::entityLocks,
-            LockSyncPayload::new
+        private static final StreamCodec<FriendlyByteBuf, List<LockEntry>> LIST_CODEC =
+            LockEntry.STREAM_CODEC.apply(ByteBufCodecs.list());
+
+        public static final StreamCodec<FriendlyByteBuf, LockSyncPayload> STREAM_CODEC = StreamCodec.of(
+            (buf, payload) -> {
+                LIST_CODEC.encode(buf, payload.itemLocks());
+                LIST_CODEC.encode(buf, payload.blockLocks());
+                LIST_CODEC.encode(buf, payload.fluidLocks());
+                LIST_CODEC.encode(buf, payload.recipeLocks());
+                LIST_CODEC.encode(buf, payload.recipeItemLocks());
+                LIST_CODEC.encode(buf, payload.entityLocks());
+                LIST_CODEC.encode(buf, payload.modLocks());
+            },
+            buf -> new LockSyncPayload(
+                LIST_CODEC.decode(buf), LIST_CODEC.decode(buf), LIST_CODEC.decode(buf),
+                LIST_CODEC.decode(buf), LIST_CODEC.decode(buf), LIST_CODEC.decode(buf),
+                LIST_CODEC.decode(buf))
         );
 
         @Override
@@ -676,11 +787,14 @@ public class NetworkHandler {
      * the field count exceeds {@code StreamCodec.composite}'s arity.
      */
     public record StageDefinitionEntry(ResourceLocation stageId, String displayName,
-                                       List<ResourceLocation> dependencies, String description,
+                                       List<ResourceLocation> dependencies,
+                                       String dependencyMode, int dependencyCount, String description,
                                        String icon, boolean displayAsUnknownItem, boolean obscureIcon,
                                        boolean showTooltip, boolean showDescriptionOnTooltip,
                                        boolean hasTriggers,
-                                       boolean hidden, String color, String category) {
+                                       boolean hidden, String color, String category,
+                                       boolean hasUiPosition, int uiX, int uiY, String uiFrame,
+                                       String uiBackground, String uiReveal, int uiSortOrder) {
 
         private static final StreamCodec<io.netty.buffer.ByteBuf, List<ResourceLocation>> DEPS_CODEC =
             ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list());
@@ -690,6 +804,8 @@ public class NetworkHandler {
                 ResourceLocation.STREAM_CODEC.encode(buf, e.stageId());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.displayName());
                 DEPS_CODEC.encode(buf, e.dependencies());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.dependencyMode());
+                buf.writeVarInt(e.dependencyCount());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.description());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.icon());
                 buf.writeBoolean(e.displayAsUnknownItem());
@@ -701,22 +817,45 @@ public class NetworkHandler {
                 buf.writeBoolean(e.hidden());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.color());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.category());
+                buf.writeBoolean(e.hasUiPosition());
+                if (e.hasUiPosition()) {
+                    buf.writeVarInt(e.uiX());
+                    buf.writeVarInt(e.uiY());
+                }
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.uiFrame());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.uiBackground());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.uiReveal());
+                buf.writeVarInt(e.uiSortOrder());
             },
-            buf -> new StageDefinitionEntry(
-                ResourceLocation.STREAM_CODEC.decode(buf),
-                ByteBufCodecs.STRING_UTF8.decode(buf),
-                DEPS_CODEC.decode(buf),
-                ByteBufCodecs.STRING_UTF8.decode(buf),
-                ByteBufCodecs.STRING_UTF8.decode(buf),
-                buf.readBoolean(),
-                buf.readBoolean(),
-                buf.readBoolean(),
-                buf.readBoolean(),
-                buf.readBoolean(),
-                buf.readBoolean(),
-                ByteBufCodecs.STRING_UTF8.decode(buf),
-                ByteBufCodecs.STRING_UTF8.decode(buf)
-            )
+            buf -> {
+                ResourceLocation stageId = ResourceLocation.STREAM_CODEC.decode(buf);
+                String displayName = ByteBufCodecs.STRING_UTF8.decode(buf);
+                List<ResourceLocation> dependencies = DEPS_CODEC.decode(buf);
+                String dependencyMode = ByteBufCodecs.STRING_UTF8.decode(buf);
+                int dependencyCount = buf.readVarInt();
+                String description = ByteBufCodecs.STRING_UTF8.decode(buf);
+                String icon = ByteBufCodecs.STRING_UTF8.decode(buf);
+                boolean displayAsUnknownItem = buf.readBoolean();
+                boolean obscureIcon = buf.readBoolean();
+                boolean showTooltip = buf.readBoolean();
+                boolean showDescriptionOnTooltip = buf.readBoolean();
+                boolean hasTriggers = buf.readBoolean();
+                boolean hidden = buf.readBoolean();
+                String color = ByteBufCodecs.STRING_UTF8.decode(buf);
+                String category = ByteBufCodecs.STRING_UTF8.decode(buf);
+                boolean hasUiPosition = buf.readBoolean();
+                int uiX = hasUiPosition ? buf.readVarInt() : 0;
+                int uiY = hasUiPosition ? buf.readVarInt() : 0;
+                String uiFrame = ByteBufCodecs.STRING_UTF8.decode(buf);
+                String uiBackground = ByteBufCodecs.STRING_UTF8.decode(buf);
+                String uiReveal = ByteBufCodecs.STRING_UTF8.decode(buf);
+                int uiSortOrder = buf.readVarInt();
+                return new StageDefinitionEntry(stageId, displayName, dependencies, dependencyMode,
+                    dependencyCount, description,
+                    icon, displayAsUnknownItem, obscureIcon, showTooltip, showDescriptionOnTooltip,
+                    hasTriggers, hidden, color, category, hasUiPosition, uiX, uiY, uiFrame,
+                    uiBackground, uiReveal, uiSortOrder);
+            }
         );
     }
 

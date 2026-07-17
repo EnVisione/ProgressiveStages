@@ -30,8 +30,13 @@ public class LockedItemDecorator implements IItemDecorator {
         if (ClientLockCache.isCreativeBypass()) return false;
         // EMI mixin path owns rendering when inside its SlotWidget.
         if (LockIconRenderer.isInsideSlotWidget()) return false;
-        // JEI draws its own greying — don't double-paint over its slot widgets.
-        if (isCalledFromJei()) return false;
+        // JEI draws its own greying — don't double-paint over its slot widgets. This is a cheap
+        // ThreadLocal read set by the JEI grid/recipe-slot mixins (see LockIconRenderer). It
+        // REPLACES the old StackWalker.getInstance().walk(...) that ran once per item slot per
+        // frame — that full-stack walk was the render-thread freeze the watchdog caught, and it
+        // scaled with the number of visible slots (catastrophic under EMI/JEI ingredient grids).
+        // When JEI is absent the flag is simply never set, so non-JEI packs pay one boolean read.
+        if (LockIconRenderer.isInsideJeiRender()) return false;
 
         if (!ClientStageCache.isItemLocked(stack.getItem())) return false;
 
@@ -45,19 +50,5 @@ public class LockedItemDecorator implements IItemDecorator {
         if (!StageConfig.isShowLockIcon()) return false;
         LockIconRenderer.renderLockOverlay(graphics, x, y, 16);
         return true;
-    }
-
-    /**
-     * Walk the call stack for any frame originating in {@code mezz.jei.*}.
-     * Cheap (StackWalker is lazy and short-circuits) and avoids paying for
-     * full stack capture per render.
-     */
-    private static boolean isCalledFromJei() {
-        try {
-            return StackWalker.getInstance().walk(s ->
-                s.anyMatch(f -> f.getClassName().startsWith("mezz.jei.")));
-        } catch (Throwable t) {
-            return false;
-        }
     }
 }

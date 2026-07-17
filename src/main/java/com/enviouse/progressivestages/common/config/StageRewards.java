@@ -28,6 +28,15 @@ public record StageRewards(List<StageCost.ItemCost> items,
     public static final StageRewards NONE =
         new StageRewards(List.of(), List.of(), List.of(), "", 0, 0);
 
+    public StageRewards {
+        items = items == null ? List.of() : List.copyOf(items);
+        effects = effects == null ? List.of() : List.copyOf(effects);
+        commands = commands == null ? List.of() : List.copyOf(commands);
+        teleport = teleport == null ? "" : teleport;
+        xpLevels = Math.max(0, xpLevels);
+        xpPoints = Math.max(0, xpPoints);
+    }
+
     /** A status effect to apply on grant: effect id, duration in TICKS, amplifier (0 = level I). */
     public record EffectReward(ResourceLocation effect, int durationTicks, int amplifier) {}
 

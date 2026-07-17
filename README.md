@@ -1,12 +1,8 @@
 # ProgressiveStages
 
-> **EnVy here — trying to use Claude to make a more detailed README. If it works I'll keep it, if not I won't.**
-
----
-
 A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression. Define stages as TOML files; ProgressiveStages locks items, blocks, entities, fluids, dimensions, recipes, enchantments, crops, mob spawns, pets, regions, structures, screens, and player interactions until the player has earned the right stage(s).
 
-**ProgressiveStages 2.0** is a ground-up rework: a unified prefix-based lock model, multi-stage gating where a single resource can require all of several stages, per-stage `[unlocks]` carve-outs, and full coverage of crops/mobs/enchants/regions/structures that v1 didn't have.
+**ProgressiveStages 3.0** turns that foundation into a fully authorable progression platform: declarative per-stage triggers, graph-based stage scope, scripting and command APIs, broad content enforcement, and a vanilla advancement-style in-game map.
 
 ---
 
@@ -16,19 +12,25 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 
 ## What's new in 3.0
 
+- **Vanilla advancement-style stage map** — `/stage`, `/stages`, `/ps`, `/stage gui`, or the keybind opens a draggable and wheel-scrollable progression graph using vanilla task/goal/challenge frames, dependency connectors, tiled backgrounds, hover cards, search, owned-stage filtering, click-to-pin details, trigger progress, unlock previews, and server-validated purchases.
+- **Author-controlled map layout** — each stage's `[display]` can set `x`, `y`, `frame`, `background`, `reveal`, and `sort_order`; omit `x` + `y` for automatic dependency-graph layout. Reveal can be `always`, `dependencies`, or `unlocked`.
+- **Named trigger counters** — `type = "custom_counter", counter = "quest_points", count = 10` bridges stage TOML to `/stage counter get|add|set|reset ...` and `ProgressiveStages.counter/addCounter/setCounter/resetCounter(...)` in KubeJS.
+- **Expanded KubeJS API** — actual-change `grant`/`revoke`, plus `toggle`, `exists`, `available`, dependency queries, tag queries/bulk operations, counters, immediate trigger evaluation, and `openGui`.
+- **Correctness and dedicated-server parity** — per-stage exemptions and `[unlocks]` are scoped to their owning stage, secondary categories retain every gating stage, mixed team/server-scope dependencies store correctly, reload/stop clears runtime state, biome time is exact for any polling interval, and block/fluid/mod locks now sync to dedicated clients and recipe viewers.
+- **Reproducible build + tests** — optional integrations resolve from publisher Maven repositories; a fresh clone no longer needs ignored `libs/*.jar` files.
 - **`[rewards]` on grant** — the companion to `[cost]`. `[rewards]` hands a stage's loot out **the moment it's granted**: `items = ["minecraft:diamond:5"]`, `effects = ["minecraft:strength:60:1"]` (`id:seconds:amplifier`), `commands = ["give {player} ..."]` (run as the player at permission 2; `{player}` substituted; singular `command` also accepted), `teleport = "[dim] x y z"` (dimension optional), `xp_levels`, `xp_points`. Fires **once per real grant** — applied to the player who earned/bought the stage (not per team member), not on login/sync — for every cause.
 - **Six new `[[triggers]]` conditions** — `reach_y` (state: while current Y ≥ `count`; aliases `altitude`/`y_level`/`height`); `fish` (vanilla `FISH_CAUGHT`, retroactive); `sleep` (vanilla `SLEEP_IN_BED`, retroactive); `ride` (blocks ridden on any vehicle — minecart/boat/pig/horse/strider, retroactive); `biome_time` (seconds spent in a target biome/`#tag`; `count` = seconds or a friendly `duration = "5m"`); and `stage_held_for` (held another stage for ≥ `count` seconds; `count` seconds or `duration = "3d"` — grant times are now recorded for **every** stage).
 - **Stage tags + bulk ops** — tag stages with `[stage].tags = ["combat","tier2"]`, then `/stage tag grant <players> <tag>`, `/stage tag revoke <players> <tag>`, and `/stage tag list <tag>`. Grant **bypasses dependencies** and **skips stages already owned**.
 - **`[cost]` cooldown + refund** — `cooldown` (or `cooldown_seconds`; accepts `"5m"`) is a **per-player** rate limit between skill-tree purchases (server-enforced); `refund_percent` returns that % of a purchased stage's item/XP cost when the stage is later **revoked**.
 - **Ability gating expanded** — `[abilities].locked` now also gates `sprint`, `swim`, and `climb` (clamps upward motion on ladders/vines), in addition to `elytra`.
-- **Jade + WTHIT in-world overlay** — looking at a locked **block OR mob** shows a red `🔒 Requires: <stage>` line. Pulled from the **Modrinth Maven** (`compileOnly maven.modrinth:jade:...` / `...:wthit:...`, with a CurseMaven fallback) — not bundled jars, inert when the mods aren't installed. Entity locks are now synced to the client to power the mob overlay.
+- **Jade + WTHIT in-world overlay** — looking at a locked **block OR mob** shows a red `🔒 Requires: <stage>` line. Pulled from the **Modrinth Maven** (`compileOnly maven.modrinth:jade:...` / `...:wthit:...`) — not bundled jars, inert when the mods aren't installed. Entity locks are now synced to the client to power the mob overlay.
 - **`[display].encrypt_blocks`** — `encrypt_blocks = true` masquerades this stage's exact-id locked **blocks** as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline (chunk rewrite, break-speed, drop replacement). Per-stage on/off.
 - **Authoring / debug commands** — `/stage simulate [player]` (dry-run: reachable-next stages with % and which conditions are short, plus dep-blocked stages); `/stage new <id>` (scaffold a stage TOML); `/stage export` (write a markdown progression guide to the config folder).
 - **Three finer-grained gates (now shipped — were "planned" in earlier 3.0 drafts):**
   - **`[enchants].max_levels`** — `max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]` caps an enchantment at that level until the gating stage is owned (effective cap = MIN across every still-missing capping stage; level `0` removes it). Enforced in the periodic inventory scan. Whole-enchant locking via `[enchants].locked` is unchanged.
   - **`[beacon].locked`** — `locked = ["id:minecraft:strength", "id:minecraft:haste"]` (MobEffect ids). A player missing the gating stage simply doesn't receive that beacon effect; other players in range are unaffected.
   - **`[brewing].locked`** — `locked = ["id:minecraft:strength", "id:minecraft:swiftness"]` (Potion ids). A player missing the gating stage can't TAKE the brewed potion out of a brewing stand's slots (it brews and sits there until they unlock it). Hopper/automation extraction is gated too, best-effort via the nearest player.
-- **Stage Tree GUI — search + hide** — a search box filters the stage list by stage name OR by a **locked item id** (type an item to find the stage(s) that gate it; results show as a flat list), an "☑ owned" toggle hides already-unlocked stages, and the detail pane shows a "Gates mods: create ×42, mekanism ×18" breakdown for the selected stage.
+- **Stage map search + reveal controls** — search by stage name, id, description, category, or **locked item id**; hide owned stages; use per-stage `reveal` rules to conceal future branches until prerequisites are met.
 - **EMI + JEI both optional (reload-crash fix)** — locked items/recipes are hidden and re-shown on unlock in EMI **and** JEI; both are `type = "optional"` (EMI mixins `required: false`) so neither is a hard dependency, and the recipe-viewer reload no longer crashes when EMI is absent (a `NoClassDefFoundError` class-load guard was fixed).
 
 ---
@@ -94,14 +96,14 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 1. Install [NeoForge](https://neoforged.net/) for Minecraft 1.21.1.
 2. Drop the jar into `mods/`.
 3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
-4. Launch the game once. ProgressiveStages generates `config/progressivestages/` with `stone_age.toml` and `diamond_age.toml` examples plus the main `progressivestages.toml` config file.
-5. Edit or add `config/progressivestages/<stage_id>.toml` files; reload at runtime with `/stage reload`.
+4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and three example stages under `config/progressivestages/stages/`.
+5. Edit or add `config/progressivestages/stages/<stage_id>.toml` files. Nested folders are supported. Reload at runtime with `/stage reload`.
 
 ---
 
 ## Quick Start
 
-`config/progressivestages/iron_age.toml`:
+`config/progressivestages/stages/iron_age.toml`:
 
 ```toml
 [stage]
@@ -288,7 +290,7 @@ Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`,
 
 ## Stage Tree Viewer & Per-Stage `[display]`
 
-Players can open an in-game **Stage Tree / Progression viewer** via `/stage gui` or the "Open Progression Tree" keybind (category *ProgressiveStages*, unbound by default — assign it in Controls). It's a **read-only, two-pane master/detail screen**. The **left pane** is the stage tree: every stage indented by dependency depth and colour-coded by status (unlocked / ready-to-unlock / locked). Selecting a stage fills the **right pane** with its icon, name, and status; description; the **prerequisites needed to advance** (each marked ✓/✗); a **"% to unlock" progress bar** with the live per-condition `[[triggers]]` breakdown; and an **icon-grid preview of the items that stage unlocks**, with a total count.
+Players can open the **vanilla-style progression map** with `/stage`, `/stages`, `/ps`, `/stage gui`, or the "Open Progression Tree" keybind. Drag empty map space to pan, use the wheel or WASD/arrow keys to scroll, hover a framed node for its stage card, and click it to pin prerequisites, live trigger progress, unlock previews, and any purchase button. Search matches stage text and locked item ids; the Owned control filters completed stages.
 
 Each stage can override the global tooltip/icon defaults for its own locked items with a `[display]` block — all keys optional, inheriting the global default when omitted:
 
@@ -298,6 +300,12 @@ display_as_unknown_item     = true    # mask the item NAME as "Unknown Item"
 obscure_icon                = true    # also replace the ICON with a "?" placeholder
 show_tooltip                = true    # show the lock / required-stage tooltip lines
 show_description_on_tooltip = true    # append [stage].description to the tooltip
+x = 168                               # optional explicit map coordinates; omit both for auto-layout
+y = 0
+frame = "challenge"                   # task | goal | challenge
+background = "minecraft:block/deepslate_tiles"
+reveal = "dependencies"               # always | dependencies | unlocked
+sort_order = 20                        # ordering hint for automatic layout
 ```
 
 ---
@@ -317,7 +325,7 @@ show_description_on_tooltip = true    # append [stage].description to the toolti
 | **KubeJS** | **New in 2.5:** a global `ProgressiveStages` object with `onGranted`/`onRevoked` callbacks (fire on every engine grant/revoke), `condition('id', player => bool)` for custom `script:` trigger conditions, and `has`/`grant`/`revoke`/`list`/`percent` helpers. Also first-class `player.stages.has/add/remove(...)`; Java `StageChangeEvent` (NeoForge bus) carries the `StageCause`. (KubeJS 7.x has no native stage events on engine grants — use `onGranted`/`onRevoked`.) |
 | **NaturesCompass** | Filters dimension/structure search results so locked dimensions don't appear |
 | **Visual Workbench** | Reflective shim — locks targeting `minecraft:crafting_table` apply through VW-replaced workbenches |
-| **Jade / WTHIT** | **New in 3.0:** looking at a locked **block or mob** appends a red `🔒 Requires: <stage>` line to the overlay (blocks via the item-lock cache, entities via a new client entity-lock sync; both honor creative bypass). Sourced from the **Modrinth Maven** as `compileOnly` dev jars (CurseMaven fallback), inert when neither mod is installed |
+| **Jade / WTHIT** | **New in 3.0:** looking at a locked **block or mob** appends a red `🔒 Requires: <stage>` line to the overlay (blocks via the item-lock cache, entities via a new client entity-lock sync; both honor creative bypass). Sourced from the **Modrinth Maven** as `compileOnly` dev jars, inert when neither mod is installed |
 
 All integrations are reflection-loaded; absent mods are silently skipped. Each can be disabled via the `[integration]` config section.
 
@@ -329,22 +337,27 @@ All integrations are reflection-loaded; absent mods are silently skipped. Each c
 |---|---|---|
 | `/stage grant <player> <stage>` | OP | Grant a stage |
 | `/stage revoke <player> <stage>` | OP | Revoke a stage |
-| `/stage list [player]` | OP | Show a player's owned stages |
-| `/stage check <player> <stage>` | OP | Check if a player has a stage |
-| `/stage info <stage>` | OP | Print a stage's full definition |
-| `/stage tree` | OP | Print the stage dependency tree |
-| `/stage gui` | OP | Open the in-game Stage Tree / Progression viewer (any player can open it via the keybind) |
-| `/stage progress [next\|all\|<stage>] [player]` | OP | Show live `[[triggers]]` rule/condition progress toward stages |
+| `/stage`, `/stages`, `/ps`, `/stage gui` | Player | Open the vanilla-style progression map |
+| `/stage list [player]` | Player | Show a player's owned stages |
+| `/stage check <player> <stage>` | Player | Check if a player has a stage |
+| `/stage info <stage>` | Player | Print a stage's full definition |
+| `/stage tree` | Player | Print the stage dependency tree |
+| `/stage progress [next\|all\|<stage>] [player]` | Player | Show live `[[triggers]]` rule/condition progress toward stages |
+| `/stage counter get\|add\|set\|reset ...` | OP | Read or mutate named counters used by `custom_counter` triggers |
 | `/stage tag grant\|revoke <players> <tag>` | OP | **New in 3.0.** Grant/revoke every stage tagged `<tag>` (from `[stage].tags`) to the selected players. Grant bypasses dependencies and skips already-owned stages |
 | `/stage tag list <tag>` | OP | **New in 3.0.** List every stage that declares `<tag>` |
+| `/stage category grant\|revoke <players> <category>` | OP | Bulk-change every stage in a GUI category (quote names containing spaces) |
+| `/stage category list <category>` | OP | List stages in a category |
+| `/stage bulk grant\|revoke <players>` | OP | Grant or revoke the complete stage set |
+| `/stage sync <players>` | OP | Force a full definitions/locks/ownership client refresh |
 | `/stage simulate [player]` | OP | **New in 3.0.** Dry-run: reachable-next stages with % + which conditions are still short, then dependency-blocked stages and what they're missing |
-| `/stage new <id>` | OP | **New in 3.0.** Scaffold a commented stage TOML at `config/ProgressiveStages/<id>.toml` (won't overwrite) |
+| `/stage new <id>` | OP | **New in 3.0.** Scaffold a commented stage TOML at `config/progressivestages/stages/<id>.toml` (won't overwrite) |
 | `/stage export` | OP | **New in 3.0.** Write a markdown progression guide (`progressivestages_guide.md`) built from the stage graph to the config folder |
-| `/stage validate` | OP | Validate every stage TOML file (registry existence, dependency cycles, malformed entries). **Deepened in 2.5:** full multi-node dependency cycles, transitively-unreachable stages, dead trigger targets (unresolved exact-id entity/block/item/effect or `kill_with` item), and profession ids. |
-| `/stage reload` | OP | Reload stage configs (incl. each stage's `[[triggers]]`) from disk |
+| `/progressivestages validate` | Admin | Validate every stage TOML file (registry existence, dependency cycles, malformed entries). **Deepened in 2.5:** full multi-node dependency cycles, transitively-unreachable stages, dead trigger targets (unresolved exact-id entity/block/item/effect or `kill_with` item), and profession ids. |
+| `/progressivestages reload` | Admin | Reload stage configs (incl. each stage's `[[triggers]]`) from disk |
 | `/progressivestages triggers list [player]` | OP | List every stage that declares `[[triggers]]`; with a player, show their live per-condition progress |
 | `/progressivestages trigger reset <player> <stage>` | OP | Clear a stage's persisted one-shot (dimension / biome visited) progress |
-| `/stage diagnose ftbquests` | OP | Dump FTB Quests integration status (provider registered, team mode, recheck queue) |
+| `/progressivestages ftb status [player]` | Admin | Dump FTB Quests integration status (provider registered, team mode, recheck queue) |
 
 Every line of every command's output is a configurable template via `messages.cmd_*` keys in `progressivestages.toml`. `&` color codes and `{placeholder}` substitution work everywhere.
 
@@ -352,7 +365,7 @@ Every line of every command's output is a configurable template via `messages.cm
 
 ## Configuration
 
-`config/progressivestages.toml` — high-level groups:
+`config/progressivestages/progressivestages.toml` — high-level groups. Stage files live beside it in `config/progressivestages/stages/`:
 
 - **`[general]`** — `starting_stages`, `team_mode` (`ftb_teams` / `solo`), `linear_progression`, `reapply_starting_stages_on_login`, `debug_logging`.
 - **`[enforcement]`** — every per-category enforcement toggle (`block_item_use`, `block_block_placement`, `block_dimension_travel`, `block_enchants`, `block_crop_growth`, `block_pet_interact`, `block_loot_drops`, `block_mob_spawns`, `block_mob_replacements`, `block_region_entry`, `block_structure_entry`, `block_screen_open`, ...), plus `allow_creative_bypass`, `mask_locked_item_names`, `obscure_locked_item_icons` (new — replace a locked item's icon with a `?`), `trigger_poll_interval` (new — `[[triggers]]` poll cadence in ticks), `notification_cooldown`, `reveal_stage_names_only_to_operators`, lock-sound config, eject-blocked-inventory frequency.
@@ -437,7 +450,7 @@ compat/
 - **Stage tags + bulk ops** — `[stage].tags = ["combat","tier2"]` + `/stage tag grant|revoke <players> <tag>` and `/stage tag list <tag>`. Grant bypasses dependencies and skips already-owned stages.
 - **`[cost]` cooldown + refund** — `cooldown` / `cooldown_seconds` (per-player rate limit between purchases; accepts `"5m"`) and `refund_percent` (% of item/XP cost returned when a purchased stage is revoked).
 - **Ability gating expanded** — `[abilities].locked` now also gates `sprint`, `swim`, and `climb` (clamps upward motion on ladders/vines), in addition to `elytra`.
-- **Jade + WTHIT overlay** — looking at a locked block or mob shows `🔒 Requires: <stage>`. Sourced from the Modrinth Maven as `compileOnly` dev jars (CurseMaven fallback), inert when uninstalled. Entity locks are now synced to the client for the mob overlay.
+- **Jade + WTHIT overlay** — looking at a locked block or mob shows `🔒 Requires: <stage>`. Sourced from the Modrinth Maven as `compileOnly` dev jars, inert when uninstalled. Entity locks are now synced to the client for the mob overlay.
 - **`[display].encrypt_blocks`** — masquerades this stage's exact-id locked blocks as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline. Per-stage on/off.
 - **Authoring/debug commands** — `/stage simulate [player]` (dry-run reachable-next stages + short conditions + dep-blocked stages), `/stage new <id>` (scaffold a stage TOML), `/stage export` (markdown progression guide).
 - **`[enchants].max_levels` enchant level cap** — `max_levels = ["minecraft:sharpness:3", ...]` caps an enchant at that level (instead of locking it) until the gating stage is owned; effective cap = MIN across every missing capping stage, level `0` removes it; enforced in the periodic inventory scan. `[enchants].locked` (whole-enchant) unchanged.
@@ -522,7 +535,9 @@ compat/
 
 ## Documentation
 
-Per-feature documentation: [DOCUMENTATION.md](DOCUMENTATION.md).
+Per-feature documentation: [DOCUMENTATION.md](DOCUMENTATION.md). The implemented 3.0 scope and
+remaining real-game release matrix live in
+[ProgressiveStages_3.0_Release_Plan.md](implementation/ProgressiveStages_3.0_Release_Plan.md).
 
 ## License
 

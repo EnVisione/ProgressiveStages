@@ -2,7 +2,6 @@ package com.enviouse.progressivestages.common.api;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.Event;
-import net.neoforged.bus.api.ICancellableEvent;
 
 import java.util.UUID;
 
@@ -17,11 +16,10 @@ import java.util.UUID;
  *   <li>Triggering custom game logic</li>
  * </ul>
  *
- * <p>This event is fired AFTER the stage change has been applied.
- * Cancelling this event has no effect on the stage change itself,
- * but can prevent downstream handlers from processing.
+ * <p>This event is fired after the stage change has been applied. It is a notification event and
+ * is intentionally not cancellable.
  */
-public class StageChangeEvent extends Event implements ICancellableEvent {
+public class StageChangeEvent extends Event {
 
     private final ServerPlayer player;
     private final UUID teamId;
@@ -98,4 +96,3 @@ public class StageChangeEvent extends Event implements ICancellableEvent {
         return cause;
     }
 }
-

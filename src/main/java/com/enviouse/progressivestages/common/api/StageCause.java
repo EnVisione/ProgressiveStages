@@ -88,9 +88,11 @@ public enum StageCause {
      */
     API,
 
+    /** Stage changed by KubeJS or another server-side script. */
+    SCRIPT,
+
     /**
      * Unknown or unspecified cause
      */
     UNKNOWN
 }
-

@@ -24,6 +24,8 @@ public class StagePurchaseData extends SavedData {
 
     /** Set of keys "teamId|stageId" for stages this team has paid for and not yet been refunded. */
     private final Set<String> paid = new HashSet<>();
+    /** Paid stages revoked while their team was offline; delivered to the next member who joins. */
+    private final Set<String> pendingRefunds = new HashSet<>();
 
     public static StagePurchaseData get(MinecraftServer server) {
         ServerLevel overworld = server.overworld();
@@ -50,10 +52,38 @@ public class StagePurchaseData extends SavedData {
         return removed;
     }
 
+    /** Move a paid flag into the offline-refund queue. */
+    public boolean deferRefund(UUID teamId, StageId stageId) {
+        String key = key(teamId, stageId);
+        if (!paid.remove(key)) return false;
+        pendingRefunds.add(key);
+        setDirty();
+        return true;
+    }
+
+    public Set<StageId> getPendingRefunds(UUID teamId) {
+        String prefix = teamId + "|";
+        Set<StageId> result = new HashSet<>();
+        for (String entry : pendingRefunds) {
+            if (!entry.startsWith(prefix)) continue;
+            try { result.add(StageId.parse(entry.substring(prefix.length()))); }
+            catch (IllegalArgumentException ignored) {}
+        }
+        return Set.copyOf(result);
+    }
+
+    public boolean consumePendingRefund(UUID teamId, StageId stageId) {
+        boolean removed = pendingRefunds.remove(key(teamId, stageId));
+        if (removed) setDirty();
+        return removed;
+    }
+
     public static StagePurchaseData load(CompoundTag tag, HolderLookup.Provider provider) {
         StagePurchaseData d = new StagePurchaseData();
         net.minecraft.nbt.ListTag list = tag.getList("paid", net.minecraft.nbt.Tag.TAG_STRING);
         for (int i = 0; i < list.size(); i++) d.paid.add(list.getString(i));
+        net.minecraft.nbt.ListTag pending = tag.getList("pending_refunds", net.minecraft.nbt.Tag.TAG_STRING);
+        for (int i = 0; i < pending.size(); i++) d.pendingRefunds.add(pending.getString(i));
         return d;
     }
 
@@ -62,6 +92,9 @@ public class StagePurchaseData extends SavedData {
         net.minecraft.nbt.ListTag list = new net.minecraft.nbt.ListTag();
         for (String k : paid) list.add(net.minecraft.nbt.StringTag.valueOf(k));
         tag.put("paid", list);
+        net.minecraft.nbt.ListTag pending = new net.minecraft.nbt.ListTag();
+        for (String k : pendingRefunds) pending.add(net.minecraft.nbt.StringTag.valueOf(k));
+        tag.put("pending_refunds", pending);
         return tag;
     }
 }

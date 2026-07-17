@@ -25,6 +25,11 @@ public final class StageLockTooltip {
     /** Missing-stage label for a block (via its item form's lock), or empty if accessible/ungated. */
     public static Optional<String> blockRequirement(Block block) {
         if (block == null) return Optional.empty();
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
+        if (blockId == null) return Optional.empty();
+        Set<StageId> nativeLocks = ClientLockCache.getRequiredStagesForBlock(blockId);
+        if (!nativeLocks.isEmpty()) return label(nativeLocks, () -> ownsAll(nativeLocks));
+        // Backward-compatible fallback: an item lock can still describe the block's item form.
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(block.asItem());
         if (itemId == null) return Optional.empty();
         return label(ClientLockCache.getRequiredStagesForItem(itemId),
@@ -47,5 +52,10 @@ public final class StageLockTooltip {
             if (!ClientStageCache.hasStage(s)) missing.add(ClientStageCache.getDisplayName(s));
         }
         return missing.isEmpty() ? Optional.empty() : Optional.of(String.join(", ", missing));
+    }
+
+    private static boolean ownsAll(Set<StageId> gating) {
+        for (StageId stage : gating) if (!ClientStageCache.hasStage(stage)) return false;
+        return true;
     }
 }

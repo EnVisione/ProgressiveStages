@@ -29,14 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * pieces correctly; as a safety net we additionally consult {@code getAllStructuresAt} and
  * verify via the resolved start's bounding box.
  *
- * <p>v2.0 note on multi-stage: {@link LockRegistry.StructureRulesAggregate#lockedEntry} maps
- * structure ID → owning StageId. Each entry has a single owning stage by aggregate-merge
- * rule (see {@link LockRegistry.StructureRulesAggregate#merge}, which uses
- * {@code putIfAbsent}). This means if two stages both declare the same structure under
- * {@code locked_entry}, only the first stage in load order wins — matching the documented
- * pre-v2.0 first-match-wins semantics for structure entry. Multi-stage gating per
- * structure is not currently expressible in the aggregate; if needed, the merger would
- * need to switch to a Set-valued map. Single-stage behavior is intentional here.
+ * <p>Structure entry is multi-stage. Declaring the same structure from several stage files
+ * requires all of those stages, matching the rest of ProgressiveStages' lock model.
  */
 public final class StructureEnforcer {
 
@@ -69,13 +63,14 @@ public final class StructureEnforcer {
         Registry<Structure> structureRegistry =
             level.registryAccess().registryOrThrow(Registries.STRUCTURE);
 
-        for (Map.Entry<ResourceLocation, StageId> entry : agg.lockedEntry.entrySet()) {
+        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
             Structure structure = structureRegistry.get(entry.getKey());
             if (structure == null) continue;
             StructureStart start = level.structureManager().getStructureAt(pos, structure);
             if (start == StructureStart.INVALID_START) continue;
             if (!start.getBoundingBox().isInside(pos)) continue;
-            if (StageManager.getInstance().hasStage(player, entry.getValue())) continue;
+            java.util.Optional<StageId> missing = firstMissing(player, entry.getValue());
+            if (missing.isEmpty()) continue;
 
             // Apply mining fatigue while inside a locked structure that sets prevent_block_break.
             // This is the §2.12 "Indestructibility" signal — block breaks are already cancelled
@@ -86,7 +81,7 @@ public final class StructureEnforcer {
             }
 
             repel(player, start.getBoundingBox(), agg.entryPadding);
-            ItemEnforcer.notifyLockedWithCooldown(player, entry.getValue(), "This structure");
+            ItemEnforcer.notifyLockedWithCooldown(player, missing.get(), "This structure");
             return;
         }
 
@@ -98,6 +93,10 @@ public final class StructureEnforcer {
     /** Drop the per-player safe-position record on logout. */
     public static void cleanupPlayer(UUID playerId) {
         SAFE_POS.remove(playerId);
+    }
+
+    public static void resetRuntimeState() {
+        SAFE_POS.clear();
     }
 
     public static boolean canBreakBlock(ServerPlayer player, BlockPos pos) {
@@ -128,13 +127,31 @@ public final class StructureEnforcer {
         if (agg.lockedEntry.isEmpty()) return java.util.Optional.empty();
         Registry<Structure> structureRegistry =
             level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        for (Map.Entry<ResourceLocation, StageId> entry : agg.lockedEntry.entrySet()) {
+        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
             Structure structure = structureRegistry.get(entry.getKey());
             if (structure == null) continue;
             StructureStart start = level.structureManager().getStructureAt(pos, structure);
             if (start == StructureStart.INVALID_START) continue;
             if (!start.getBoundingBox().isInside(pos)) continue;
-            return java.util.Optional.of(entry.getValue());
+            return entry.getValue().stream().findFirst();
+        }
+        return java.util.Optional.empty();
+    }
+
+    /** First structure gate at {@code pos} that this player is still missing. */
+    public static java.util.Optional<StageId> getLockedEntryStageAt(ServerLevel level, BlockPos pos,
+                                                                    ServerPlayer player) {
+        LockRegistry.StructureRulesAggregate agg = LockRegistry.getInstance().getStructures();
+        if (agg.lockedEntry.isEmpty()) return java.util.Optional.empty();
+        Registry<Structure> structureRegistry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
+            Structure structure = structureRegistry.get(entry.getKey());
+            if (structure == null) continue;
+            StructureStart start = level.structureManager().getStructureAt(pos, structure);
+            if (start != StructureStart.INVALID_START && start.getBoundingBox().isInside(pos)) {
+                java.util.Optional<StageId> missing = firstMissing(player, entry.getValue());
+                if (missing.isPresent()) return missing;
+            }
         }
         return java.util.Optional.empty();
     }
@@ -197,15 +214,23 @@ public final class StructureEnforcer {
         Registry<Structure> structureRegistry =
             level.registryAccess().registryOrThrow(Registries.STRUCTURE);
 
-        for (Map.Entry<ResourceLocation, StageId> entry : agg.lockedEntry.entrySet()) {
+        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
             Structure structure = structureRegistry.get(entry.getKey());
             if (structure == null) continue;
             StructureStart start = level.structureManager().getStructureAt(pos, structure);
             if (start == StructureStart.INVALID_START) continue;
             if (!start.getBoundingBox().isInside(pos)) continue;
-            if (!StageManager.getInstance().hasStage(player, entry.getValue())) return false;
+            if (firstMissing(player, entry.getValue()).isPresent()) return false;
         }
         return true;
+    }
+
+    private static java.util.Optional<StageId> firstMissing(ServerPlayer player,
+                                                             java.util.Collection<StageId> stages) {
+        for (StageId stage : stages) {
+            if (!StageManager.getInstance().hasStage(player, stage)) return java.util.Optional.of(stage);
+        }
+        return java.util.Optional.empty();
     }
 
     /**

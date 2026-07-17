@@ -117,7 +117,8 @@ runs/
 
 # Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
 !gradle-wrapper.jar
-/implementation/
+/implementation/*
+!/implementation/ProgressiveStages_3.0_Release_Plan.md
 
 # Claude Code session-local artifacts (analysis reports, settings, transcripts)
 # and project-level Claude instructions. Never push.
@@ -130,4 +131,3 @@ CLAUDE.md
 # CurseForge release copy + changelog scratchpad (local-only, never published as a repo doc)
 curseforge.md
 changelog.md
-

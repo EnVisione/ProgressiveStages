@@ -2,9 +2,8 @@ package com.enviouse.progressivestages.common.team;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
-import com.enviouse.progressivestages.common.data.StageAttachments;
-import com.enviouse.progressivestages.common.data.TeamStageData;
 import com.enviouse.progressivestages.common.network.NetworkHandler;
+import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.MinecraftServer;
@@ -32,6 +31,15 @@ public class TeamStageSync {
 
     public static void initialize(MinecraftServer srv) {
         server = srv;
+        teamAlignmentStatus.clear();
+    }
+
+    /** Release references and transient alignment state between integrated-server runs. */
+    public static void shutdown(MinecraftServer stoppingServer) {
+        if (server == stoppingServer) {
+            server = null;
+            teamAlignmentStatus.clear();
+        }
     }
 
     /**
@@ -58,9 +66,6 @@ public class TeamStageSync {
     public static void checkTeamAlignment(UUID teamId) {
         if (server == null) return;
 
-        TeamStageData data = server.overworld().getData(StageAttachments.TEAM_STAGES);
-        Set<StageId> teamStages = data.getStages(teamId);
-
         // Get all online team members
         Set<ServerPlayer> members = getOnlineTeamMembers(teamId);
         if (members.size() <= 1) {
@@ -70,7 +75,7 @@ public class TeamStageSync {
         }
 
         // Check if all members have the same highest stage
-        Optional<StageId> teamHighest = data.getHighestStage(teamId);
+        Optional<StageId> teamHighest = getHighestStage(StageManager.getInstance().getStages(teamId));
         if (teamHighest.isEmpty()) {
             setTeamAligned(teamId, true);
             return;
@@ -90,13 +95,11 @@ public class TeamStageSync {
     public static boolean onPlayerJoinTeam(ServerPlayer player, UUID newTeamId, UUID oldTeamId) {
         if (server == null) return true;
 
-        TeamStageData data = server.overworld().getData(StageAttachments.TEAM_STAGES);
-
         // Get player's current stages (from their old team, or solo)
-        Set<StageId> playerStages = data.getStages(oldTeamId);
+        Set<StageId> playerStages = StageManager.getInstance().getStages(oldTeamId);
 
         // Get new team's stages
-        Set<StageId> teamStages = data.getStages(newTeamId);
+        Set<StageId> teamStages = StageManager.getInstance().getStages(newTeamId);
 
         // Validate join based on stage matching rule
         if (!validateStageMatch(playerStages, teamStages)) {
@@ -170,8 +173,7 @@ public class TeamStageSync {
         if (!isTeamAligned(teamId)) return;
 
         Set<ServerPlayer> members = getOnlineTeamMembers(teamId);
-        TeamStageData data = server.overworld().getData(StageAttachments.TEAM_STAGES);
-        Set<StageId> stages = data.getStages(teamId);
+        Set<StageId> stages = StageManager.getInstance().getStages(teamId);
 
         for (ServerPlayer member : members) {
             NetworkHandler.sendStageSync(member, stages);

@@ -1,0 +1,9 @@
+{
+  "progressivestages:locks": {
+    "entrypoints": {
+      "client": "com.enviouse.progressivestages.compat.wthit.ProgressiveStagesWthitPlugin"
+    },
+    "side": "client",
+    "required": ["progressivestages"]
+  }
+}

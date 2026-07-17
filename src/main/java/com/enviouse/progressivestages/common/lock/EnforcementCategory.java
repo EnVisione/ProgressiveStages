@@ -19,6 +19,8 @@ public enum EnforcementCategory {
     ITEM_USE("block_item_use", StageConfig::isBlockItemUse),
     ITEM_PICKUP("block_item_pickup", StageConfig::isBlockItemPickup),
     ITEM_INVENTORY("block_item_inventory", StageConfig::isBlockItemInventory),
+    ITEM_HOTBAR("block_item_hotbar", StageConfig::isBlockItemHotbar),
+    ITEM_MOUSE_PICKUP("block_item_mouse_pickup", StageConfig::isBlockItemMousePickup),
     BLOCK_PLACEMENT("block_block_placement", StageConfig::isBlockBlockPlacement),
     BLOCK_INTERACTION("block_block_interaction", StageConfig::isBlockBlockInteraction),
     DIMENSION_TRAVEL("block_dimension_travel", StageConfig::isBlockDimensionTravel),
@@ -52,6 +54,8 @@ public enum EnforcementCategory {
             case "use", "item_use" -> ITEM_USE;
             case "pickup", "item_pickup" -> ITEM_PICKUP;
             case "inventory", "item_inventory" -> ITEM_INVENTORY;
+            case "hotbar", "item_hotbar" -> ITEM_HOTBAR;
+            case "mouse", "mouse_pickup", "item_mouse_pickup" -> ITEM_MOUSE_PICKUP;
             case "placement", "place", "block_placement" -> BLOCK_PLACEMENT;
             case "interaction", "block_interaction" -> BLOCK_INTERACTION;
             case "dimension", "dimension_travel" -> DIMENSION_TRAVEL;

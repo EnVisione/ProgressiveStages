@@ -87,6 +87,8 @@ public final class StageTriggerEvaluator {
     private static volatile boolean watchBreedSpecies = false;
     /** v3.0: biome_time conditions — accumulated per poll while the player is in the biome. */
     private static final List<TriggerCondition> biomeTimeConds = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /** Sub-second tick remainder per player+biome counter, so every poll interval accrues exactly. */
+    private static final Map<String, Long> biomeTickRemainders = new ConcurrentHashMap<>();
     // v2.4 unlock juice
     private static final Set<StageId> hudBarStages = ConcurrentHashMap.newKeySet();
     private static final Set<StageId> nudgeStages = ConcurrentHashMap.newKeySet();
@@ -168,8 +170,21 @@ public final class StageTriggerEvaluator {
     }
 
     public static boolean isActive() { return active; }
-    public static Set<StageId> stagesWithTriggers() { return RULES.keySet(); }
-    public static List<TriggerRule> rulesFor(StageId id) { return RULES.getOrDefault(id, List.of()); }
+    public static Set<StageId> stagesWithTriggers() {
+        return java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(RULES.keySet()));
+    }
+    public static List<TriggerRule> rulesFor(StageId id) {
+        return List.copyOf(RULES.getOrDefault(id, List.of()));
+    }
+
+    /** Clear every JVM-local cache between integrated-server worlds. Persisted counters are world data. */
+    public static void resetRuntimeState() {
+        rebuild(List.of());
+        lastPoll.clear();
+        sentNudges.clear();
+        lastGoalSent.clear();
+        biomeTickRemainders.clear();
+    }
 
     /** v2.4: true if the stage has no trigger rules, or at least one of its rules is satisfied. */
     public static boolean triggersSatisfied(ServerPlayer player, StageId stageId) {
@@ -190,7 +205,8 @@ public final class StageTriggerEvaluator {
         Long last = lastPoll.get(player.getUUID());
         if (last != null && now - last < interval) return;
         lastPoll.put(player.getUUID(), now);
-        accumulateBiomeTime(player, interval);
+        long elapsedTicks = last == null ? interval : Math.max(1L, now - last);
+        accumulateBiomeTime(player, elapsedTicks);
         evaluatePlayer(player);
         // v2.4 unlock juice (poll-driven, change-detected).
         if (!hudBarStages.isEmpty()) pushActiveGoal(player);
@@ -286,6 +302,7 @@ public final class StageTriggerEvaluator {
             lastGoalSent.remove(uuid);
             String prefix = uuid + "|";
             sentNudges.keySet().removeIf(k -> k.startsWith(prefix));
+            biomeTickRemainders.keySet().removeIf(k -> k.startsWith(prefix));
         }
     }
 
@@ -485,17 +502,41 @@ public final class StageTriggerEvaluator {
             case RIDE       -> rideBlocks(player);
             case BIOME_TIME -> counterValue(player, "biometime:" + c.targetBody());
             case STAGE_HELD_FOR -> stageHeldSeconds(player, c);
+            case CUSTOM_COUNTER -> counterValue(player,
+                "custom:" + c.targetBody().trim().toLowerCase(Locale.ROOT));
+            case SCOREBOARD -> scoreboardValue(player, c.targetBody());
+            case HEALTH -> Math.round(player.getHealth());
+            case FOOD -> player.getFoodData().getFoodLevel();
+            case STAGE_COUNT -> ProgressiveStagesAPI.getStages(player).size();
+            case ONLINE_TEAM_SIZE -> com.enviouse.progressivestages.common.team.TeamProvider.getInstance()
+                .getTeamMembers(com.enviouse.progressivestages.common.team.TeamProvider.getInstance()
+                    .getTeamId(player), player).size();
+            case SCRIPT_VALUE -> com.enviouse.progressivestages.common.compat.ScriptHooks
+                .evalProgress(c.targetBody(), player);
         };
     }
 
-    /** Per-poll biome-time accrual: +seconds (= poll interval / 20) for each biome_time the player is in. */
-    private static void accumulateBiomeTime(ServerPlayer player, int intervalTicks) {
+    private static long scoreboardValue(ServerPlayer player, String objectiveName) {
+        net.minecraft.world.scores.Scoreboard scoreboard = player.getScoreboard();
+        net.minecraft.world.scores.Objective objective = scoreboard.getObjective(objectiveName);
+        if (objective == null) return 0L;
+        net.minecraft.world.scores.ReadOnlyScoreInfo score = scoreboard.getPlayerScoreInfo(player, objective);
+        return score != null ? score.value() : 0L;
+    }
+
+    /** Per-poll biome-time accrual with exact tick remainders for arbitrary poll intervals. */
+    private static void accumulateBiomeTime(ServerPlayer player, long elapsedTicks) {
         if (biomeTimeConds.isEmpty() || player.server == null) return;
-        long seconds = Math.max(1L, intervalTicks / 20L);
         for (TriggerCondition c : biomeTimeConds) {
             if (inBiome(player, c.targetBody(), c.targetIsTag())) {
-                StageCounterData.get(player.server).increment(player.getUUID(),
-                    "biometime:" + c.targetBody(), seconds);
+                String key = player.getUUID() + "|" + c.targetBody();
+                long totalTicks = biomeTickRemainders.getOrDefault(key, 0L) + elapsedTicks;
+                long seconds = totalTicks / 20L;
+                biomeTickRemainders.put(key, totalTicks % 20L);
+                if (seconds > 0) {
+                    StageCounterData.get(player.server).increment(player.getUUID(),
+                        "biometime:" + c.targetBody(), seconds);
+                }
             }
         }
     }

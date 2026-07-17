@@ -32,7 +32,7 @@ displayURL="https://discord.com/invite/9v4gaRSfdJ" #optional — community Disco
 authors = "${mod_authors}" #optional
 
 # The description text for the mod (multi line!) (#mandatory)
-description = '''Team-scoped linear stage progression system with integrated item/recipe/dimension/mod locking and EMI visual feedback'''
+description = '''${mod_description}'''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
 [[mixins]]
@@ -45,6 +45,10 @@ config = "${mod_id}-ftbquests.mixins.json"
 # EMI mixins (optional - only loaded if EMI is present)
 [[mixins]]
 config = "${mod_id}-emi.mixins.json"
+
+# JEI mixins (optional - only loaded if JEI is present)
+[[mixins]]
+config = "${mod_id}-jei.mixins.json"
 
 # The [[accessTransformers]] block allows you to declare where your AT file is.
 # If this block is omitted, a fallback attempt will be made to load an AT from META-INF/accesstransformer.cfg

@@ -77,7 +77,7 @@ public final class LockDefinition {
     private final List<MobReplacement> mobReplacements;
     private final List<RegionLock> regions;
     private final StructureRules structures;
-    /** Parsed but not yet enforced — ore masquerade is deferred post-2.0. */
+    /** Ore masquerade rules enforced by the chunk rewrite, harvest, and drop pipelines. */
     private final List<OreOverride> oreOverrides;
 
     // ---- Enforcement exceptions ----
@@ -156,7 +156,7 @@ public final class LockDefinition {
         this.oreSpoofRadius                     = b.oreSpoofRadius;
         this.enforcementOverrides = b.enforcementOverrides.isEmpty()
             ? java.util.Map.of()
-            : new java.util.EnumMap<>(b.enforcementOverrides);
+            : java.util.Collections.unmodifiableMap(new java.util.EnumMap<>(b.enforcementOverrides));
         this.minecraftNamespace  = b.minecraftNamespace;
         this.unlocks             = b.unlocks != null ? b.unlocks : UnlockGateLists.EMPTY;
     }
@@ -306,8 +306,8 @@ public final class LockDefinition {
                           boolean preventBlockPlace, boolean preventExplosions,
                           boolean disableMobSpawning) {
             this.dimension = dimension;
-            this.pos1 = pos1;
-            this.pos2 = pos2;
+            this.pos1 = pos1.clone();
+            this.pos2 = pos2.clone();
             this.preventEntry = preventEntry;
             this.preventBlockBreak = preventBlockBreak;
             this.preventBlockPlace = preventBlockPlace;
@@ -316,8 +316,8 @@ public final class LockDefinition {
         }
 
         public ResourceLocation dimension() { return dimension; }
-        public int[] pos1()                 { return pos1; }
-        public int[] pos2()                 { return pos2; }
+        public int[] pos1()                 { return pos1.clone(); }
+        public int[] pos2()                 { return pos2.clone(); }
         public boolean preventEntry()       { return preventEntry; }
         public boolean preventBlockBreak()  { return preventBlockBreak; }
         public boolean preventBlockPlace()  { return preventBlockPlace; }
@@ -406,8 +406,8 @@ public final class LockDefinition {
     }
 
     /**
-     * A [[ores.overrides]] entry. Parsed for forward-compat; enforcement is deferred
-     * (see v2_update_plan.md §2.8 — on hold post-2.0).
+     * A {@code [[ores.overrides]]} entry: the locked target is shown and dropped as its
+     * configured substitutes until the owning stage is acquired.
      */
     public static final class OreOverride {
         private final ResourceLocation target;

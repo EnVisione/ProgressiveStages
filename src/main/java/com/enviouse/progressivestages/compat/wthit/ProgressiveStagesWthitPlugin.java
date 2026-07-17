@@ -1,28 +1,24 @@
 package com.enviouse.progressivestages.compat.wthit;
 
-import com.enviouse.progressivestages.common.util.Constants;
 import mcp.mobius.waila.api.IBlockComponentProvider;
+import mcp.mobius.waila.api.IClientRegistrar;
 import mcp.mobius.waila.api.IEntityComponentProvider;
-import mcp.mobius.waila.api.IRegistrar;
-import mcp.mobius.waila.api.IWailaPlugin;
-import mcp.mobius.waila.api.TooltipPosition;
-import mcp.mobius.waila.api.WailaPlugin;
+import mcp.mobius.waila.api.IWailaClientPlugin;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Block;
 
 /**
- * v3.0: the ProgressiveStages WTHIT plugin (discovered via the {@link WailaPlugin} annotation).
- * Registers one provider for both block and entity bodies. compileOnly dep, so this class only
- * loads when WTHIT is installed.
+ * v3.0: the ProgressiveStages WTHIT client plugin, discovered through
+ * {@code waila_plugins.json}. Registers one provider for both block and entity bodies.
+ * The WTHIT dependency is compile-only, so this class loads only when WTHIT is installed.
  */
-@WailaPlugin(id = Constants.MOD_ID)
-public class ProgressiveStagesWthitPlugin implements IWailaPlugin {
+public class ProgressiveStagesWthitPlugin implements IWailaClientPlugin {
 
     @Override
-    public void register(IRegistrar registrar) {
+    public void register(IClientRegistrar registrar) {
         StageLockWthitProvider provider = new StageLockWthitProvider();
-        // Cast disambiguates the IBlock/IEntity addComponent overloads (one provider implements both).
-        registrar.addComponent((IBlockComponentProvider) provider, TooltipPosition.BODY, Block.class);
-        registrar.addComponent((IEntityComponentProvider) provider, TooltipPosition.BODY, Entity.class);
+        // Cast disambiguates the block/entity body overloads (one provider implements both).
+        registrar.body((IBlockComponentProvider) provider, Block.class);
+        registrar.body((IEntityComponentProvider) provider, Entity.class);
     }
 }

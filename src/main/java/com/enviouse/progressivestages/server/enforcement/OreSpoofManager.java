@@ -141,6 +141,28 @@ public final class OreSpoofManager {
         }
     }
 
+    /** Drop every world/player cache when the logical server stops. */
+    public void resetRuntimeState() {
+        playerStates.clear();
+        chunkSpoofCandidates.clear();
+    }
+
+    /**
+     * Restore every currently spoofed position before a live stage reload, then invalidate the
+     * candidate cache so newly-added and removed ore rules are discovered from fresh palettes.
+     */
+    public void prepareForReload(net.minecraft.server.MinecraftServer server) {
+        if (server != null) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                PlayerSpoofState state = playerStates.get(player.getUUID());
+                if (state != null && player.level() instanceof ServerLevel level) {
+                    clearAllSpoofed(player, level, state);
+                }
+            }
+        }
+        resetRuntimeState();
+    }
+
     /** Snappy un-spoof — called when a player gains stages. Pushes truth packets and clears state. */
     public void onStageGained(ServerPlayer player) {
         LockRegistry reg = LockRegistry.getInstance();

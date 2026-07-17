@@ -69,6 +69,9 @@ public final class KubeJSStagesCompat {
         ServerPlayer sp = event.getPlayer();
         if (sp == null) return;
         String stage = event.getStageId().toString();
+        com.enviouse.progressivestages.common.compat.ScriptHooks.fireChanged(
+            sp, stage, event.getChangeType().name().toLowerCase(java.util.Locale.ROOT),
+            event.getCause().name().toLowerCase(java.util.Locale.ROOT), event.getTeamId().toString());
         if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.GRANTED) {
             com.enviouse.progressivestages.common.compat.ScriptHooks.fireGranted(sp, stage);
         } else if (event.getChangeType() == com.enviouse.progressivestages.common.api.StageChangeType.REVOKED) {
@@ -99,9 +102,8 @@ public final class KubeJSStagesCompat {
             if (!(player instanceof ServerPlayer sp)) return false;
             StageId id = safeParse(stage);
             if (id == null) return false;
-            if (StageManager.getInstance().hasStage(sp, id)) return false;
-            StageManager.getInstance().grantStage(sp, id);
-            return true;
+            return com.enviouse.progressivestages.common.api.ProgressiveStagesAPI.grantStage(
+                sp, id, com.enviouse.progressivestages.common.api.StageCause.SCRIPT);
         }
 
         @Override
@@ -109,9 +111,8 @@ public final class KubeJSStagesCompat {
             if (!(player instanceof ServerPlayer sp)) return false;
             StageId id = safeParse(stage);
             if (id == null) return false;
-            if (!StageManager.getInstance().hasStage(sp, id)) return false;
-            StageManager.getInstance().revokeStage(sp, id);
-            return true;
+            return com.enviouse.progressivestages.common.api.ProgressiveStagesAPI.revokeStage(
+                sp, id, com.enviouse.progressivestages.common.api.StageCause.SCRIPT);
         }
 
         @Override

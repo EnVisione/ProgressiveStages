@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.common.config;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * v2.4: a stage's {@code [cost]} section — makes the stage purchasable from the in-game tree GUI
@@ -27,5 +28,10 @@ public record StageCost(int xpLevels, List<ItemCost> items, boolean bypassRequir
         refundPercent = Math.max(0, Math.min(100, refundPercent));
     }
 
-    public record ItemCost(ResourceLocation item, int count) {}
+    public record ItemCost(ResourceLocation item, int count) {
+        public ItemCost {
+            item = Objects.requireNonNull(item, "item");
+            count = Math.max(1, count);
+        }
+    }
 }

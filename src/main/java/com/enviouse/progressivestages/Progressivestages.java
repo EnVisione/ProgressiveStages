@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages;
 
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.config.ConfigPaths;
 import com.enviouse.progressivestages.common.data.StageAttachments;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
@@ -10,7 +11,6 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -19,7 +19,7 @@ import java.nio.file.Path;
 
 /**
  * Main mod class for ProgressiveStages
- * Team-scoped linear stage progression system with integrated item/recipe/dimension/mod locking and EMI visual feedback
+ * Customizable graph-based stage progression, content gating, triggers, scripting, and UI.
  */
 @Mod(Constants.MOD_ID)
 public class Progressivestages {
@@ -36,11 +36,10 @@ public class Progressivestages {
         // Register Global Loot Modifier codec (2.0 — filters chest/fishing/archeology loot)
         com.enviouse.progressivestages.common.LootModifiers.register(modEventBus);
 
-        // Register config (custom filename: progressivestages.toml instead of default progressivestages-common.toml)
-        modContainer.registerConfig(ModConfig.Type.COMMON, StageConfig.SPEC, "progressivestages.toml");
-
-        // Create config folder early (before world load)
+        // Build/migrate the unified hierarchy before NeoForge opens the common config.
         createConfigFolder();
+
+        modContainer.registerConfig(ModConfig.Type.COMMON, StageConfig.SPEC, Constants.MAIN_CONFIG_FILE);
 
         // Register setup events
         modEventBus.addListener(this::commonSetup);
@@ -59,14 +58,13 @@ public class Progressivestages {
      * Also generates default stage files if none exist.
      */
     private void createConfigFolder() {
-        Path configFolder = FMLPaths.CONFIGDIR.get().resolve(Constants.STAGE_FILES_DIRECTORY);
+        ConfigPaths.prepareAndMigrate(LOGGER);
+        Path configFolder = ConfigPaths.stagesDirectory();
 
-        boolean folderCreated = false;
         if (!Files.exists(configFolder)) {
             try {
                 Files.createDirectories(configFolder);
                 LOGGER.info("[ProgressiveStages] Created config directory: {}", configFolder);
-                folderCreated = true;
             } catch (java.nio.file.AccessDeniedException e) {
                 LOGGER.error("[ProgressiveStages] Permission denied creating config directory: {}", configFolder);
                 LOGGER.error("[ProgressiveStages] Please check file permissions for the config folder.");
@@ -97,14 +95,13 @@ public class Progressivestages {
      */
     private void generateDefaultStageFilesIfNeeded(Path configFolder) {
         // Count existing stage files (excluding triggers.toml)
-        int stageFileCount = 0;
-        try (var stream = Files.newDirectoryStream(configFolder, "*.toml")) {
-            for (Path file : stream) {
-                String fileName = file.getFileName().toString().toLowerCase();
-                if (!fileName.equals("triggers.toml")) {
-                    stageFileCount++;
-                }
-            }
+        long stageFileCount;
+        try (var stream = Files.walk(configFolder)) {
+            stageFileCount = stream
+                .filter(Files::isRegularFile)
+                .filter(file -> file.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".toml"))
+                .filter(file -> !file.getFileName().toString().equalsIgnoreCase("triggers.toml"))
+                .count();
         } catch (IOException e) {
             LOGGER.warn("[ProgressiveStages] Could not scan config directory for stage files: {}", e.getMessage());
             return;

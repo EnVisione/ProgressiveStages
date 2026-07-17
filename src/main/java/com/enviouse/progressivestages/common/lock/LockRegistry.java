@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -82,21 +83,21 @@ public final class LockRegistry {
     private final ResolvedCategory<Item>              recipeOutputCat = new ResolvedCategory<>(Registries.ITEM);
 
     // ------- other lockable structures -------
-    private final Map<ResourceLocation, StageId>            dimensionLocks   = new ConcurrentHashMap<>();
-    private final Map<String, InteractionLockEntry>         interactionLocks = new ConcurrentHashMap<>();
+    private final Map<ResourceLocation, Set<StageId>>       dimensionLocks   = new ConcurrentHashMap<>();
+    private final Map<String, List<InteractionLockEntry>>   interactionLocks = new ConcurrentHashMap<>();
     private final List<MobReplacementEntry>                 mobReplacements  = Collections.synchronizedList(new ArrayList<>());
     private final List<RegionLockEntry>                     regions          = Collections.synchronizedList(new ArrayList<>());
     private final List<OreOverrideEntry>                    oreOverrides     = Collections.synchronizedList(new ArrayList<>());
     private StructureRulesAggregate                         structures       = StructureRulesAggregate.EMPTY;
     /** Curios slot identifier → required stage. Populated if the compat module is active. */
-    private final Map<String, StageId>                      curioSlotLocks   = new ConcurrentHashMap<>();
+    private final Map<String, Set<StageId>>                 curioSlotLocks   = new ConcurrentHashMap<>();
 
     // ------- enforcement exceptions -------
-    private final List<String> useExemptions          = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> pickupExemptions       = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> hotbarExemptions       = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> mousePickupExemptions  = Collections.synchronizedList(new ArrayList<>());
-    private final List<String> inventoryExemptions    = Collections.synchronizedList(new ArrayList<>());
+    private final Map<StageId, List<String>> useExemptions         = new ConcurrentHashMap<>();
+    private final Map<StageId, List<String>> pickupExemptions      = new ConcurrentHashMap<>();
+    private final Map<StageId, List<String>> hotbarExemptions      = new ConcurrentHashMap<>();
+    private final Map<StageId, List<String>> mousePickupExemptions = new ConcurrentHashMap<>();
+    private final Map<StageId, List<String>> inventoryExemptions   = new ConcurrentHashMap<>();
 
     // ------- v2.0: stages that gate the minecraft: namespace via shorthand -------
     private final Set<StageId> vanillaNamespaceGatingStages = ConcurrentHashMap.newKeySet();
@@ -223,13 +224,13 @@ public final class LockRegistry {
         recipeOutputCat.register(locks.recipeOutputs(), id);
 
         for (ResourceLocation dim : locks.lockedDimensions()) {
-            dimensionLocks.put(dim, id);
+            dimensionLocks.computeIfAbsent(dim, k -> ConcurrentHashMap.newKeySet()).add(id);
         }
 
         for (LockDefinition.InteractionLock i : locks.interactions()) {
             String key = interactionKey(i.type(), i.heldItem(), i.targetBlock());
-            interactionLocks.put(key, new InteractionLockEntry(
-                i.type(), i.heldItem(), i.targetBlock(), i.description(), id));
+            interactionLocks.computeIfAbsent(key, k -> new java.util.concurrent.CopyOnWriteArrayList<>())
+                .add(new InteractionLockEntry(i.type(), i.heldItem(), i.targetBlock(), i.description(), id));
         }
 
         for (LockDefinition.MobReplacement m : locks.mobReplacements()) {
@@ -288,14 +289,16 @@ public final class LockRegistry {
         structures = structures.merge(locks.structures(), id);
 
         for (String slot : locks.curioLockedSlots()) {
-            if (slot != null && !slot.isEmpty()) curioSlotLocks.putIfAbsent(slot, id);
+            if (slot != null && !slot.isEmpty()) {
+                curioSlotLocks.computeIfAbsent(slot, k -> ConcurrentHashMap.newKeySet()).add(id);
+            }
         }
 
-        useExemptions.addAll(locks.allowedUse());
-        pickupExemptions.addAll(locks.allowedPickup());
-        hotbarExemptions.addAll(locks.allowedHotbar());
-        mousePickupExemptions.addAll(locks.allowedMousePickup());
-        inventoryExemptions.addAll(locks.allowedInventory());
+        putExemptions(useExemptions, id, locks.allowedUse());
+        putExemptions(pickupExemptions, id, locks.allowedPickup());
+        putExemptions(hotbarExemptions, id, locks.allowedHotbar());
+        putExemptions(mousePickupExemptions, id, locks.allowedMousePickup());
+        putExemptions(inventoryExemptions, id, locks.allowedInventory());
 
         if (locks.minecraftNamespace()) {
             vanillaNamespaceGatingStages.add(id);
@@ -347,6 +350,15 @@ public final class LockRegistry {
     /** True if any stage declared an {@code [enforcement]} category override. Cheap fast-path gate. */
     public boolean hasEnforcementOverrides() {
         return anyEnforcementOverrides;
+    }
+
+    /** True when at least one stage explicitly overrides this specific category. */
+    public boolean hasEnforcementOverrides(EnforcementCategory category) {
+        if (!anyEnforcementOverrides || category == null) return false;
+        for (Map<EnforcementCategory, Boolean> overrides : stageEnforcementOverrides.values()) {
+            if (overrides.containsKey(category)) return true;
+        }
+        return false;
     }
 
     /**
@@ -422,7 +434,7 @@ public final class LockRegistry {
         for (Item item : BuiltInRegistries.ITEM) {
             ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
             if (id == null) continue;
-            itemCat.findStage(id, item.builtInRegistryHolder())
+            itemCat.findStage(id, BuiltInRegistries.ITEM.wrapAsHolder(item))
                 .ifPresent(stage -> resolved.put(id, stage));
         }
 
@@ -439,11 +451,7 @@ public final class LockRegistry {
     // ================================================================
 
     public Optional<StageId> getRequiredStageForBlock(Block block) {
-        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
-        // Preserve v1 behavior: a block counts as whitelisted if its item form is whitelisted.
-        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(block.asItem());
-        if (itemId != null && itemCat.isWhitelisted(itemId)) return Optional.empty();
-        return blockCat.findStage(id, block.builtInRegistryHolder());
+        return getRequiredStagesForBlock(block).stream().findFirst();
     }
 
     public boolean isBlockUnlocked(ResourceLocation blockId) {
@@ -460,7 +468,7 @@ public final class LockRegistry {
         if (fluid == null) {
             return fluidCat.findStageIdOnly(fluidId);
         }
-        return fluidCat.findStage(fluidId, fluid.builtInRegistryHolder());
+        return fluidCat.findStage(fluidId, BuiltInRegistries.FLUID.wrapAsHolder(fluid));
     }
 
     public boolean isFluidUnlocked(ResourceLocation fluidId) {
@@ -489,7 +497,7 @@ public final class LockRegistry {
 
     public Optional<StageId> getRequiredStageForEntity(EntityType<?> type) {
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        return entityCat.findStage(id, type.builtInRegistryHolder());
+        return entityCat.findStage(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
     }
 
     public boolean isEntityLocked(EntityType<?> type) {
@@ -498,12 +506,11 @@ public final class LockRegistry {
 
     public Optional<StageId> getRequiredStageForSpawn(EntityType<?> type) {
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        return spawnCat.findStage(id, type.builtInRegistryHolder());
+        return spawnCat.findStage(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
     }
 
     public Optional<StageId> getRequiredStageForDimension(ResourceLocation dimId) {
-        if (dimId == null) return Optional.empty();
-        return Optional.ofNullable(dimensionLocks.get(dimId));
+        return getRequiredStagesForDimension(dimId).stream().findFirst();
     }
 
     // ================================================================
@@ -518,7 +525,7 @@ public final class LockRegistry {
     public Optional<StageId> getRequiredStageForRecipeByOutput(Item outputItem) {
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(outputItem);
         if (id == null) return Optional.empty();
-        return recipeOutputCat.findStage(id, outputItem.builtInRegistryHolder());
+        return recipeOutputCat.findStage(id, BuiltInRegistries.ITEM.wrapAsHolder(outputItem));
     }
 
     public boolean hasRecipeOnlyLock(Item item) {
@@ -539,7 +546,7 @@ public final class LockRegistry {
         for (Item item : BuiltInRegistries.ITEM) {
             ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
             if (id == null) continue;
-            recipeOutputCat.findStage(id, item.builtInRegistryHolder())
+            recipeOutputCat.findStage(id, BuiltInRegistries.ITEM.wrapAsHolder(item))
                 .ifPresent(stage -> out.put(id, stage));
         }
         return Collections.unmodifiableMap(out);
@@ -576,18 +583,27 @@ public final class LockRegistry {
     // Query — interactions
     // ================================================================
 
-    public Optional<StageId> getRequiredStageForInteraction(String type, String heldItem, String target) {
-        InteractionLockEntry exact = interactionLocks.get(interactionKey(type, heldItem, target));
-        if (exact != null) return Optional.of(exact.requiredStage);
-        for (InteractionLockEntry e : interactionLocks.values()) {
-            if (e.matches(type, heldItem, target)) return Optional.of(e.requiredStage);
+    public Set<StageId> getRequiredStagesForInteraction(String type, String heldItem, String target) {
+        Set<StageId> out = new LinkedHashSet<>();
+        List<InteractionLockEntry> exact = interactionLocks.get(interactionKey(type, heldItem, target));
+        if (exact != null) for (InteractionLockEntry e : exact) out.add(e.requiredStage);
+        for (List<InteractionLockEntry> entries : interactionLocks.values()) {
+            for (InteractionLockEntry e : entries) {
+                if (e.matches(type, heldItem, target)) out.add(e.requiredStage);
+            }
         }
-        return Optional.empty();
+        return out.isEmpty() ? Set.of() : Set.copyOf(out);
+    }
+
+    public Optional<StageId> getRequiredStageForInteraction(String type, String heldItem, String target) {
+        return getRequiredStagesForInteraction(type, heldItem, target).stream().findFirst();
     }
 
     public java.util.Collection<InteractionLockEntry> getAllInteractionLocksOfType(String type) {
         List<InteractionLockEntry> out = new ArrayList<>();
-        for (InteractionLockEntry e : interactionLocks.values()) if (type.equals(e.type)) out.add(e);
+        for (List<InteractionLockEntry> entries : interactionLocks.values()) {
+            for (InteractionLockEntry e : entries) if (type.equals(e.type)) out.add(e);
+        }
         return out;
     }
 
@@ -599,11 +615,38 @@ public final class LockRegistry {
     // Enforcement exemption checks
     // ================================================================
 
-    public boolean isExemptFromUse(Item item)          { return matchesExemption(item, useExemptions); }
-    public boolean isExemptFromPickup(Item item)       { return matchesExemption(item, pickupExemptions); }
-    public boolean isExemptFromHotbar(Item item)       { return matchesExemption(item, hotbarExemptions); }
-    public boolean isExemptFromMousePickup(Item item)  { return matchesExemption(item, mousePickupExemptions); }
-    public boolean isExemptFromInventory(Item item)    { return matchesExemption(item, inventoryExemptions); }
+    public boolean isExemptFromUse(Item item, Set<StageId> missing) {
+        return allEnforcingStagesExempt(item, missing, EnforcementCategory.ITEM_USE, useExemptions);
+    }
+    public boolean isExemptFromPickup(Item item, Set<StageId> missing) {
+        return allEnforcingStagesExempt(item, missing, EnforcementCategory.ITEM_PICKUP, pickupExemptions);
+    }
+    public boolean isExemptFromHotbar(Item item, Set<StageId> missing) {
+        return allEnforcingStagesExempt(item, missing, EnforcementCategory.ITEM_HOTBAR, hotbarExemptions);
+    }
+    public boolean isExemptFromMousePickup(Item item, Set<StageId> missing) {
+        return allEnforcingStagesExempt(item, missing, EnforcementCategory.ITEM_MOUSE_PICKUP, mousePickupExemptions);
+    }
+    public boolean isExemptFromInventory(Item item, Set<StageId> missing) {
+        return allEnforcingStagesExempt(item, missing, EnforcementCategory.ITEM_INVENTORY, inventoryExemptions);
+    }
+
+    private static void putExemptions(Map<StageId, List<String>> target, StageId stage, List<String> values) {
+        if (values != null && !values.isEmpty()) target.put(stage, List.copyOf(values));
+    }
+
+    private boolean allEnforcingStagesExempt(Item item, Set<StageId> missing,
+                                              EnforcementCategory category,
+                                              Map<StageId, List<String>> exemptions) {
+        if (item == null || missing == null || missing.isEmpty()) return false;
+        boolean anyEnforcing = false;
+        for (StageId stage : missing) {
+            if (!isCategoryEnforced(stage, category)) continue;
+            anyEnforcing = true;
+            if (!matchesExemption(item, exemptions.getOrDefault(stage, List.of()))) return false;
+        }
+        return anyEnforcing;
+    }
 
     private boolean matchesExemption(Item item, List<String> exemptions) {
         if (exemptions.isEmpty()) return false;
@@ -616,7 +659,7 @@ public final class LockRegistry {
             if (entry.startsWith("#")) {
                 try {
                     TagKey<Item> tagKey = TagKey.create(Registries.ITEM, ResourceLocation.parse(entry.substring(1)));
-                    if (item.builtInRegistryHolder().is(tagKey)) return true;
+                    if (BuiltInRegistries.ITEM.wrapAsHolder(item).is(tagKey)) return true;
                 } catch (Exception ignored) {}
             } else if (entry.contains(":")) {
                 if (itemIdStr.equals(entry)) return true;
@@ -637,12 +680,12 @@ public final class LockRegistry {
 
     public Optional<StageId> getRequiredStageForCrop(Block block) {
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
-        return cropCat.findStage(id, block.builtInRegistryHolder());
+        return cropCat.findStage(id, BuiltInRegistries.BLOCK.wrapAsHolder(block));
     }
 
     public Optional<StageId> getRequiredStageForScreen(Block block) {
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
-        return screenCat.findStage(id, block.builtInRegistryHolder());
+        return screenCat.findStage(id, BuiltInRegistries.BLOCK.wrapAsHolder(block));
     }
 
     /**
@@ -653,28 +696,28 @@ public final class LockRegistry {
     public Optional<StageId> getRequiredStageForScreenItem(Item item) {
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
         if (id == null) return Optional.empty();
-        return screenItemCat.findStage(id, item.builtInRegistryHolder());
+        return screenItemCat.findStage(id, BuiltInRegistries.ITEM.wrapAsHolder(item));
     }
 
     public Optional<StageId> getRequiredStageForLoot(Item item) {
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
         if (id == null) return Optional.empty();
-        return lootCat.findStage(id, item.builtInRegistryHolder());
+        return lootCat.findStage(id, BuiltInRegistries.ITEM.wrapAsHolder(item));
     }
 
     public Optional<StageId> getRequiredStageForPetTaming(EntityType<?> type) {
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        return petTamingCat.findStage(id, type.builtInRegistryHolder());
+        return petTamingCat.findStage(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
     }
 
     public Optional<StageId> getRequiredStageForPetBreeding(EntityType<?> type) {
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        return petBreedingCat.findStage(id, type.builtInRegistryHolder());
+        return petBreedingCat.findStage(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
     }
 
     public Optional<StageId> getRequiredStageForPetCommanding(EntityType<?> type) {
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        return petCommandingCat.findStage(id, type.builtInRegistryHolder());
+        return petCommandingCat.findStage(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
     }
 
     public List<MobReplacementEntry> getMobReplacements() {
@@ -695,12 +738,13 @@ public final class LockRegistry {
 
     /** Unmodifiable view of locked Curios slot identifiers → required stage. */
     public Map<String, StageId> getCurioSlotLocks() {
-        return Collections.unmodifiableMap(curioSlotLocks);
+        Map<String, StageId> out = new LinkedHashMap<>();
+        curioSlotLocks.forEach((slot, stages) -> stages.stream().findFirst().ifPresent(s -> out.put(slot, s)));
+        return Collections.unmodifiableMap(out);
     }
 
     public Optional<StageId> getRequiredStageForCurioSlot(String slotIdentifier) {
-        if (slotIdentifier == null) return Optional.empty();
-        return Optional.ofNullable(curioSlotLocks.get(slotIdentifier));
+        return getRequiredStagesForCurioSlot(slotIdentifier).stream().findFirst();
     }
 
     // ================================================================
@@ -814,7 +858,7 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStages(Item item) {
         if (item == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-        Set<StageId> raw = itemCat.findStages(id, item.builtInRegistryHolder());
+        Set<StageId> raw = itemCat.findStages(id, BuiltInRegistries.ITEM.wrapAsHolder(item));
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
 
@@ -822,8 +866,12 @@ public final class LockRegistry {
         if (block == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(block.asItem());
-        if (itemId != null && itemCat.isWhitelisted(itemId)) return Set.of();
-        Set<StageId> raw = blockCat.findStages(id, block.builtInRegistryHolder());
+        Set<StageId> raw = blockCat.findStages(id, BuiltInRegistries.BLOCK.wrapAsHolder(block));
+        if (itemId != null && !raw.isEmpty()) {
+            Set<StageId> filtered = new LinkedHashSet<>(raw);
+            filtered.removeIf(stage -> itemCat.isWhitelistedFor(itemId, stage));
+            raw = filtered.isEmpty() ? Set.of() : Set.copyOf(filtered);
+        }
         // v2.0: apply per-stage [unlocks] carve-outs (mods is the meaningful filter for blocks).
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
@@ -833,7 +881,7 @@ public final class LockRegistry {
         Fluid fluid = BuiltInRegistries.FLUID.get(fluidId);
         Set<StageId> raw = (fluid == null)
             ? fluidCat.findStagesIdOnly(fluidId)
-            : fluidCat.findStages(fluidId, fluid.builtInRegistryHolder());
+            : fluidCat.findStages(fluidId, BuiltInRegistries.FLUID.wrapAsHolder(fluid));
         return applyPerStageUnlocksFluid(raw, fluidId, fluidId.getNamespace());
     }
 
@@ -842,21 +890,21 @@ public final class LockRegistry {
         EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(entityId);
         Set<StageId> raw = (type == null)
             ? entityCat.findStagesIdOnly(entityId)
-            : entityCat.findStages(entityId, type.builtInRegistryHolder());
+            : entityCat.findStages(entityId, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
         return applyPerStageUnlocksEntity(raw, entityId, entityId.getNamespace());
     }
 
     public Set<StageId> getRequiredStagesForEntity(EntityType<?> type) {
         if (type == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        Set<StageId> raw = entityCat.findStages(id, type.builtInRegistryHolder());
+        Set<StageId> raw = entityCat.findStages(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
         return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
     }
 
     public Set<StageId> getRequiredStagesForDimension(ResourceLocation dimId) {
         if (dimId == null) return Set.of();
-        StageId direct = dimensionLocks.get(dimId);
-        Set<StageId> raw = direct != null ? Set.of(direct) : Set.of();
+        Set<StageId> direct = dimensionLocks.get(dimId);
+        Set<StageId> raw = direct != null ? Set.copyOf(direct) : Set.of();
         return applyPerStageUnlocksDimension(raw, dimId);
     }
 
@@ -870,7 +918,7 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStagesForRecipeByOutput(Item output) {
         if (output == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(output);
-        Set<StageId> raw = recipeOutputCat.findStages(id, output.builtInRegistryHolder());
+        Set<StageId> raw = recipeOutputCat.findStages(id, BuiltInRegistries.ITEM.wrapAsHolder(output));
         // v2.0: carve-outs apply on the output item and its mod namespace.
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
@@ -881,12 +929,12 @@ public final class LockRegistry {
 
     public Set<StageId> getRequiredStagesForMod(String modId) {
         if (modId == null) return Set.of();
-        return itemCat.modStages(modId);
+        return applyPerStageUnlocks(itemCat.modStages(modId), null, modId.toLowerCase(java.util.Locale.ROOT));
     }
 
     public Set<StageId> getRequiredStagesForName(String pattern) {
         if (pattern == null) return Set.of();
-        String needle = pattern.toLowerCase();
+        String needle = pattern.toLowerCase(java.util.Locale.ROOT);
         Set<StageId> out = null;
         // we can't access the inner entries here; use existing single-stage as fallback
         Optional<StageId> single = itemCat.nameStage(pattern);
@@ -1080,21 +1128,21 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStagesForSpawn(EntityType<?> type) {
         if (type == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        Set<StageId> raw = spawnCat.findStages(id, type.builtInRegistryHolder());
+        Set<StageId> raw = spawnCat.findStages(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
         return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
     }
 
     public Set<StageId> getRequiredStagesForLoot(Item item) {
         if (item == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-        Set<StageId> raw = lootCat.findStages(id, item.builtInRegistryHolder());
+        Set<StageId> raw = lootCat.findStages(id, BuiltInRegistries.ITEM.wrapAsHolder(item));
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
 
     public Set<StageId> getRequiredStagesForCrop(Block block) {
         if (block == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
-        Set<StageId> raw = cropCat.findStages(id, block.builtInRegistryHolder());
+        Set<StageId> raw = cropCat.findStages(id, BuiltInRegistries.BLOCK.wrapAsHolder(block));
         // v2.0: per-stage [unlocks] carve-outs (mods filter is meaningful for crop blocks).
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
@@ -1102,7 +1150,7 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStagesForScreen(Block block) {
         if (block == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
-        Set<StageId> raw = screenCat.findStages(id, block.builtInRegistryHolder());
+        Set<StageId> raw = screenCat.findStages(id, BuiltInRegistries.BLOCK.wrapAsHolder(block));
         // v2.0: per-stage [unlocks] carve-outs.
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
@@ -1110,7 +1158,7 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStagesForScreenItem(Item item) {
         if (item == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-        Set<StageId> raw = screenItemCat.findStages(id, item.builtInRegistryHolder());
+        Set<StageId> raw = screenItemCat.findStages(id, BuiltInRegistries.ITEM.wrapAsHolder(item));
         // v2.0: per-stage [unlocks] carve-outs (item/mod filter applies directly here).
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
@@ -1119,7 +1167,7 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStagesForTrade(Item item) {
         if (item == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-        Set<StageId> raw = tradeCat.findStages(id, item.builtInRegistryHolder());
+        Set<StageId> raw = tradeCat.findStages(id, BuiltInRegistries.ITEM.wrapAsHolder(item));
         return applyPerStageUnlocks(raw, id, id != null ? id.getNamespace() : null);
     }
 
@@ -1174,7 +1222,7 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStagesForPetTaming(EntityType<?> type) {
         if (type == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        Set<StageId> raw = petTamingCat.findStages(id, type.builtInRegistryHolder());
+        Set<StageId> raw = petTamingCat.findStages(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
         // v2.0: per-stage [unlocks] entity carve-outs.
         return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
     }
@@ -1182,21 +1230,21 @@ public final class LockRegistry {
     public Set<StageId> getRequiredStagesForPetBreeding(EntityType<?> type) {
         if (type == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        Set<StageId> raw = petBreedingCat.findStages(id, type.builtInRegistryHolder());
+        Set<StageId> raw = petBreedingCat.findStages(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
         return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
     }
 
     public Set<StageId> getRequiredStagesForPetCommanding(EntityType<?> type) {
         if (type == null) return Set.of();
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        Set<StageId> raw = petCommandingCat.findStages(id, type.builtInRegistryHolder());
+        Set<StageId> raw = petCommandingCat.findStages(id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type));
         return applyPerStageUnlocksEntity(raw, id, id != null ? id.getNamespace() : null);
     }
 
     public Set<StageId> getRequiredStagesForCurioSlot(String slotIdentifier) {
         if (slotIdentifier == null) return Set.of();
-        StageId direct = curioSlotLocks.get(slotIdentifier);
-        return direct != null ? Set.of(direct) : Set.of();
+        Set<StageId> direct = curioSlotLocks.get(slotIdentifier);
+        return direct != null ? Set.copyOf(direct) : Set.of();
     }
 
     // ----- isXxxBlockedFor + primary helpers for secondary categories -----
@@ -1353,18 +1401,21 @@ public final class LockRegistry {
     private static final class ResolvedCategory<T> {
         private final ResourceKey<? extends Registry<T>> registryKey;
         private final List<Entry<T>> entries = Collections.synchronizedList(new ArrayList<>());
-        private final Set<ResourceLocation> whitelist = ConcurrentHashMap.newKeySet();
+        /** Exact-id carve-outs keyed to the stage they exempt; never global across stages. */
+        private final Map<ResourceLocation, Set<StageId>> whitelistStages = new ConcurrentHashMap<>();
 
         ResolvedCategory(ResourceKey<? extends Registry<T>> registryKey) {
             this.registryKey = registryKey;
         }
 
-        void clear() { entries.clear(); whitelist.clear(); }
+        void clear() { entries.clear(); whitelistStages.clear(); }
 
         void register(CategoryLocks locks, StageId stage) {
             if (locks == null) return;
             for (PrefixEntry e : locks.locked()) entries.add(new Entry<>(e, stage));
-            whitelist.addAll(locks.alwaysUnlocked());
+            for (ResourceLocation id : locks.alwaysUnlocked()) {
+                whitelistStages.computeIfAbsent(id, k -> ConcurrentHashMap.newKeySet()).add(stage);
+            }
         }
 
         /** Register a single {@link PrefixEntry} → stage pair (used for synthetic entries). */
@@ -1375,9 +1426,10 @@ public final class LockRegistry {
 
         Optional<StageId> findStage(ResourceLocation id, Holder<T> holder) {
             if (id == null) return Optional.empty();
-            if (whitelist.contains(id)) return Optional.empty();
             for (Entry<T> e : entries) {
-                if (e.prefix.matches(id, holder, registryKey)) return Optional.of(e.stage);
+                if (e.prefix.matches(id, holder, registryKey) && !isWhitelistedFor(id, e.stage)) {
+                    return Optional.of(e.stage);
+                }
             }
             return Optional.empty();
         }
@@ -1385,10 +1437,9 @@ public final class LockRegistry {
         /** v2.0 multi-stage: every gating stage for this id (deduplicated, insertion order). */
         Set<StageId> findStages(ResourceLocation id, Holder<T> holder) {
             if (id == null) return Set.of();
-            if (whitelist.contains(id)) return Set.of();
             Set<StageId> out = null;
             for (Entry<T> e : entries) {
-                if (e.prefix.matches(id, holder, registryKey)) {
+                if (e.prefix.matches(id, holder, registryKey) && !isWhitelistedFor(id, e.stage)) {
                     if (out == null) out = new java.util.LinkedHashSet<>();
                     out.add(e.stage);
                 }
@@ -1399,19 +1450,17 @@ public final class LockRegistry {
         /** ID-only variant for contexts with no holder (e.g. dimensions, recipe IDs). */
         Optional<StageId> findStageIdOnly(ResourceLocation id) {
             if (id == null) return Optional.empty();
-            if (whitelist.contains(id)) return Optional.empty();
             for (Entry<T> e : entries) {
-                if (e.prefix.matchesIdOnly(id)) return Optional.of(e.stage);
+                if (e.prefix.matchesIdOnly(id) && !isWhitelistedFor(id, e.stage)) return Optional.of(e.stage);
             }
             return Optional.empty();
         }
 
         Set<StageId> findStagesIdOnly(ResourceLocation id) {
             if (id == null) return Set.of();
-            if (whitelist.contains(id)) return Set.of();
             Set<StageId> out = null;
             for (Entry<T> e : entries) {
-                if (e.prefix.matchesIdOnly(id)) {
+                if (e.prefix.matchesIdOnly(id) && !isWhitelistedFor(id, e.stage)) {
                     if (out == null) out = new java.util.LinkedHashSet<>();
                     out.add(e.stage);
                 }
@@ -1420,11 +1469,16 @@ public final class LockRegistry {
         }
 
         boolean isWhitelisted(ResourceLocation id) {
-            return id != null && whitelist.contains(id);
+            return id != null && whitelistStages.containsKey(id);
+        }
+
+        boolean isWhitelistedFor(ResourceLocation id, StageId stage) {
+            Set<StageId> stages = id == null ? null : whitelistStages.get(id);
+            return stages != null && stages.contains(stage);
         }
 
         Set<ResourceLocation> whitelistView() {
-            return Collections.unmodifiableSet(whitelist);
+            return Collections.unmodifiableSet(whitelistStages.keySet());
         }
 
         /** Direct ID-kind locks in this category, as a map. */
@@ -1462,7 +1516,7 @@ public final class LockRegistry {
         }
 
         Optional<StageId> modStage(String modId) {
-            String needle = modId.toLowerCase();
+            String needle = modId.toLowerCase(java.util.Locale.ROOT);
             for (Entry<T> e : entries) {
                 if (e.prefix.kind() == PrefixEntry.Kind.MOD && e.prefix.value().equals(needle)) {
                     return Optional.of(e.stage);
@@ -1472,7 +1526,7 @@ public final class LockRegistry {
         }
 
         Set<StageId> modStages(String modId) {
-            String needle = modId.toLowerCase();
+            String needle = modId.toLowerCase(java.util.Locale.ROOT);
             Set<StageId> out = null;
             for (Entry<T> e : entries) {
                 if (e.prefix.kind() == PrefixEntry.Kind.MOD && e.prefix.value().equals(needle)) {
@@ -1492,7 +1546,7 @@ public final class LockRegistry {
         }
 
         Optional<StageId> nameStage(String pattern) {
-            String needle = pattern.toLowerCase();
+            String needle = pattern.toLowerCase(java.util.Locale.ROOT);
             for (Entry<T> e : entries) {
                 if (e.prefix.kind() == PrefixEntry.Kind.NAME && e.prefix.value().equals(needle)) {
                     return Optional.of(e.stage);
@@ -1766,8 +1820,8 @@ public final class LockRegistry {
         public static final StructureRulesAggregate EMPTY =
             new StructureRulesAggregate(Map.of(), false, false, false, false, 0);
 
-        /** Structure ID → required stage. Only exact IDs are used for entry locks. */
-        public final Map<ResourceLocation, StageId> lockedEntry;
+        /** Structure ID → every required stage. Only exact IDs are used for entry locks. */
+        public final Map<ResourceLocation, Set<StageId>> lockedEntry;
         public final boolean preventBlockBreak;
         public final boolean preventBlockPlace;
         public final boolean preventExplosions;
@@ -1775,9 +1829,11 @@ public final class LockRegistry {
         /** v2.5: max entry-padding buffer (blocks) across all locked-structure stages. */
         public final int entryPadding;
 
-        public StructureRulesAggregate(Map<ResourceLocation, StageId> lockedEntry,
+        public StructureRulesAggregate(Map<ResourceLocation, Set<StageId>> lockedEntry,
                                        boolean pbb, boolean pbp, boolean pex, boolean dms, int entryPadding) {
-            this.lockedEntry = Collections.unmodifiableMap(lockedEntry);
+            Map<ResourceLocation, Set<StageId>> copy = new LinkedHashMap<>();
+            lockedEntry.forEach((id, stages) -> copy.put(id, Set.copyOf(stages)));
+            this.lockedEntry = Collections.unmodifiableMap(copy);
             this.preventBlockBreak = pbb;
             this.preventBlockPlace = pbp;
             this.preventExplosions = pex;
@@ -1787,10 +1843,11 @@ public final class LockRegistry {
 
         StructureRulesAggregate merge(LockDefinition.StructureRules other, StageId stage) {
             if (other == null || other.isEmpty()) return this;
-            Map<ResourceLocation, StageId> merged = new HashMap<>(this.lockedEntry);
+            Map<ResourceLocation, Set<StageId>> merged = new HashMap<>();
+            this.lockedEntry.forEach((id, stages) -> merged.put(id, new LinkedHashSet<>(stages)));
             for (PrefixEntry e : other.lockedEntry().locked()) {
                 if (e.kind() == PrefixEntry.Kind.ID && e.id() != null) {
-                    merged.putIfAbsent(e.id(), stage);
+                    merged.computeIfAbsent(e.id(), k -> new LinkedHashSet<>()).add(stage);
                 }
             }
             return new StructureRulesAggregate(

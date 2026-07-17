@@ -142,6 +142,10 @@ public final class IngredientGateHelper {
         NOTIFY_COOLDOWNS.remove(playerId);
     }
 
+    public static void clearAllCooldowns() {
+        NOTIFY_COOLDOWNS.clear();
+    }
+
     // -------------------- internal --------------------
 
     private static Set<Item> collectDistinct(Container c, int from, int toExclusive) {

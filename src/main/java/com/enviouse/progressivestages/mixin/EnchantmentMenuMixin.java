@@ -24,6 +24,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Gates the enchanting table at the menu level:
@@ -81,16 +82,17 @@ public abstract class EnchantmentMenuMixin {
         int clue = enchantClue[id];
         if (clue < 0) return;
 
-        final Holder<Enchantment>[] resolved = new Holder[]{null};
+        AtomicReference<Holder<Enchantment>> resolved = new AtomicReference<>();
         this.access.execute((level, pos) -> {
             IdMap<Holder<Enchantment>> idmap = level.registryAccess()
                 .registryOrThrow(Registries.ENCHANTMENT).asHolderIdMap();
-            resolved[0] = idmap.byId(clue);
+            resolved.set(idmap.byId(clue));
         });
-        if (resolved[0] == null) return;
+        Holder<Enchantment> enchantment = resolved.get();
+        if (enchantment == null) return;
 
-        if (isLocked(sp, resolved[0])) {
-            Optional<StageId> required = primaryRestrictingFor(sp, resolved[0]);
+        if (isLocked(sp, enchantment)) {
+            Optional<StageId> required = primaryRestrictingFor(sp, enchantment);
             required.ifPresent(stage -> ItemEnforcer.notifyLockedWithCooldown(sp, stage, StageConfig.getMsgTypeLabelEnchantment()));
             cir.setReturnValue(false);
         }

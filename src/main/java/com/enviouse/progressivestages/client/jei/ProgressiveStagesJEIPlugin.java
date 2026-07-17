@@ -179,12 +179,17 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
                 directFluidLocks.add(entry.getKey());
             }
         }
+        for (var entry : ClientLockCache.getAllFluidMultiLocks().entrySet()) {
+            if (ClientLockCache.isFluidLocked(entry.getKey())) {
+                directFluidLocks.add(entry.getKey());
+            }
+        }
 
         // Fluid mod locks (fluid_mods = ["..."])
         for (String modId : lockRegistry.getAllLockedFluidMods()) {
             var requiredStage = lockRegistry.getFluidModLockStage(modId);
             if (requiredStage.isPresent() && !ClientStageCache.hasStage(requiredStage.get())) {
-                lockedFluidMods.add(modId.toLowerCase());
+                lockedFluidMods.add(modId.toLowerCase(java.util.Locale.ROOT));
             }
         }
 
@@ -192,15 +197,16 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
         for (String modId : lockRegistry.getAllLockedMods()) {
             var requiredStage = lockRegistry.getModLockStage(modId);
             if (requiredStage.isPresent() && !ClientStageCache.hasStage(requiredStage.get())) {
-                lockedMods.add(modId.toLowerCase());
+                lockedMods.add(modId.toLowerCase(java.util.Locale.ROOT));
             }
         }
+        lockedMods.addAll(ClientLockCache.getLockedModIds());
 
         // Name patterns also lock fluids (names = ["diamond"])
         for (String pattern : lockRegistry.getAllNamePatterns()) {
             var requiredStage = lockRegistry.getNamePatternStage(pattern);
             if (requiredStage.isPresent() && !ClientStageCache.hasStage(requiredStage.get())) {
-                namePatterns.add(pattern.toLowerCase());
+                namePatterns.add(pattern.toLowerCase(java.util.Locale.ROOT));
             }
         }
 
@@ -229,14 +235,14 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
             }
 
             // Check fluid mod lock and general mod lock
-            String modId = fluidId.getNamespace().toLowerCase();
+            String modId = fluidId.getNamespace().toLowerCase(java.util.Locale.ROOT);
             if (lockedFluidMods.contains(modId) || lockedMods.contains(modId)) {
                 toHide.add(new FluidStack(fluid, 1000));
                 continue;
             }
 
             // Check name patterns (names = ["diamond"] locks fluids containing "diamond")
-            String fluidIdStr = fluidId.toString().toLowerCase();
+            String fluidIdStr = fluidId.toString().toLowerCase(java.util.Locale.ROOT);
             for (String pattern : namePatterns) {
                 if (fluidIdStr.contains(pattern)) {
                     toHide.add(new FluidStack(fluid, 1000));
@@ -355,17 +361,21 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
                 for (var e : _reg.getAllFluidLocks().entrySet()) {
                     if (!ClientStageCache.hasStage(e.getValue())) directFluidLocks.add(e.getKey());
                 }
+                for (var e : ClientLockCache.getAllFluidMultiLocks().entrySet()) {
+                    if (ClientLockCache.isFluidLocked(e.getKey())) directFluidLocks.add(e.getKey());
+                }
                 for (String modId : _reg.getAllLockedFluidMods()) {
                     var rs = _reg.getFluidModLockStage(modId);
-                    if (rs.isPresent() && !ClientStageCache.hasStage(rs.get())) lockedFluidMods.add(modId.toLowerCase());
+                    if (rs.isPresent() && !ClientStageCache.hasStage(rs.get())) lockedFluidMods.add(modId.toLowerCase(java.util.Locale.ROOT));
                 }
                 for (String modId : _reg.getAllLockedMods()) {
                     var rs = _reg.getModLockStage(modId);
-                    if (rs.isPresent() && !ClientStageCache.hasStage(rs.get())) lockedMods.add(modId.toLowerCase());
+                    if (rs.isPresent() && !ClientStageCache.hasStage(rs.get())) lockedMods.add(modId.toLowerCase(java.util.Locale.ROOT));
                 }
+                lockedMods.addAll(ClientLockCache.getLockedModIds());
                 for (String pattern : _reg.getAllNamePatterns()) {
                     var rs = _reg.getNamePatternStage(pattern);
-                    if (rs.isPresent() && !ClientStageCache.hasStage(rs.get())) namePatterns.add(pattern.toLowerCase());
+                    if (rs.isPresent() && !ClientStageCache.hasStage(rs.get())) namePatterns.add(pattern.toLowerCase(java.util.Locale.ROOT));
                 }
                 hideLockedFluidsAllTypes(directFluidLocks, lockedFluidMods, lockedMods, namePatterns, unlockedFluids);
                 if (!lockedMods.isEmpty()) {
@@ -476,11 +486,6 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
             return;
         }
 
-        var lockedMods = LockRegistry.getInstance().getAllLockedMods();
-        if (lockedMods.isEmpty()) {
-            return;
-        }
-
         List<FluidStack> toHide = new ArrayList<>();
         List<FluidStack> toShow = new ArrayList<>();
 
@@ -488,17 +493,11 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
             ResourceLocation fluidId = BuiltInRegistries.FLUID.getKey(fluid);
             if (fluidId == null) continue;
 
-            String modId = fluidId.getNamespace().toLowerCase();
-            var requiredStage = LockRegistry.getInstance().getModLockStage(modId);
-
-            if (requiredStage.isPresent()) {
-                FluidStack stack = new FluidStack(fluid, 1000);
-                if (ClientStageCache.hasStage(requiredStage.get())) {
-                    toShow.add(stack);
-                } else if (!StageConfig.isShowLockedRecipes()) {
-                    toHide.add(stack);
-                }
-            }
+            boolean locked = ClientLockCache.isFluidLocked(fluidId)
+                || ClientLockCache.isModLocked(fluidId.getNamespace());
+            FluidStack stack = new FluidStack(fluid, 1000);
+            if (locked && !StageConfig.isShowLockedRecipes()) toHide.add(stack);
+            else toShow.add(stack);
         }
 
         try {
@@ -580,12 +579,12 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
                 if (ing == null) continue;
                 String displayMod = null;
                 try { displayMod = helper.getDisplayModId(ing); } catch (Throwable ignored) {}
-                if (displayMod != null && blockedMods.contains(displayMod.toLowerCase())) {
+                if (displayMod != null && blockedMods.contains(displayMod.toLowerCase(java.util.Locale.ROOT))) {
                     toHide.add(ing);
                     continue;
                 }
                 var owner = RecipeViewerModHints.owningModIdForClass(ing.getClass());
-                if (owner.isPresent() && blockedMods.contains(owner.get().toLowerCase())) {
+                if (owner.isPresent() && blockedMods.contains(owner.get().toLowerCase(java.util.Locale.ROOT))) {
                     toHide.add(ing);
                 }
             }
@@ -626,11 +625,11 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
                         boolean blocked = false;
                         if (rl != null && directFluidLocks.contains(rl)) blocked = true;
                         if (!blocked && rl != null) {
-                            String ns = rl.getNamespace().toLowerCase();
+                            String ns = rl.getNamespace().toLowerCase(java.util.Locale.ROOT);
                             if (lockedFluidMods.contains(ns) || lockedMods.contains(ns)) blocked = true;
                         }
                         if (!blocked && rl != null) {
-                            String s = rl.toString().toLowerCase();
+                            String s = rl.toString().toLowerCase(java.util.Locale.ROOT);
                             for (String p : namePatterns) {
                                 if (s.contains(p)) { blocked = true; break; }
                             }
@@ -638,7 +637,10 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
                         // UID-embedded namespace scan — catches Create potions whose Fluid is minecraft:water
                         if (!blocked) {
                             String uid = null;
-                            try { uid = helper.getUniqueId(fs, UidContext.Ingredient); } catch (Throwable ignored) {}
+                            try {
+                                Object value = helper.getUid(fs, UidContext.Ingredient);
+                                if (value != null) uid = value.toString();
+                            } catch (Throwable ignored) {}
                             if (uid != null && uidDeclaresBlocked(uid, lockedMods, directFluidLocks)) {
                                 blocked = true;
                             }
@@ -680,7 +682,7 @@ public class ProgressiveStagesJEIPlugin implements IModPlugin {
         while (m.find()) {
             String ns = m.group(1);
             String path = m.group(2);
-            if (ns != null && blockedMods.contains(ns.toLowerCase())) return true;
+            if (ns != null && blockedMods.contains(ns.toLowerCase(java.util.Locale.ROOT))) return true;
             try {
                 ResourceLocation rl = ResourceLocation.fromNamespaceAndPath(ns, path);
                 if (blockedIds.contains(rl)) return true;

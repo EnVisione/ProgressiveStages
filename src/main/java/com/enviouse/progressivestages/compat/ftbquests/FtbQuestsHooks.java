@@ -123,7 +123,7 @@ public final class FtbQuestsHooks {
             ourProviderInstance = java.lang.reflect.Proxy.newProxyInstance(
                 FtbQuestsHooks.class.getClassLoader(),
                 new Class<?>[] { providerInterfaceCache },
-                (proxy, method, args) -> handleProviderMethod(method.getName(), args)
+                (proxy, method, args) -> handleProviderMethod(proxy, method.getName(), args)
             );
             LOGGER.debug("[ProgressiveStages] Created provider proxy: {}", ourProviderInstance);
 
@@ -159,7 +159,7 @@ public final class FtbQuestsHooks {
      * Handle StageProvider interface method calls via proxy.
      * Interface methods: has(Player, String), add(ServerPlayer, String), remove(ServerPlayer, String), sync(ServerPlayer), getName()
      */
-    private static Object handleProviderMethod(String methodName, Object[] args) {
+    private static Object handleProviderMethod(Object proxy, String methodName, Object[] args) {
         try {
             switch (methodName) {
                 case "has" -> {
@@ -193,8 +193,8 @@ public final class FtbQuestsHooks {
                 }
                 // Object methods
                 case "toString" -> { return PROVIDER_ID; }
-                case "hashCode" -> { return System.identityHashCode(FtbQuestsHooks.class); }
-                case "equals" -> { return args != null && args.length == 1 && args[0] == FtbQuestsHooks.class; }
+                case "hashCode" -> { return System.identityHashCode(proxy); }
+                case "equals" -> { return args != null && args.length == 1 && args[0] == proxy; }
                 default -> {
                     LOGGER.debug("[ProgressiveStages] Unknown StageProvider method called: {}", methodName);
                     return null;
@@ -220,7 +220,11 @@ public final class FtbQuestsHooks {
             // fall through to mine's backend on failure
         }
 
-        StageId stageId = StageId.parse(stage);
+        StageId stageId = StageId.tryParse(stage);
+        if (stageId == null) {
+            LOGGER.warn("[ProgressiveStages] FTB Provider has called with invalid stage ID {}", stage);
+            return false;
+        }
         boolean has;
         if (player instanceof ServerPlayer serverPlayer) {
             has = ProgressiveStagesAPI.hasStage(serverPlayer, stageId);
@@ -360,7 +364,7 @@ public final class FtbQuestsHooks {
         // Check if the stage exists in our system
         if (!ProgressiveStagesAPI.stageExists(stageId)) {
             LOGGER.error("[ProgressiveStages] FTB Provider add() - stage '{}' does not exist in ProgressiveStages! " +
-                "Check that the stage ID in FTB Quests matches a [stage] id in config/ProgressiveStages/*.toml", stageId);
+                "Check that the stage ID in FTB Quests matches a [stage] id in config/progressivestages/stages/*.toml", stageId);
             return;
         }
 
@@ -566,4 +570,3 @@ public final class FtbQuestsHooks {
         previousProvider = null;
     }
 }
-

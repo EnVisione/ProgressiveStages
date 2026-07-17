@@ -1,12 +1,16 @@
 package com.enviouse.progressivestages.common.api;
 
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
+import com.enviouse.progressivestages.server.triggers.StageCounterData;
+import com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -14,7 +18,8 @@ import java.util.Set;
  * Public API for ProgressiveStages.
  *
  * <p>This is the primary entry point for other mods to interact with ProgressiveStages.
- * All methods are thread-safe and can be called from any context.
+ * Mutation methods must be called on the logical server thread. Query methods read the live
+ * server state and should normally be called there as well.
  *
  * <p>Example usage:
  * <pre>{@code
@@ -69,6 +74,17 @@ public final class ProgressiveStagesAPI {
         return StageManager.getInstance().getStages(player);
     }
 
+    public static boolean hasAllStages(ServerPlayer player, Collection<StageId> stageIds) {
+        return stageIds != null && getStages(player).containsAll(stageIds);
+    }
+
+    public static boolean hasAnyStage(ServerPlayer player, Collection<StageId> stageIds) {
+        if (stageIds == null) return false;
+        Set<StageId> owned = getStages(player);
+        for (StageId id : stageIds) if (owned.contains(id)) return true;
+        return false;
+    }
+
     // ========== Stage Modification Methods ==========
 
     /**
@@ -87,7 +103,7 @@ public final class ProgressiveStagesAPI {
             return false;
         }
         StageManager.getInstance().grantStageWithCause(player, stageId, cause);
-        return true;
+        return hasStage(player, stageId);
     }
 
     /**
@@ -106,7 +122,154 @@ public final class ProgressiveStagesAPI {
             return false;
         }
         StageManager.getInstance().revokeStageWithCause(player, stageId, cause);
-        return true;
+        return !hasStage(player, stageId);
+    }
+
+    /** Grant an existing stage without checking or auto-granting its prerequisites. */
+    public static boolean grantStageBypass(ServerPlayer player, StageId stageId, StageCause cause) {
+        if (!stageExists(stageId) || hasStage(player, stageId)) return false;
+        StageManager.getInstance().grantStageBypassDependencies(player, stageId, cause);
+        return hasStage(player, stageId);
+    }
+
+    /** Grant several requested stages and return how many requested targets changed. */
+    public static int grantStages(ServerPlayer player, Collection<StageId> stageIds, StageCause cause) {
+        if (stageIds == null) return 0;
+        int changed = 0;
+        for (StageId id : new java.util.LinkedHashSet<>(stageIds)) {
+            if (id != null && grantStage(player, id, cause)) changed++;
+        }
+        return changed;
+    }
+
+    /** Revoke several requested stages and return how many requested targets changed. */
+    public static int revokeStages(ServerPlayer player, Collection<StageId> stageIds, StageCause cause) {
+        if (stageIds == null) return 0;
+        int changed = 0;
+        for (StageId id : new java.util.LinkedHashSet<>(stageIds)) {
+            if (id != null && revokeStage(player, id, cause)) changed++;
+        }
+        return changed;
+    }
+
+    /** Dependencies the player still needs before this stage can be granted normally. */
+    public static java.util.List<StageId> getMissingDependencies(ServerPlayer player, StageId stageId) {
+        return java.util.List.copyOf(StageManager.getInstance().getMissingDependencies(player, stageId));
+    }
+
+    /** True when the stage exists, is not owned, and all dependencies are currently owned. */
+    public static boolean isAvailable(ServerPlayer player, StageId stageId) {
+        return stageExists(stageId) && !hasStage(player, stageId)
+            && getMissingDependencies(player, stageId).isEmpty();
+    }
+
+    /** Existing, unowned stages whose dependency policy is currently satisfied. */
+    public static List<StageId> getAvailableStages(ServerPlayer player) {
+        return getAllStageIds().stream().filter(id -> isAvailable(player, id)).toList();
+    }
+
+    /** Every existing stage the player does not currently own. */
+    public static List<StageId> getLockedStages(ServerPlayer player) {
+        Set<StageId> owned = getStages(player);
+        return getAllStageIds().stream().filter(id -> !owned.contains(id)).toList();
+    }
+
+    /** Every declared stage carrying the given lower-case tag. */
+    public static java.util.List<StageId> getStagesWithTag(String tag) {
+        if (tag == null || tag.isBlank()) return java.util.List.of();
+        String wanted = tag.trim().toLowerCase(java.util.Locale.ROOT);
+        return getAllDefinitions().stream()
+            .filter(def -> def.getTags().contains(wanted))
+            .map(StageDefinition::getId)
+            .toList();
+    }
+
+    /** Every stage in a presentation category (case-insensitive). */
+    public static List<StageId> getStagesInCategory(String category) {
+        if (category == null) return List.of();
+        String wanted = category.trim();
+        return getAllDefinitions().stream()
+            .filter(def -> def.getCategory().equalsIgnoreCase(wanted))
+            .map(StageDefinition::getId).toList();
+    }
+
+    public static Set<StageId> getDependencies(StageId stageId) {
+        return java.util.Collections.unmodifiableSet(
+            new java.util.LinkedHashSet<>(StageOrder.getInstance().getDependencies(stageId)));
+    }
+
+    public static Set<StageId> getAllDependencies(StageId stageId) {
+        return java.util.Collections.unmodifiableSet(
+            new java.util.LinkedHashSet<>(StageOrder.getInstance().getAllDependencies(stageId)));
+    }
+
+    public static Set<StageId> getDependents(StageId stageId) {
+        return java.util.Collections.unmodifiableSet(
+            new java.util.LinkedHashSet<>(StageOrder.getInstance().getDependents(stageId)));
+    }
+
+    public static Set<StageId> getAllDependents(StageId stageId) {
+        return java.util.Collections.unmodifiableSet(
+            new java.util.LinkedHashSet<>(StageOrder.getInstance().getAllDependents(stageId)));
+    }
+
+    /** Detailed live trigger progress suitable for integrations and custom UIs. */
+    public static List<StageTriggerEvaluator.RuleProgress> getTriggerProgress(
+            ServerPlayer player, StageId stageId) {
+        return List.copyOf(StageTriggerEvaluator.describeProgress(player, stageId));
+    }
+
+    public static float getTriggerPercent(ServerPlayer player, StageId stageId) {
+        return StageTriggerEvaluator.stagePercent(player, stageId);
+    }
+
+    /** Immediately re-evaluate all declarative trigger rules for this player. */
+    public static void evaluateTriggers(ServerPlayer player) {
+        StageTriggerEvaluator.evaluatePlayer(player);
+    }
+
+    /** Push definitions, lock rules, ownership, and bypass state to a connected client. */
+    public static void syncPlayer(ServerPlayer player) {
+        com.enviouse.progressivestages.common.network.NetworkHandler.sendStageDefinitionsSync(player);
+        com.enviouse.progressivestages.common.network.NetworkHandler.sendLockSync(player);
+        com.enviouse.progressivestages.common.network.NetworkHandler.sendStageSync(player, getStages(player));
+        com.enviouse.progressivestages.common.network.NetworkHandler.sendCreativeBypass(player,
+            StageConfig.isAllowCreativeBypass() && player.isCreative());
+    }
+
+    // ========== Named counters (commands/KubeJS/custom integrations) ==========
+
+    public static long getCounter(ServerPlayer player, String counter) {
+        return StageCounterData.get(player.server).get(player.getUUID(), customCounterKey(counter));
+    }
+
+    public static long addCounter(ServerPlayer player, String counter, long amount) {
+        StageCounterData data = StageCounterData.get(player.server);
+        String key = customCounterKey(counter);
+        data.increment(player.getUUID(), key, amount);
+        StageTriggerEvaluator.evaluatePlayer(player);
+        return data.get(player.getUUID(), key);
+    }
+
+    public static long setCounter(ServerPlayer player, String counter, long value) {
+        StageCounterData data = StageCounterData.get(player.server);
+        String key = customCounterKey(counter);
+        data.set(player.getUUID(), key, value);
+        StageTriggerEvaluator.evaluatePlayer(player);
+        return data.get(player.getUUID(), key);
+    }
+
+    public static void resetCounter(ServerPlayer player, String counter) {
+        StageCounterData.get(player.server).reset(player.getUUID(), customCounterKey(counter));
+        StageTriggerEvaluator.evaluatePlayer(player);
+    }
+
+    private static String customCounterKey(String counter) {
+        if (counter == null || counter.isBlank()) {
+            throw new IllegalArgumentException("Counter name cannot be blank");
+        }
+        String normalized = counter.trim().toLowerCase(java.util.Locale.ROOT);
+        return normalized.startsWith("custom:") ? normalized : "custom:" + normalized;
     }
 
     // ========== Stage Definition Methods ==========
@@ -133,7 +296,7 @@ public final class ProgressiveStagesAPI {
 
     /**
      * Get all registered stage definitions.
-     * These are loaded from the TOML files in config/ProgressiveStages/.
+     * These are loaded from TOML files in config/progressivestages/stages/ and datapacks.
      *
      * @return Collection of all stage definitions
      */
@@ -229,4 +392,3 @@ public final class ProgressiveStagesAPI {
         return false;
     }
 }
-

@@ -21,8 +21,8 @@ import java.util.List;
  * (or the explicit killer, when we have one) lacks the stage for a locked item,
  * the drop is removed from the collection before it spills into the world.
  *
- * <p>Note: loot tables for generated chests are not filtered here — those
- * require a Global Loot Modifier and are deferred.
+ * <p>Generated-chest, fishing, archeology, and other loot-table results are handled by the
+ * companion global loot modifier; this class covers entity and block drop event collections.
  */
 public final class LootEnforcer {
 

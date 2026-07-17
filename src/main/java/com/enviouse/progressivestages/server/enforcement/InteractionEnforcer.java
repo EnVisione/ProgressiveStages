@@ -21,14 +21,9 @@ import java.util.Optional;
  * Handles interaction locking (item-on-block, block right-click, item-on-entity, etc.)
  * Useful for Create mod style interactions.
  *
- * <p>v2.0 note on multi-stage: interactions are stored in {@code LockRegistry.interactionLocks}
- * as a {@code Map<String, InteractionLockEntry>} keyed by {@code (type, heldItem, target)}.
- * The map's {@code put} call overwrites prior entries with the same key, so each interaction
- * key has exactly ONE owning stage by data-structure design. Multi-stage gating per
- * interaction would require switching to a list-valued map. Single-stage behavior is
- * intentional here and documented in StageFileParser. If a pack needs multi-stage gating
- * on the same interaction, they should split the held-item or target into a tag and
- * gate on the surrounding [items] / [blocks] / [entities] categories instead.
+ * <p>Interaction keys are multi-stage: when several stages declare the same held-item/target
+ * combination, the player must own every gating stage. Tag and wildcard entries participate in
+ * the same most-restrictive-wins resolution.
  */
 public class InteractionEnforcer {
 
@@ -59,11 +54,11 @@ public class InteractionEnforcer {
 
         // Check item_on_block interactions
         if (!heldItem.isEmpty()) {
-            Optional<StageId> required = LockRegistry.getInstance().getRequiredStageForInteraction(
+            java.util.Set<StageId> required = LockRegistry.getInstance().getRequiredStagesForInteraction(
                 TYPE_ITEM_ON_BLOCK, heldItemId, targetBlockId
             );
 
-            if (required.isPresent() && !StageManager.getInstance().hasStage(player, required.get())) {
+            if (firstMissing(player, required).isPresent()) {
                 return false;
             }
 
@@ -74,11 +69,11 @@ public class InteractionEnforcer {
         }
 
         // Check block_right_click interactions
-        Optional<StageId> blockClickRequired = LockRegistry.getInstance().getRequiredStageForInteraction(
+        java.util.Set<StageId> blockClickRequired = LockRegistry.getInstance().getRequiredStagesForInteraction(
             TYPE_BLOCK_RIGHT_CLICK, "*", targetBlockId
         );
 
-        if (blockClickRequired.isPresent() && !StageManager.getInstance().hasStage(player, blockClickRequired.get())) {
+        if (firstMissing(player, blockClickRequired).isPresent()) {
             return false;
         }
 
@@ -136,14 +131,22 @@ public class InteractionEnforcer {
      * Checks exact-match locks first, then falls back to tag-pattern locks.
      */
     public static void notifyLocked(ServerPlayer player, ItemStack heldItem, Block targetBlock) {
-        Optional<StageId> required = getRequiredStage(heldItem, targetBlock);
+        String heldItemId = getItemId(heldItem);
+        String targetBlockId = getBlockId(targetBlock);
+        java.util.Set<StageId> stages = new java.util.LinkedHashSet<>();
+        if (!heldItem.isEmpty()) stages.addAll(LockRegistry.getInstance().getRequiredStagesForInteraction(
+            TYPE_ITEM_ON_BLOCK, heldItemId, targetBlockId));
+        stages.addAll(LockRegistry.getInstance().getRequiredStagesForInteraction(
+            TYPE_BLOCK_RIGHT_CLICK, "*", targetBlockId));
+        Optional<StageId> required = firstMissing(player, stages);
         if (required.isPresent()) {
             ItemEnforcer.notifyLocked(player, required.get(), com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
             return;
         }
         // Fall back to tag-pattern search for notification
         for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(TYPE_ITEM_ON_BLOCK)) {
-            if (itemMatches(heldItem, entry.heldItem) && blockMatches(targetBlock, entry.targetBlock)) {
+            if (itemMatches(heldItem, entry.heldItem) && blockMatches(targetBlock, entry.targetBlock)
+                    && !StageManager.getInstance().hasStage(player, entry.requiredStage)) {
                 ItemEnforcer.notifyLocked(player, entry.requiredStage, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
                 return;
             }
@@ -214,10 +217,10 @@ public class InteractionEnforcer {
         String entityTypeId = getEntityTypeId(entityType);
 
         // Check exact / wildcard match first
-        Optional<StageId> required = LockRegistry.getInstance().getRequiredStageForInteraction(
+        java.util.Set<StageId> required = LockRegistry.getInstance().getRequiredStagesForInteraction(
             TYPE_ITEM_ON_ENTITY, heldItemId, entityTypeId
         );
-        if (required.isPresent() && !StageManager.getInstance().hasStage(player, required.get())) {
+        if (firstMissing(player, required).isPresent()) {
             return false;
         }
 
@@ -245,16 +248,18 @@ public class InteractionEnforcer {
         String heldItemId = getItemId(heldItem);
         String entityTypeId = getEntityTypeId(entityType);
 
-        Optional<StageId> required = LockRegistry.getInstance().getRequiredStageForInteraction(
+        Optional<StageId> required = firstMissing(player,
+            LockRegistry.getInstance().getRequiredStagesForInteraction(
             TYPE_ITEM_ON_ENTITY, heldItemId, entityTypeId
-        );
+        ));
         if (required.isPresent()) {
             ItemEnforcer.notifyLocked(player, required.get(), com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
             return;
         }
         // Tag-pattern fallback
         for (LockRegistry.InteractionLockEntry entry : LockRegistry.getInstance().getAllInteractionLocksOfType(TYPE_ITEM_ON_ENTITY)) {
-            if (itemMatches(heldItem, entry.heldItem) && entityTypeMatches(entityType, entry.targetBlock)) {
+            if (itemMatches(heldItem, entry.heldItem) && entityTypeMatches(entityType, entry.targetBlock)
+                    && !StageManager.getInstance().hasStage(player, entry.requiredStage)) {
                 ItemEnforcer.notifyLocked(player, entry.requiredStage, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelInteraction());
                 return;
             }
@@ -264,6 +269,14 @@ public class InteractionEnforcer {
     private static String getEntityTypeId(EntityType<?> entityType) {
         ResourceLocation rl = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
         return rl != null ? rl.toString() : "*";
+    }
+
+    private static Optional<StageId> firstMissing(ServerPlayer player, java.util.Collection<StageId> stages) {
+        if (player == null || stages == null) return Optional.empty();
+        for (StageId stage : stages) {
+            if (!StageManager.getInstance().hasStage(player, stage)) return Optional.of(stage);
+        }
+        return Optional.empty();
     }
 
     /**
@@ -279,7 +292,7 @@ public class InteractionEnforcer {
             try {
                 ResourceLocation tagLoc = ResourceLocation.parse(tagName);
                 TagKey<EntityType<?>> tagKey = TagKey.create(Registries.ENTITY_TYPE, tagLoc);
-                return entityType.builtInRegistryHolder().is(tagKey);
+                return BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(entityType).is(tagKey);
             } catch (Exception e) {
                 return false;
             }
@@ -303,7 +316,7 @@ public class InteractionEnforcer {
             try {
                 ResourceLocation tagLoc = ResourceLocation.parse(tagName);
                 TagKey<Block> tagKey = TagKey.create(Registries.BLOCK, tagLoc);
-                return block.builtInRegistryHolder().is(tagKey);
+                return BuiltInRegistries.BLOCK.wrapAsHolder(block).is(tagKey);
             } catch (Exception e) {
                 return false;
             }

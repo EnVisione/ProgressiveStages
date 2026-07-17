@@ -220,4 +220,9 @@ public class DimensionEnforcer {
         SAVED_POSITIONS.remove(playerId);
         BOUNCING_BACK.remove(playerId);
     }
+
+    public static void resetRuntimeState() {
+        SAVED_POSITIONS.clear();
+        BOUNCING_BACK.clear();
+    }
 }

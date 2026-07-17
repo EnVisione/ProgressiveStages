@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.common.config;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
+import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.trigger.TriggerRule;
 import net.minecraft.resources.ResourceLocation;
 
@@ -36,6 +37,8 @@ public class StageDefinition {
     private final String unlockMessage;
     private final LockDefinition locks;
     private final List<StageId> dependencies;
+    private final DependencyMode dependencyMode;
+    private final int dependencyCount;
     private final List<String> unlockedItems;
     private final List<String> unlockedBlocks;
     private final List<String> unlockedEntities;
@@ -47,6 +50,13 @@ public class StageDefinition {
     private final Boolean obscureIcon;
     private final Boolean showTooltip;
     private final Boolean showDescriptionOnTooltip;
+    // v3.0: advancement-style stage-map layout. Null coordinates request automatic DAG layout.
+    private final Integer uiX;
+    private final Integer uiY;
+    private final String uiFrame;       // task | goal | challenge
+    private final String uiBackground;  // optional texture id, tiled behind the stage map
+    private final String uiReveal;      // always | dependencies | unlocked
+    private final int uiSortOrder;
     // v3.0: encrypted-block visual — masquerade this stage's locked blocks until owned.
     private final boolean encryptBlocks;
     private final String encryptAs; // placeholder block id (default minecraft:stone)
@@ -66,14 +76,17 @@ public class StageDefinition {
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
-        this.displayName = builder.displayName;
-        this.description = builder.description;
+        this.displayName = builder.displayName != null && !builder.displayName.isBlank()
+            ? builder.displayName : builder.id.getPath();
+        this.description = builder.description != null ? builder.description : "";
         this.icon = builder.icon;
         this.unlockMessage = builder.unlockMessage;
         this.locks = builder.locks != null ? builder.locks : LockDefinition.empty();
         this.dependencies = builder.dependencies != null
             ? Collections.unmodifiableList(new ArrayList<>(builder.dependencies))
             : Collections.emptyList();
+        this.dependencyMode = builder.dependencyMode != null ? builder.dependencyMode : DependencyMode.ALL;
+        this.dependencyCount = this.dependencyMode.requiredCount(this.dependencies.size(), builder.dependencyCount);
         this.unlockedItems = builder.unlockedItems != null
             ? Collections.unmodifiableList(new ArrayList<>(builder.unlockedItems))
             : Collections.emptyList();
@@ -93,6 +106,12 @@ public class StageDefinition {
         this.obscureIcon = builder.obscureIcon;
         this.showTooltip = builder.showTooltip;
         this.showDescriptionOnTooltip = builder.showDescriptionOnTooltip;
+        this.uiX = builder.uiX;
+        this.uiY = builder.uiY;
+        this.uiFrame = builder.uiFrame != null ? builder.uiFrame : "task";
+        this.uiBackground = builder.uiBackground != null ? builder.uiBackground : "";
+        this.uiReveal = builder.uiReveal != null ? builder.uiReveal : "always";
+        this.uiSortOrder = builder.uiSortOrder;
         this.encryptBlocks = builder.encryptBlocks;
         this.encryptAs = builder.encryptAs != null && !builder.encryptAs.isEmpty()
             ? builder.encryptAs : "minecraft:stone";
@@ -152,6 +171,23 @@ public class StageDefinition {
      */
     public List<StageId> getDependencies() {
         return dependencies;
+    }
+
+    /** How the entries in {@link #getDependencies()} are combined: all, any, or at_least. */
+    public DependencyMode getDependencyMode() {
+        return dependencyMode;
+    }
+
+    /** Effective number of direct dependencies required after mode-aware clamping. */
+    public int getDependencyCount() {
+        return dependencyCount;
+    }
+
+    /** Return whether the supplied effective ownership set satisfies this stage's dependency policy. */
+    public boolean dependenciesSatisfied(java.util.Set<StageId> ownedStages) {
+        int owned = 0;
+        for (StageId dependency : dependencies) if (ownedStages.contains(dependency)) owned++;
+        return dependencyMode.isSatisfied(owned, dependencies.size(), dependencyCount);
     }
 
     /**
@@ -238,6 +274,24 @@ public class StageDefinition {
         return showDescriptionOnTooltip;
     }
 
+    /** Explicit advancement-map X coordinate in pixels, or empty for automatic dependency layout. */
+    public Optional<Integer> getUiX() { return Optional.ofNullable(uiX); }
+
+    /** Explicit advancement-map Y coordinate in pixels, or empty for automatic dependency layout. */
+    public Optional<Integer> getUiY() { return Optional.ofNullable(uiY); }
+
+    /** Vanilla advancement frame style: {@code task}, {@code goal}, or {@code challenge}. */
+    public String getUiFrame() { return uiFrame; }
+
+    /** Optional texture resource tiled behind this stage's category, or an empty string. */
+    public String getUiBackground() { return uiBackground; }
+
+    /** Map reveal rule: {@code always}, {@code dependencies}, or {@code unlocked}. */
+    public String getUiReveal() { return uiReveal; }
+
+    /** Stable author-supplied ordering hint used by automatic layout. */
+    public int getUiSortOrder() { return uiSortOrder; }
+
     /** v3.0: true if this stage's locked blocks should be visually masqueraded until owned. */
     public boolean isEncryptBlocks() { return encryptBlocks; }
 
@@ -312,6 +366,8 @@ public class StageDefinition {
         private String unlockMessage;
         private LockDefinition locks;
         private List<StageId> dependencies = new ArrayList<>();
+        private DependencyMode dependencyMode = DependencyMode.ALL;
+        private int dependencyCount = 1;
         private List<String> unlockedItems = new ArrayList<>();
         private List<String> unlockedBlocks = new ArrayList<>();
         private List<String> unlockedEntities = new ArrayList<>();
@@ -321,6 +377,12 @@ public class StageDefinition {
         private Boolean obscureIcon = null;
         private Boolean showTooltip = null;
         private Boolean showDescriptionOnTooltip = null;
+        private Integer uiX = null;
+        private Integer uiY = null;
+        private String uiFrame = "task";
+        private String uiBackground = "";
+        private String uiReveal = "always";
+        private int uiSortOrder = 0;
         private boolean encryptBlocks = false;
         private String encryptAs = "minecraft:stone";
         private boolean hidden = false;
@@ -388,6 +450,13 @@ public class StageDefinition {
          */
         public Builder dependencies(List<StageId> dependencies) {
             this.dependencies = dependencies != null ? dependencies : new ArrayList<>();
+            return this;
+        }
+
+        /** Configure alternate/quorum dependency handling. */
+        public Builder dependencyPolicy(DependencyMode mode, int count) {
+            this.dependencyMode = mode != null ? mode : DependencyMode.ALL;
+            this.dependencyCount = count;
             return this;
         }
 
@@ -463,6 +532,12 @@ public class StageDefinition {
             this.showDescriptionOnTooltip = v;
             return this;
         }
+
+        public Builder uiPosition(Integer x, Integer y) { this.uiX = x; this.uiY = y; return this; }
+        public Builder uiFrame(String v) { this.uiFrame = v != null ? v : "task"; return this; }
+        public Builder uiBackground(String v) { this.uiBackground = v != null ? v : ""; return this; }
+        public Builder uiReveal(String v) { this.uiReveal = v != null ? v : "always"; return this; }
+        public Builder uiSortOrder(int v) { this.uiSortOrder = v; return this; }
 
         public Builder encryptBlocks(boolean v) { this.encryptBlocks = v; return this; }
         public Builder encryptAs(String v) { this.encryptAs = v; return this; }

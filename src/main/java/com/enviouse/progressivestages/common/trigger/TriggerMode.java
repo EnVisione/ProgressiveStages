@@ -17,9 +17,16 @@ public enum TriggerMode {
     /** Parse a TOML {@code mode = "..."} value, defaulting to {@link #ALL_OF}. */
     public static TriggerMode fromString(String s) {
         if (s == null) return ALL_OF;
+        TriggerMode parsed = tryParse(s);
+        return parsed != null ? parsed : ALL_OF;
+    }
+
+    public static TriggerMode tryParse(String s) {
+        if (s == null) return null;
         return switch (s.trim().toLowerCase(Locale.ROOT)) {
             case "any_of", "anyof", "any", "or" -> ANY_OF;
-            default -> ALL_OF;
+            case "all_of", "allof", "all", "and" -> ALL_OF;
+            default -> null;
         };
     }
 }

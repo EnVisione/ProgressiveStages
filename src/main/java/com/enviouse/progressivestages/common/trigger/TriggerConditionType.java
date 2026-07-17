@@ -51,7 +51,14 @@ public enum TriggerConditionType {
     SLEEP,       // times slept in a bed             -> Stats.SLEEP_IN_BED (retroactive)
     RIDE,        // blocks ridden on any vehicle     -> vehicle distance stats (retroactive)
     BIOME_TIME,  // seconds spent in a target biome  (event-counted)
-    STAGE_HELD_FOR; // held another stage for >= count seconds (time since grant)
+    STAGE_HELD_FOR, // held another stage for >= count seconds (time since grant)
+    CUSTOM_COUNTER, // server/KubeJS-managed named counter
+    SCOREBOARD,     // live value of a vanilla scoreboard objective
+    HEALTH,         // current health points (20 at normal full health)
+    FOOD,           // current food level (20 at full hunger)
+    STAGE_COUNT,    // number of stages the player's team currently owns
+    ONLINE_TEAM_SIZE, // number of currently-online team members
+    SCRIPT_VALUE;   // numeric progress supplied by a KubeJS callback
 
     /**
      * Resolve a TOML {@code type = "..."} value (with generous aliases) to a type, or
@@ -91,6 +98,13 @@ public enum TriggerConditionType {
             case "ride", "riding", "ride_distance" -> RIDE;
             case "biome_time", "time_in_biome", "biome_seconds" -> BIOME_TIME;
             case "stage_held_for", "held_stage", "stage_age", "owned_for" -> STAGE_HELD_FOR;
+            case "custom_counter", "counter", "named_counter", "kubejs_counter" -> CUSTOM_COUNTER;
+            case "scoreboard", "score", "objective", "scoreboard_value" -> SCOREBOARD;
+            case "health", "hp", "health_points" -> HEALTH;
+            case "food", "hunger", "food_level" -> FOOD;
+            case "stage_count", "stages_owned", "owned_stages" -> STAGE_COUNT;
+            case "online_team_size", "team_size", "online_members" -> ONLINE_TEAM_SIZE;
+            case "script_value", "script_progress", "kubejs_value", "progress_provider" -> SCRIPT_VALUE;
             default -> null;
         };
     }
@@ -100,6 +114,7 @@ public enum TriggerConditionType {
         return switch (this) {
             case KILL, MINE, CRAFT, PICKUP, USE, DROP, BREAK_ITEM, DISTANCE, STAT, PLAY_TIME,
                  BREED, TAME, KILL_WITH, FISH, SLEEP, RIDE, BIOME_TIME -> true;
+            case CUSTOM_COUNTER, SCOREBOARD, SCRIPT_VALUE -> true;
             default -> false;
         };
     }
@@ -115,7 +130,7 @@ public enum TriggerConditionType {
             // DISTANCE defaults to "all"; BREED/TAME take an OPTIONAL species target.
             // REACH_Y/FISH/SLEEP/RIDE derive their own subject; BIOME_TIME/STAGE_HELD_FOR need a target.
             case PLAY_TIME, LEVEL, XP, DISTANCE, DAY_COUNT, WORLD_TIME, BREED, TAME,
-                 REACH_Y, FISH, SLEEP, RIDE -> false;
+                 REACH_Y, FISH, SLEEP, RIDE, HEALTH, FOOD, STAGE_COUNT, ONLINE_TEAM_SIZE -> false;
             default -> true;
         };
     }

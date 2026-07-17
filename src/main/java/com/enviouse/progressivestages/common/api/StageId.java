@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.common.api;
 import com.enviouse.progressivestages.common.util.Constants;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -73,7 +74,7 @@ public final class StageId implements Comparable<StageId> {
         }
 
         // Trim whitespace and convert to lowercase
-        id = id.trim().toLowerCase();
+        id = id.trim().toLowerCase(Locale.ROOT);
 
         if (id.contains(":")) {
             String[] parts = id.split(":", 2);
@@ -95,7 +96,7 @@ public final class StageId implements Comparable<StageId> {
      */
     private static String normalizeComponent(String component) {
         if (component == null) return "";
-        return component.trim().toLowerCase();
+        return component.trim().toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -136,6 +137,13 @@ public final class StageId implements Comparable<StageId> {
             throw new IllegalArgumentException(
                 "Stage ID path cannot start or end with a slash: '" + path + "'"
             );
+        }
+        for (String segment : path.split("/")) {
+            if (segment.equals(".") || segment.equals("..")) {
+                throw new IllegalArgumentException(
+                    "Stage ID path cannot contain dot traversal segments: '" + path + "'"
+                );
+            }
         }
     }
 

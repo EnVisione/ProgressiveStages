@@ -29,15 +29,15 @@ import org.slf4j.Logger;
 public final class MobReplacementEnforcer {
 
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final ThreadLocal<Boolean> finalizingReplacement =
+        ThreadLocal.withInitial(() -> false);
 
     private MobReplacementEnforcer() {}
 
-    /**
-     * Try to apply a replacement. Returns {@code true} if a replacement was applied
-     * (the caller must cancel the original spawn).
-     */
+    /** Returns true when the caller must cancel the original spawn. */
     public static boolean tryReplace(Mob mob, ServerLevelAccessor levelAccess,
                                      double x, double y, double z, MobSpawnType spawnType) {
+        if (finalizingReplacement.get()) return false;
         if (!StageConfig.isBlockMobReplacements()) return false;
         if (!(levelAccess.getLevel() instanceof ServerLevel level)) return false;
 
@@ -48,7 +48,7 @@ public final class MobReplacementEnforcer {
         double radius = StageConfig.getMobSpawnCheckRadius();
 
         for (LockRegistry.MobReplacementEntry entry : LockRegistry.getInstance().getMobReplacements()) {
-            if (!entry.target.matches(originalId, originalType.builtInRegistryHolder(),
+            if (!entry.target.matches(originalId, net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(originalType),
                     net.minecraft.core.registries.Registries.ENTITY_TYPE)) {
                 continue;
             }
@@ -63,27 +63,35 @@ public final class MobReplacementEnforcer {
             }
 
             // Found a replacement that applies — try to spawn the new mob.
-            EntityType<?> replacementType = BuiltInRegistries.ENTITY_TYPE.get(entry.replaceWith);
+            EntityType<?> replacementType = BuiltInRegistries.ENTITY_TYPE
+                .getOptional(entry.replaceWith).orElse(null);
             if (replacementType == null) {
                 LOGGER.warn("[ProgressiveStages] Replacement entity not found: {}", entry.replaceWith);
-                return false;
+                return true;
             }
             Entity replacement = replacementType.create(level);
-            if (replacement == null) return false;
+            if (replacement == null) return true;
             replacement.moveTo(x, y, z, mob.getYRot(), mob.getXRot());
 
-            // Viability check: if the replacement can't actually spawn at these coords
-            // (water mob on land, collision, etc.), drop the replacement and fall through
-            // to a plain cancel so the world doesn't flash a broken despawn.
+            // Invalid replacements cancel the original spawn.
             if (replacement instanceof Mob replacementMob) {
                 if (!replacementMob.checkSpawnRules(level, spawnType)
                         || !replacementMob.checkSpawnObstruction(level)) {
                     replacement.discard();
-                    return false;
+                    return true;
                 }
-                replacementMob.finalizeSpawn(level,
-                    level.getCurrentDifficultyAt(BlockPos.containing(x, y, z)),
-                    spawnType, null);
+                finalizingReplacement.set(true);
+                try {
+                    net.neoforged.neoforge.event.EventHooks.finalizeMobSpawn(replacementMob, level,
+                        level.getCurrentDifficultyAt(BlockPos.containing(x, y, z)),
+                        spawnType, null);
+                } finally {
+                    finalizingReplacement.remove();
+                }
+                if (replacementMob.isSpawnCancelled()) {
+                    replacement.discard();
+                    return true;
+                }
             }
             level.addFreshEntity(replacement);
             return true;

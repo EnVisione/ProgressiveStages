@@ -38,9 +38,16 @@ public class StageManager {
     /** v2.4: synthetic "team" that holds server-wide ({@code scope = "server"}) stages shared by everyone. */
     public static final UUID SERVER_TEAM = new UUID(0L, 0L);
 
+    /** One concrete stage removal from its real persistence owner. */
+    private record RevokedStage(UUID owner, StageId stageId) {}
+
     private static boolean isServerScoped(StageId stageId) {
         return StageOrder.getInstance().getStageDefinition(stageId)
             .map(StageDefinition::isServerScope).orElse(false);
+    }
+
+    private static UUID storageTeam(UUID subjectTeam, StageId stageId) {
+        return isServerScoped(stageId) ? SERVER_TEAM : subjectTeam;
     }
 
     public static StageManager getInstance() {
@@ -57,6 +64,10 @@ public class StageManager {
      */
     public void initialize(MinecraftServer server) {
         this.server = server;
+    }
+
+    public void shutdown(MinecraftServer stoppingServer) {
+        if (this.server == stoppingServer) this.server = null;
     }
 
     /**
@@ -129,18 +140,16 @@ public class StageManager {
             }
         }
 
-        // v2.4: server-scoped stages are stored under SERVER_TEAM and synced to everyone.
-        boolean serverScoped = isServerScoped(stageId);
-        UUID storeTeam = serverScoped ? SERVER_TEAM : teamId;
-        List<StageId> newlyGranted = grantStageToTeamInternal(storeTeam, stageId, false);
+        List<StageId> newlyGranted = grantStageToTeamInternal(teamId, stageId, false);
 
         // Fire events for each newly granted stage
         for (StageId granted : newlyGranted) {
-            fireStageChangeEvent(player, teamId, granted, StageChangeType.GRANTED, cause);
+            fireStageChangeEvent(player, storageTeam(teamId, granted), granted, StageChangeType.GRANTED, cause);
             applyRewardsOnce(player, granted);
         }
 
-        if (serverScoped) syncAllPlayers(); else syncToTeamMembers(teamId);
+        if (newlyGranted.stream().anyMatch(StageManager::isServerScoped)) syncAllPlayers();
+        else syncToTeamMembers(teamId);
     }
 
     /** v3.0: apply a newly-granted stage's [rewards] ONCE, to the player who earned/bought it. */
@@ -156,7 +165,7 @@ public class StageManager {
      */
     public void markPurchased(ServerPlayer player, StageId stageId) {
         if (player.server == null) return;
-        UUID storeTeam = isServerScoped(stageId) ? SERVER_TEAM : TeamProvider.getInstance().getTeamId(player);
+        UUID storeTeam = storageTeam(TeamProvider.getInstance().getTeamId(player), stageId);
         com.enviouse.progressivestages.server.triggers.StagePurchaseData.get(player.server)
             .markPaid(storeTeam, stageId);
     }
@@ -172,7 +181,7 @@ public class StageManager {
     /**
      * Internal method that grants stages and returns newly granted stages.
      *
-     * @param teamId The team to grant stages to
+     * @param teamId The subject team. Each granted stage is stored according to its own scope.
      * @param stageId The stage to grant
      * @param bypassDependencies If true, skip dependency checks (admin bypass)
      */
@@ -183,34 +192,63 @@ public class StageManager {
         }
 
         TeamStageData data = getTeamStageData();
-        Set<StageId> currentStages = data.getStages(teamId);
         Set<StageId> toGrant = new LinkedHashSet<>();
 
-        // Check for missing dependencies (v1.3)
+        // Auto-grant only the dependency branches needed by this stage's policy. For example, an
+        // `any` stage follows one declared branch instead of accidentally granting every branch.
         if (!bypassDependencies && StageConfig.isLinearProgression()) {
-            // Auto-grant all dependencies recursively
-            Set<StageId> allDeps = StageOrder.getInstance().getAllDependencies(stageId);
-            toGrant.addAll(allDeps);
+            Set<StageId> effectiveOwned = new LinkedHashSet<>(getStages(teamId));
+            collectRequiredGrantPlan(stageId, effectiveOwned, toGrant, new HashSet<>());
+        } else {
+            toGrant.add(stageId);
         }
-
-        // Add the target stage
-        toGrant.add(stageId);
 
         // Grant all stages
         List<StageId> newlyGranted = new ArrayList<>();
         for (StageId id : toGrant) {
-            if (data.grantStage(teamId, id)) {
+            UUID owner = storageTeam(teamId, id);
+            if (data.grantStage(owner, id)) {
                 newlyGranted.add(id);
-                LOGGER.debug("Granted stage {} to team {}", id, teamId);
+                LOGGER.debug("Granted stage {} to storage owner {} (subject team {})", id, owner, teamId);
             }
         }
 
-        // Send unlock messages for newly granted stages
         if (!newlyGranted.isEmpty()) {
-            sendUnlockMessages(teamId, newlyGranted);
+            List<StageId> serverStages = newlyGranted.stream().filter(StageManager::isServerScoped).toList();
+            List<StageId> teamStages = newlyGranted.stream().filter(s -> !isServerScoped(s)).toList();
+            if (!serverStages.isEmpty()) sendUnlockMessages(SERVER_TEAM, serverStages);
+            if (!teamStages.isEmpty()) sendUnlockMessages(teamId, teamStages);
         }
 
         return newlyGranted;
+    }
+
+    private void collectRequiredGrantPlan(StageId stageId, Set<StageId> effectiveOwned,
+                                          Set<StageId> plan, Set<StageId> visiting) {
+        if (effectiveOwned.contains(stageId) || plan.contains(stageId) || !visiting.add(stageId)) return;
+        StageDefinition definition = StageOrder.getInstance().getStageDefinition(stageId).orElse(null);
+        if (definition == null) {
+            visiting.remove(stageId);
+            return;
+        }
+
+        int ownedDirect = 0;
+        for (StageId dependency : definition.getDependencies()) {
+            if (effectiveOwned.contains(dependency) || plan.contains(dependency)) ownedDirect++;
+        }
+        int needed = Math.max(0, definition.getDependencyCount() - ownedDirect);
+        for (StageId dependency : definition.getDependencies()) {
+            if (needed <= 0) break;
+            if (effectiveOwned.contains(dependency) || plan.contains(dependency)) continue;
+            collectRequiredGrantPlan(dependency, effectiveOwned, plan, visiting);
+            if (plan.contains(dependency)) needed--;
+        }
+
+        Set<StageId> prospective = new HashSet<>(effectiveOwned);
+        prospective.addAll(plan);
+        if (definition.dependenciesSatisfied(prospective)) plan.add(stageId);
+        else LOGGER.warn("Cannot build an automatic grant plan for {}: its dependency policy is unsatisfiable", stageId);
+        visiting.remove(stageId);
     }
 
     /**
@@ -236,12 +274,12 @@ public class StageManager {
 
         // Fire events for each newly granted stage
         for (StageId granted : newlyGranted) {
-            fireStageChangeEvent(player, teamId, granted, StageChangeType.GRANTED, cause);
+            fireStageChangeEvent(player, storageTeam(teamId, granted), granted, StageChangeType.GRANTED, cause);
             applyRewardsOnce(player, granted);
         }
 
-        // Sync to all team members
-        syncToTeamMembers(teamId);
+        if (newlyGranted.stream().anyMatch(StageManager::isServerScoped)) syncAllPlayers();
+        else syncToTeamMembers(teamId);
     }
 
     /**
@@ -265,24 +303,37 @@ public class StageManager {
     public void revokeStageWithCause(ServerPlayer player, StageId stageId, StageCause cause) {
         UUID teamId = TeamProvider.getInstance().getTeamId(player);
         boolean serverScoped = isServerScoped(stageId);
-        UUID storeTeam = serverScoped ? SERVER_TEAM : teamId;
-        List<StageId> revoked = revokeStageFromTeamInternal(storeTeam, stageId);
+        List<RevokedStage> revoked = revokeStageFromTeamInternal(teamId, stageId);
 
-        // Fire events for each revoked stage
-        for (StageId revokedStage : revoked) {
-            fireStageChangeEvent(player, teamId, revokedStage, StageChangeType.REVOKED, cause);
+        // Fire one event for each concrete storage owner. A server-stage cascade can revoke the
+        // same team-scoped dependent from many teams; collapsing those into one event leaves
+        // regression clocks and integration state stale for every other team.
+        for (RevokedStage change : revoked) {
+            StageId revokedStage = change.stageId();
+            ServerPlayer affectedPlayer = onlineRepresentative(change.owner(), player).orElse(player);
+            fireStageChangeEvent(affectedPlayer, change.owner(), revokedStage, StageChangeType.REVOKED, cause);
             // v3.0: refund part of the cost ONLY for stages this team actually PURCHASED (consume the
             // paid flag so it refunds at most once) — never for earned/granted stages.
             StageOrder.getInstance().getStageDefinition(revokedStage).ifPresent(d -> {
                 if (d.isPurchasable() && d.getCost().refundPercent() > 0 && player.server != null
                         && com.enviouse.progressivestages.server.triggers.StagePurchaseData
-                            .get(player.server).consumePaid(storeTeam, revokedStage)) {
-                    refundCost(player, d.getCost());
+                            .get(player.server).isPaid(change.owner(), revokedStage)) {
+                    var purchaseData = com.enviouse.progressivestages.server.triggers.StagePurchaseData.get(player.server);
+                    Optional<ServerPlayer> recipient = onlineRepresentative(change.owner(), player);
+                    if (recipient.isPresent() && purchaseData.consumePaid(change.owner(), revokedStage)) {
+                        refundCost(recipient.get(), d.getCost());
+                    } else {
+                        // Never pay another team's refund to the command issuer. Persist it for the
+                        // next member of that team who logs in instead.
+                        purchaseData.deferRefund(change.owner(), revokedStage);
+                    }
                 }
             });
         }
 
-        if (serverScoped) syncAllPlayers(); else syncToTeamMembers(teamId);
+        boolean affectedMultipleTeams = serverScoped || revoked.stream()
+            .anyMatch(change -> SERVER_TEAM.equals(change.owner()) || !teamId.equals(change.owner()));
+        if (affectedMultipleTeams) syncAllPlayers(); else syncToTeamMembers(teamId);
     }
 
     /** v3.0: return refund_percent of a purchased stage's item/xp cost to the player. */
@@ -316,40 +367,80 @@ public class StageManager {
     }
 
     /**
-     * Internal method that revokes stages and returns revoked stages.
+     * Internal method that revokes stages and returns revoked stage ids. Each stage uses its own
+     * storage scope. Cascading from a server-wide prerequisite removes team-scoped dependents from
+     * every team because the prerequisite disappeared globally.
      */
-    private List<StageId> revokeStageFromTeamInternal(UUID teamId, StageId stageId) {
+    private List<RevokedStage> revokeStageFromTeamInternal(UUID teamId, StageId stageId) {
         if (!StageOrder.getInstance().stageExists(stageId)) {
             LOGGER.warn("Attempted to revoke non-existent stage: {}", stageId);
             return Collections.emptyList();
         }
 
         TeamStageData data = getTeamStageData();
-        Set<StageId> toRevoke = new LinkedHashSet<>();
-
-        // Add the target stage
-        toRevoke.add(stageId);
-
         // Cascade to dependents when linear progression is on globally, OR the stage opts in via
-        // its per-stage revoke_cascade flag (v2.4). Either way, stages that depend on this one go too.
+        // its per-stage revoke_cascade flag. Policy-aware cascading preserves dependents whose
+        // `any`/`at_least` prerequisites remain satisfied through another branch.
         boolean cascade = StageConfig.isLinearProgression()
             || StageOrder.getInstance().getStageDefinition(stageId)
                 .map(d -> d.getRevoke().cascade()).orElse(false);
-        if (cascade) {
-            Set<StageId> dependents = StageOrder.getInstance().getAllDependents(stageId);
-            toRevoke.addAll(dependents);
-        }
+        List<RevokedStage> revoked = new ArrayList<>();
+        Deque<RevokedStage> pending = new ArrayDeque<>();
+        Set<RevokedStage> queued = new HashSet<>();
+        RevokedStage root = new RevokedStage(storageTeam(teamId, stageId), stageId);
+        pending.add(root);
+        queued.add(root);
 
-        // Revoke all stages
-        List<StageId> revoked = new ArrayList<>();
-        for (StageId id : toRevoke) {
-            if (data.revokeStage(teamId, id)) {
-                revoked.add(id);
-                LOGGER.debug("Revoked stage {} from team {}", id, teamId);
+        while (!pending.isEmpty()) {
+            RevokedStage change = pending.removeFirst();
+            if (!data.revokeStage(change.owner(), change.stageId())) continue;
+            revoked.add(change);
+            if (!cascade) continue;
+
+            for (StageId dependent : StageOrder.getInstance().getDependents(change.stageId())) {
+                StageDefinition definition = StageOrder.getInstance().getStageDefinition(dependent).orElse(null);
+                if (definition == null) continue;
+                if (definition.isServerScope()) {
+                    // Server stages have one concrete owner. Use the initiating team as the subject
+                    // context for the unusual (but supported) case of a global stage depending on a
+                    // team-scoped stage.
+                    if (data.hasStage(SERVER_TEAM, dependent)
+                            && !definition.dependenciesSatisfied(effectiveStages(data, teamId))) {
+                        RevokedStage next = new RevokedStage(SERVER_TEAM, dependent);
+                        if (queued.add(next)) pending.addLast(next);
+                    }
+                    continue;
+                }
+
+                Collection<UUID> owners = SERVER_TEAM.equals(change.owner())
+                    ? new ArrayList<>(data.getAllTeamIds()) : List.of(change.owner());
+                for (UUID owner : owners) {
+                    if (SERVER_TEAM.equals(owner) || !data.hasStage(owner, dependent)) continue;
+                    if (!definition.dependenciesSatisfied(effectiveStages(data, owner))) {
+                        RevokedStage next = new RevokedStage(owner, dependent);
+                        if (queued.add(next)) pending.addLast(next);
+                    }
+                }
             }
         }
 
         return revoked;
+    }
+
+    private static Set<StageId> effectiveStages(TeamStageData data, UUID teamId) {
+        Set<StageId> result = new LinkedHashSet<>(data.getStages(teamId));
+        if (!SERVER_TEAM.equals(teamId)) result.addAll(data.getStages(SERVER_TEAM));
+        return result;
+    }
+
+    /** Prefer the initiating player when they belong to the owner; otherwise find an online member. */
+    private Optional<ServerPlayer> onlineRepresentative(UUID owner, ServerPlayer initiator) {
+        if (SERVER_TEAM.equals(owner)) return Optional.of(initiator);
+        if (TeamProvider.getInstance().getTeamId(initiator).equals(owner)) return Optional.of(initiator);
+        if (server == null) return Optional.empty();
+        return server.getPlayerList().getPlayers().stream()
+            .filter(candidate -> TeamProvider.getInstance().getTeamId(candidate).equals(owner))
+            .findFirst();
     }
 
     /**
@@ -378,8 +469,16 @@ public class StageManager {
      * Get the highest stage a player has reached
      */
     public Optional<StageId> getCurrentStage(ServerPlayer player) {
-        UUID teamId = TeamProvider.getInstance().getTeamId(player);
-        return getTeamStageData().getHighestStage(teamId);
+        StageId highest = null;
+        int highestDepth = -1;
+        for (StageId stageId : getStages(player)) {
+            int depth = StageOrder.getInstance().getAllDependencies(stageId).size();
+            if (depth > highestDepth) {
+                highestDepth = depth;
+                highest = stageId;
+            }
+        }
+        return Optional.ofNullable(highest);
     }
 
     /**
@@ -406,17 +505,9 @@ public class StageManager {
             if (stageIdStr == null || stageIdStr.isBlank()) {
                 continue;
             }
-            // Pre-validate format to skip malformed config entries gracefully
-            // (mirrors fork's StageTomlIo.isValidStageName regex; allows ':' for namespaced ids and '/' for hierarchical paths)
-            if (!stageIdStr.trim().toLowerCase().matches("^[a-z0-9._/:-]+$")) {
-                LOGGER.warn("Skipping malformed starting stage entry: '{}'", stageIdStr);
-                continue;
-            }
-            StageId stageId;
-            try {
-                stageId = StageId.of(stageIdStr);
-            } catch (IllegalArgumentException e) {
-                LOGGER.warn("Skipping invalid starting stage entry '{}': {}", stageIdStr, e.getMessage());
+            StageId stageId = StageId.tryParse(stageIdStr);
+            if (stageId == null) {
+                LOGGER.warn("Skipping invalid starting stage entry '{}'", stageIdStr);
                 continue;
             }
             if (StageOrder.getInstance().stageExists(stageId)) {
@@ -547,6 +638,20 @@ public class StageManager {
     public void syncStagesOnLogin(ServerPlayer player) {
         // Grant starting stage if needed (this is a single operation, not bulk)
         grantStartingStage(player);
+
+        // A global revoke cascade may have removed a purchased team stage while every member was
+        // offline. Deliver its persisted refund to the first member who returns.
+        if (player.server != null) {
+            UUID teamId = TeamProvider.getInstance().getTeamId(player);
+            var purchaseData = com.enviouse.progressivestages.server.triggers.StagePurchaseData.get(player.server);
+            for (StageId pending : purchaseData.getPendingRefunds(teamId)) {
+                StageDefinition def = StageOrder.getInstance().getStageDefinition(pending).orElse(null);
+                if (def != null && def.isPurchasable() && def.getCost().refundPercent() > 0
+                        && purchaseData.consumePendingRefund(teamId, pending)) {
+                    refundCost(player, def.getCost());
+                }
+            }
+        }
 
         // Fire bulk event for login - FTB Quests will do one recheck
         fireBulkChangedEvent(player, StagesBulkChangedEvent.Reason.LOGIN);

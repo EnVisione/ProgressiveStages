@@ -49,7 +49,9 @@ public abstract class AbstractContainerMenuMixin {
         }
 
         // Need at least one enforcement option enabled
-        if (!StageConfig.isBlockItemInventory() && !StageConfig.isBlockItemMousePickup() && !StageConfig.isBlockItemHotbar()) {
+        LockRegistry registry = LockRegistry.getInstance();
+        if (!StageConfig.isBlockItemInventory() && !StageConfig.isBlockItemMousePickup()
+                && !StageConfig.isBlockItemHotbar() && !registry.hasEnforcementOverrides()) {
             return;
         }
 
@@ -69,7 +71,9 @@ public abstract class AbstractContainerMenuMixin {
             }
 
             // v2.0 multi-stage: blocked iff ANY gating stage is missing.
-            if (!LockRegistry.getInstance().isItemBlockedFor(serverPlayer, stack.getItem())) {
+            java.util.Set<com.enviouse.progressivestages.common.api.StageId> missing =
+                registry.missingStagesForItem(serverPlayer, stack.getItem());
+            if (missing.isEmpty()) {
                 // Item is not locked for this player — but check hotbar destination restriction
                 progressivestages$checkHotbarDestination(slotId, clickType, serverPlayer, ci);
                 return;
@@ -78,9 +82,9 @@ public abstract class AbstractContainerMenuMixin {
             // Item IS locked for this player — apply enforcement based on config
 
             // Strictest: block_item_inventory blocks ALL interaction
-            if (StageConfig.isBlockItemInventory()) {
-                // Check per-stage inventory exemption
-                if (!LockRegistry.getInstance().isExemptFromInventory(stack.getItem())) {
+            if (registry.isCategoryEnforced(missing,
+                    com.enviouse.progressivestages.common.lock.EnforcementCategory.ITEM_INVENTORY)) {
+                if (!registry.isExemptFromInventory(stack.getItem(), missing)) {
                     ci.cancel();
                     ItemEnforcer.notifyLockedWithCooldown(serverPlayer, stack.getItem());
                     return;
@@ -88,9 +92,9 @@ public abstract class AbstractContainerMenuMixin {
             }
 
             // Medium: block_item_mouse_pickup blocks picking up the locked item with mouse
-            if (StageConfig.isBlockItemMousePickup()) {
-                // Check per-stage mouse pickup exemption
-                if (!LockRegistry.getInstance().isExemptFromMousePickup(stack.getItem())) {
+            if (registry.isCategoryEnforced(missing,
+                    com.enviouse.progressivestages.common.lock.EnforcementCategory.ITEM_MOUSE_PICKUP)) {
+                if (!registry.isExemptFromMousePickup(stack.getItem(), missing)) {
                     ci.cancel();
                     ItemEnforcer.notifyLockedWithCooldown(serverPlayer, stack.getItem());
                     return;
@@ -114,7 +118,8 @@ public abstract class AbstractContainerMenuMixin {
         // This method is called for non-locked items in the clicked slot.
         // We also need to check if the player is CARRYING a locked item on their cursor
         // and trying to place it into a hotbar slot.
-        if (!StageConfig.isBlockItemHotbar()) {
+        LockRegistry registry = LockRegistry.getInstance();
+        if (!StageConfig.isBlockItemHotbar() && !registry.hasEnforcementOverrides()) {
             return;
         }
 
@@ -125,9 +130,12 @@ public abstract class AbstractContainerMenuMixin {
         }
 
         // v2.0 multi-stage
-        if (!LockRegistry.getInstance().isItemBlockedFor(player, carried.getItem())) {
-            return; // Carried item is not locked
-        }
+        java.util.Set<com.enviouse.progressivestages.common.api.StageId> missing =
+            registry.missingStagesForItem(player, carried.getItem());
+        if (missing.isEmpty()
+                || !registry.isCategoryEnforced(missing,
+                    com.enviouse.progressivestages.common.lock.EnforcementCategory.ITEM_HOTBAR)
+                || registry.isExemptFromHotbar(carried.getItem(), missing)) return;
 
         // Carried item is locked — check if target is a hotbar slot
         if (progressivestages$isHotbarSlot(slotId)) {

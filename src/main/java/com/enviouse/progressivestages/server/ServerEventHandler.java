@@ -1,11 +1,13 @@
 package com.enviouse.progressivestages.server;
 
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.network.NetworkHandler;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.team.TeamProvider;
 import com.enviouse.progressivestages.common.team.TeamStageSync;
 import com.enviouse.progressivestages.common.util.Constants;
+import com.enviouse.progressivestages.common.util.CraftingRecipeTracker;
 import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.server.commands.StageCommand;
 import com.enviouse.progressivestages.server.enforcement.*;
@@ -38,6 +40,7 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.level.block.CropGrowEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 
 import java.util.HashMap;
@@ -51,8 +54,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @EventBusSubscriber(modid = Constants.MOD_ID)
 public class ServerEventHandler {
 
+    private static boolean coreHandlersRegistered;
+
     // Track last inventory scan time per player (for scan frequency)
     private static final Map<UUID, Long> lastScanTime = new HashMap<>();
+    private static final ThreadLocal<Boolean> evaluatingSpoofProperties =
+        ThreadLocal.withInitial(() -> false);
 
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
@@ -70,11 +77,12 @@ public class ServerEventHandler {
 
         // v2.3: per-stage [[triggers]] auto-grant engine (replaces the old global triggers.toml).
         // Registered once; its rule data is (re)built by StageFileLoader on load/reload.
-        NeoForge.EVENT_BUS.register(StageTriggerEvaluator.class);
-        // v2.4: [revoke] rules + temporary-stage expiry (regression).
-        NeoForge.EVENT_BUS.register(StageRegressionHandler.class);
-        // v2.4: [abilities] gating (elytra).
-        NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.class);
+        if (!coreHandlersRegistered) {
+            NeoForge.EVENT_BUS.register(StageTriggerEvaluator.class);
+            NeoForge.EVENT_BUS.register(StageRegressionHandler.class);
+            NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.class);
+            coreHandlersRegistered = true;
+        }
 
         // Initialize FTB Teams integration (soft dependency)
         // Uses reflection to avoid loading FTBTeamsIntegration class (which imports FTB Teams API)
@@ -98,6 +106,26 @@ public class ServerEventHandler {
 
         // 2.0 soft-dep compat modules (Nature's Compass, Curios, Mekanism, automation report)
         com.enviouse.progressivestages.compat.ModCompatRegistry.initializeAll();
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        lastScanTime.clear();
+        lastDimensionCheck.clear();
+        lastRegionCheck.clear();
+        StageRegressionHandler.resetRuntimeState();
+        NetworkHandler.clearServerRuntimeState();
+        StageCommand.clearRuntimeState();
+        CraftingRecipeTracker.clearAll();
+        ItemEnforcer.clearAllCooldowns();
+        IngredientGateHelper.clearAllCooldowns();
+        DimensionEnforcer.resetRuntimeState();
+        StructureEnforcer.resetRuntimeState();
+        com.enviouse.progressivestages.common.compat.ScriptHooks.reset();
+        OreSpoofManager.get().resetRuntimeState();
+        StageFileLoader.getInstance().shutdown();
+        TeamStageSync.shutdown(event.getServer());
+        StageManager.getInstance().shutdown(event.getServer());
     }
 
     @SubscribeEvent
@@ -343,10 +371,13 @@ public class ServerEventHandler {
         if (lastScan == null || currentTime - lastScan >= scanFrequency) {
             lastScanTime.put(playerId, currentTime);
 
-            // Full inventory drop takes priority over hotbar-only move
-            if (StageConfig.isBlockItemInventory()) {
+            LockRegistry registry = LockRegistry.getInstance();
+            if (StageConfig.isBlockItemInventory()
+                    || registry.hasEnforcementOverrides(com.enviouse.progressivestages.common.lock.EnforcementCategory.ITEM_INVENTORY)) {
                 InventoryScanner.scanAndDropLockedItems(player);
-            } else if (StageConfig.isBlockItemHotbar()) {
+            }
+            if (StageConfig.isBlockItemHotbar()
+                    || registry.hasEnforcementOverrides(com.enviouse.progressivestages.common.lock.EnforcementCategory.ITEM_HOTBAR)) {
                 InventoryScanner.scanAndMoveLockedItemsFromHotbar(player);
             }
 
@@ -412,10 +443,9 @@ public class ServerEventHandler {
             // so loot can't be spilled by breaking the block.
             if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
                 if (StructureEnforcer.isContainerAt(sl, pos)) {
-                    var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, pos);
+                    var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, pos, player);
                     if (entryStage.isPresent()
-                            && !(StageConfig.isAllowCreativeBypass() && player.isCreative())
-                            && !StageManager.getInstance().hasStage(player, entryStage.get())) {
+                            && !(StageConfig.isAllowCreativeBypass() && player.isCreative())) {
                         event.setCanceled(true);
                         ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(),
                             StageConfig.getMsgTypeLabelStructureContents());
@@ -472,10 +502,9 @@ public class ServerEventHandler {
             // fired. The guard runs for every block click inside a locked structure, not just
             // containers — picking open a locked tomb's pressure plate is equally gated.
             if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
-                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getPos());
+                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getPos(), player);
                 if (entryStage.isPresent()
-                        && !(StageConfig.isAllowCreativeBypass() && player.isCreative())
-                        && !StageManager.getInstance().hasStage(player, entryStage.get())) {
+                        && !(StageConfig.isAllowCreativeBypass() && player.isCreative())) {
                     event.setCanceled(true);
                     ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(), StageConfig.getMsgTypeLabelStructureContents());
                     return;
@@ -606,10 +635,9 @@ public class ServerEventHandler {
             // with loot, and other entity-based containers sitting inside a locked structure
             // must refuse interaction for players lacking the stage.
             if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
-                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getTarget().blockPosition());
+                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getTarget().blockPosition(), player);
                 if (entryStage.isPresent()
-                        && !(StageConfig.isAllowCreativeBypass() && player.isCreative())
-                        && !StageManager.getInstance().hasStage(player, entryStage.get())) {
+                        && !(StageConfig.isAllowCreativeBypass() && player.isCreative())) {
                     event.setCanceled(true);
                     ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(),
                         StageConfig.getMsgTypeLabelStructureContents());
@@ -792,6 +820,8 @@ public class ServerEventHandler {
             lastDimensionCheck.remove(player.getUUID());
             lastRegionCheck.remove(player.getUUID());
             ItemEnforcer.clearCooldowns(player.getUUID());
+            IngredientGateHelper.clearCooldowns(player.getUUID());
+            CraftingRecipeTracker.clearLastRecipe(player.getUUID());
             DimensionEnforcer.cleanupPlayer(player.getUUID());
             StructureEnforcer.cleanupPlayer(player.getUUID());
             OreSpoofManager.get().onPlayerLogout(player);
@@ -818,6 +848,7 @@ public class ServerEventHandler {
      */
     @SubscribeEvent
     public static void onBreakSpeed(net.neoforged.neoforge.event.entity.player.PlayerEvent.BreakSpeed event) {
+        if (evaluatingSpoofProperties.get()) return;
         if (!com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()) return;
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
         var posOpt = event.getPosition();
@@ -832,8 +863,12 @@ public class ServerEventHandler {
         // Recompute speed against the displayAs block so client and server agree.
         // getDestroySpeed mirrors Player.getDestroySpeed; we just swap the BlockState.
         net.minecraft.world.level.block.state.BlockState fake = displayBlock.defaultBlockState();
-        float speed = sp.getDestroySpeed(fake);
-        event.setNewSpeed(speed);
+        evaluatingSpoofProperties.set(true);
+        try {
+            event.setNewSpeed(sp.getDigSpeed(fake, posOpt.get()));
+        } finally {
+            evaluatingSpoofProperties.remove();
+        }
     }
 
     /**
@@ -845,6 +880,7 @@ public class ServerEventHandler {
      */
     @SubscribeEvent
     public static void onHarvestCheck(net.neoforged.neoforge.event.entity.player.PlayerEvent.HarvestCheck event) {
+        if (evaluatingSpoofProperties.get()) return;
         if (!com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()) return;
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
         var realBlock = event.getTargetBlock().getBlock();
@@ -855,8 +891,12 @@ public class ServerEventHandler {
         if (displayBlock == null) return;
         net.minecraft.world.level.block.state.BlockState fake = displayBlock.defaultBlockState();
         // hasCorrectToolForDrops: does the player's held tool harvest the fake block?
-        boolean fakeHarvestable = sp.hasCorrectToolForDrops(fake);
-        event.setCanHarvest(fakeHarvestable);
+        evaluatingSpoofProperties.set(true);
+        try {
+            event.setCanHarvest(sp.hasCorrectToolForDrops(fake, sp.level(), event.getPos()));
+        } finally {
+            evaluatingSpoofProperties.remove();
+        }
     }
 
     /**
