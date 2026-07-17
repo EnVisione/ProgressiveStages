@@ -1,12 +1,14 @@
 # ProgressiveStages
 
+![ProgressiveStages logo](src/main/resources/progressivestages.png)
+
 A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression. Define stages as TOML files; ProgressiveStages locks items, blocks, entities, fluids, dimensions, recipes, enchantments, crops, mob spawns, pets, regions, structures, screens, and player interactions until the player has earned the right stage(s).
 
 **ProgressiveStages 3.0** turns that foundation into a fully authorable progression platform: declarative per-stage triggers, graph-based stage scope, scripting and command APIs, broad content enforcement, and a vanilla advancement-style in-game map.
 
 ---
 
-💬 **Community & support:** [Discord](https://discord.com/invite/9v4gaRSfdJ) · 🐛 [Issues](https://github.com/EnVisione/ProgressiveStages/issues)
+📦 **CurseForge:** [ProgressiveStages](https://www.curseforge.com/minecraft/mc-mods/progressivestages) · 💬 **Community:** [Discord](https://discord.com/invite/9v4gaRSfdJ) · 🐛 **Issues:** [GitHub](https://github.com/EnVisione/ProgressiveStages/issues)
 
 ---
 
@@ -18,6 +20,10 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
   [Complete Documentation](DOCUMENTATION.md).
 - **Building or approving a release:** follow the
   [Testing Handbook](TESTING.md).
+- **Learning how the files and runtime fit together:** read the
+  [Architecture and Project Structure Guide](ARCHITECTURE.md).
+- **Publishing the project page:** copy the maintained
+  [CurseForge 3.0 Description](CURSEFORGE.md).
 - **Want known-good files to copy:** use the tested
   [Beginner Pack](examples/beginner_pack/README.md).
 
@@ -553,11 +559,13 @@ compat/
 
 - Beginner walkthrough: [GETTING_STARTED.md](GETTING_STARTED.md).
 - Complete schema and feature reference: [DOCUMENTATION.md](DOCUMENTATION.md).
+- Architecture, folder structure, data flow, and extension guide: [ARCHITECTURE.md](ARCHITECTURE.md).
 - Build, smoke-test, multiplayer, and integration matrix: [TESTING.md](TESTING.md).
 - Copy-ready tested tutorial stages: [examples/beginner_pack](examples/beginner_pack/README.md).
+- CurseForge 3.0 project description: [CURSEFORGE.md](CURSEFORGE.md).
 - Implemented 3.0 scope and remaining runtime matrix:
   [ProgressiveStages_3.0_Release_Plan.md](implementation/ProgressiveStages_3.0_Release_Plan.md).
 
 ## License
 
-MIT
+All Rights Reserved

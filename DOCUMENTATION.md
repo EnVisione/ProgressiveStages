@@ -7,12 +7,15 @@
 > this document conflicts with what the mod actually does, the *code* is the
 > authority and this document is a bug.
 >
-> **Support & community:** [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires these in too — `displayURL` (Discord) and `issueTrackerURL` (GitHub issues) in `neoforge.mods.toml`.
+> **Project, support, and community:** [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) · [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires in the CurseForge project and GitHub issue tracker through `displayURL` and `issueTrackerURL`.
 
 > **New to stage mods?** Start with [GETTING_STARTED.md](GETTING_STARTED.md), copy the tested
 > [beginner pack](examples/beginner_pack/README.md), and return here when the beginner guide links
 > to a specific advanced feature. Release maintainers should also follow
 > [TESTING.md](TESTING.md). This file is the exhaustive reference, not the shortest learning path.
+> Maintainers and integration authors should also read the
+> [Architecture and Project Structure Guide](ARCHITECTURE.md), which follows each file from disk,
+> through parsing and validation, into runtime enforcement, networking, UI, and tests.
 >
 > **Want one complete file you can read and copy?** Open
 > [`diamond_stage.toml`](examples/reference/diamond_stage.toml). It is the directly browsable,
@@ -83,7 +86,7 @@
 15. [Public API (Java)](#15-public-api-java)
 16. [Networking & Client Caches](#16-networking--client-caches)
 17. [Troubleshooting](#17-troubleshooting)
-18. [File / Package Map](#18-file--package-map)
+18. [File, Package, and Runtime Structure](#18-file-package-and-runtime-structure)
 
 ---
 
@@ -1038,9 +1041,11 @@ Two parts: the list of locked structure IDs (`locked_entry`) and a single
 
 When a player enters the piece bounding box of any listed structure and lacks
 the gating stage, they are **bounced back out**. The check runs every
-`enforcement.region_tick_frequency` ticks (default 20 = 1s). Piece precision
-means players can't sneak in through a partial overlap — every structure piece's
-bounding box is checked individually.
+`enforcement.region_tick_frequency` ticks (default 20 = 1s). The enforcer asks
+Minecraft's `StructureManager` for the structure at the player's position and
+then verifies the position against the resolved structure start bounding box.
+This is server-side and works for registered vanilla and compliant modded
+structures.
 
 **Last-safe-position teleport — New in 2.5.** Each tick a player is *outside*
 every locked structure, the enforcer records that spot as their **last safe
@@ -1084,11 +1089,10 @@ Containers include:
 The implementation is
 [`StructureEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/StructureEnforcer.java).
 
-> **Status note:** the *indestructibility* and *explosion-immunity for
-> structure architecture* aspects of §2.12 in the v2 update plan are **on
-> hold** post-2.0 — they require structure bounding-box tracking per loaded
-> chunk, which is its own engineering lift. Entry denial + chest locking + the
-> four `[structures.rules]` flags ARE in scope and shipped.
+All four rule flags shown above are implemented. “Indestructible” in this
+context means player break events are cancelled while the relevant gate is
+missing. It does not rewrite world-generation data or make blocks globally
+unbreakable for every system and every player.
 
 ### 4.17 `[[regions]]` — fixed 3D boxes with flags + debuffs
 
@@ -3174,7 +3178,51 @@ relog or `/progressivestages reload`.
 
 ---
 
-## 18. File / Package Map
+## 18. File, Package, and Runtime Structure
+
+This section is the compact map. The dedicated
+[Architecture and Project Structure Guide](ARCHITECTURE.md) expands it into the
+runtime config tree, datapack layout, stage-file anatomy, Minecraft structure
+gating flow, startup and transactional reload sequence, ownership storage,
+network payload boundaries, trigger indexing, optional integration rules, test
+layout, and a table showing exactly where to implement each kind of change.
+
+### 18.1 Runtime files
+
+```text
+config/
+└── progressivestages/
+    ├── progressivestages.toml
+    └── stages/
+        ├── stone_age.toml
+        ├── iron_age.toml
+        └── diamond_age.toml
+```
+
+`progressivestages.toml` contains global defaults. Every `.toml` beneath
+`stages/`, including files in nested folders, is a stage candidate. The
+`[stage].id` value is authoritative; filenames and folders are organizational.
+Per-stage `[[triggers]]` live in these files, so a legacy `triggers.toml` is
+ignored. Datapack defaults live at
+`data/<namespace>/progressivestages/stages/*.toml`, and a config stage wins when
+both sources use the same stage ID.
+
+### 18.2 Runtime flow
+
+1. `ConfigPaths` creates or safely migrates the config hierarchy.
+2. `StageFileLoader` reads every config and datapack candidate.
+3. `StageFileParser` produces immutable `StageDefinition` objects or detailed errors.
+4. `StageOrder` validates dependencies and the complete graph.
+5. A valid snapshot rebuilds lock, dependency, tag, trigger, and ability indexes.
+6. Server events call focused enforcers, which consult those indexes and authoritative ownership.
+7. Real grants and revokes converge on `StageManager`, which applies scope, events, rewards, attributes, regressions, team sync, quest rechecks, and client sync.
+8. `NetworkHandler` sends presentation state to client caches and accepts only narrow GUI data or purchase requests back from the client.
+
+A reload is transactional. The existing working snapshot stays active until the
+entire candidate parses, validates, and applies. A client never becomes the
+authority for stage ownership or purchases.
+
+### 18.3 Source package map
 
 Core layout under `src/main/java/com/enviouse/progressivestages/`:
 

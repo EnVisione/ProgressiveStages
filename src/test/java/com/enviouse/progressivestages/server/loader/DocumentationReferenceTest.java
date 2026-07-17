@@ -33,5 +33,20 @@ class DocumentationReferenceTest {
         String documentation = Files.readString(PROJECT.resolve("DOCUMENTATION.md"));
 
         assertTrue(documentation.contains("[`diamond_stage.toml`](examples/reference/diamond_stage.toml)"));
+        assertTrue(documentation.contains("[Architecture and Project Structure Guide](ARCHITECTURE.md)"));
+    }
+
+    @Test
+    void releasePresentationFilesAreConnected() throws IOException {
+        String readme = Files.readString(PROJECT.resolve("README.md"));
+        String curseForge = Files.readString(PROJECT.resolve("CURSEFORGE.md"));
+        String metadata = Files.readString(PROJECT.resolve("src/main/templates/META-INF/neoforge.mods.toml"));
+
+        assertTrue(Files.size(PROJECT.resolve("src/main/resources/progressivestages.png")) > 0);
+        assertTrue(metadata.contains("logoFile=\"progressivestages.png\""));
+        assertTrue(metadata.contains("displayURL=\"https://www.curseforge.com/minecraft/mc-mods/progressivestages\""));
+        assertTrue(readme.contains("[CurseForge 3.0 Description](CURSEFORGE.md)"));
+        assertTrue(curseForge.contains("# ProgressiveStages 3.0"));
+        assertTrue(curseForge.contains("config/progressivestages/stages/"));
     }
 }
