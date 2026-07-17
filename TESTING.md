@@ -92,6 +92,8 @@ The test sources live under `src/test/java`.
 | `ClientLockCacheTest` | Immutable defensive client lock snapshots. |
 | `StageTreeScreenRenderOrderTest` | One blur pass, inspector depth, and drag-from-node behavior. |
 | `StageTreeInventoryButtonTest` | Survival inventory registration, dynamic position, and map request wiring. |
+| `OreSpoofCameraStabilityTest` | Stage and game-mode refreshes never unload the chunk beneath the player. |
+| `StageAttributeApplierTest` | Unchanged scale modifiers remain attached while changed and revoked modifiers reconcile correctly. |
 | `TriggerConditionTypeTest` | Trigger aliases and invalid condition types. |
 | `BeginnerExamplePackTest` | Every copy-ready beginner TOML parses and its graph validates. |
 

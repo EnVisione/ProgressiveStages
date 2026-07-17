@@ -899,20 +899,13 @@ public class ServerEventHandler {
         }
     }
 
-    /**
-     * v2.0.3: when a player switches game mode (survival → creative, etc.),
-     * resend any chunks in view containing spoofable targets. Creative players
-     * with allow_creative_bypass = true should immediately see the real ore;
-     * switching back to survival should re-hide it.
-     */
+    /** Refresh ore masking after a game mode change. */
     @SubscribeEvent
     public static void onChangeGameMode(
             net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangeGameModeEvent event) {
         if (!com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().isOreSpoofActive()) return;
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
-        // Defer to next tick: the gamemode change isn't fully applied until
-        // after this event returns, and resendChunksInView's creative-bypass
-        // check would still read the OLD mode.
-        sp.server.execute(() -> OreSpoofManager.get().resendChunksInView(sp));
+        // The new game mode is applied after this event returns.
+        sp.server.execute(() -> OreSpoofManager.get().refreshPlayer(sp));
     }
 }

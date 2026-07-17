@@ -472,6 +472,7 @@ compat/
 ### v3.0.1
 - **Progression-map polish** — menu blur stays below the interface, map node icons no longer overlap the pinned inspector, trigger routes are labeled clearly, dragging may begin on nodes or empty space, and a lock button beside the survival inventory recipe-book button opens the map.
 - **Custom backgrounds documented and tested** — `[display].background` accepts any namespaced client texture such as `mypack:gui/progression`.
+- **Stable camera during live progression changes** — stage grants, revokes, and game-mode changes now refresh ore disguises with targeted block updates instead of unloading the chunk beneath the player. Unchanged scale attribute modifiers are also preserved during stage synchronization.
 
 ### v3.0
 - **`[rewards]` on grant** — companion to `[cost]`: `items`, `effects` (`id:seconds:amplifier`), `commands`/`command` (run as the player at permission 2, `{player}` substituted), `teleport` (`"[dim] x y z"`), `xp_levels`, `xp_points`. Fires once per real grant (not on login/sync), for every cause.

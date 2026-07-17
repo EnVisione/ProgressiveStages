@@ -8,15 +8,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
-/**
- * v2.0.2: bridge stage changes into the chunk-rewriter pipeline. When a
- * player gains (or loses) a stage that gates ore visibility, force a re-send
- * of all loaded chunks in their view distance — the chunk-rewriter mixin
- * will produce the right packet contents based on their new stage set.
- *
- * <p>Whether the change is grant or revoke doesn't matter: both invalidate
- * what the client currently sees.
- */
+/** Refresh ore masking when owned stages change. */
 @EventBusSubscriber(modid = Constants.MOD_ID)
 public final class OreSpoofStageListener {
 
@@ -28,10 +20,10 @@ public final class OreSpoofStageListener {
         ServerPlayer p = event.getPlayer();
         if (p == null || p.connection == null) return;
         try {
-            OreSpoofManager.get().resendChunksInView(p);
+            OreSpoofManager.get().refreshPlayer(p);
         } catch (Throwable t) {
             org.slf4j.LoggerFactory.getLogger("ProgressiveStages")
-                .error("[OreSpoof] resendChunksInView (stage change) failed", t);
+                .error("[OreSpoof] Stage change refresh failed", t);
         }
     }
 
@@ -41,10 +33,10 @@ public final class OreSpoofStageListener {
         ServerPlayer p = event.getPlayer();
         if (p == null || p.connection == null) return;
         try {
-            OreSpoofManager.get().resendChunksInView(p);
+            OreSpoofManager.get().refreshPlayer(p);
         } catch (Throwable t) {
             org.slf4j.LoggerFactory.getLogger("ProgressiveStages")
-                .error("[OreSpoof] resendChunksInView (bulk change) failed", t);
+                .error("[OreSpoof] Bulk change refresh failed", t);
         }
     }
 }

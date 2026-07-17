@@ -163,47 +163,28 @@ public final class OreSpoofManager {
         resetRuntimeState();
     }
 
-    /** Snappy un-spoof — called when a player gains stages. Pushes truth packets and clears state. */
-    public void onStageGained(ServerPlayer player) {
+    /** Refresh ore masking without unloading any client chunks. */
+    public void refreshPlayer(ServerPlayer player) {
         LockRegistry reg = LockRegistry.getInstance();
         if (!reg.isOreSpoofActive()) return;
-        PlayerSpoofState st = playerStates.get(player.getUUID());
-        if (st == null || st.currentlySpoofed.isEmpty()) return;
+        if (player == null || player.connection == null) return;
         if (!(player.level() instanceof ServerLevel sl)) return;
 
-        // Compute which positions are no longer spoofed (player now has the stage).
-        java.util.List<Long> toRemove = new java.util.ArrayList<>();
-        Iterator<Map.Entry<Long, Block>> it = st.currentlySpoofed.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<Long, Block> e = it.next();
-            BlockPos pos = BlockPos.of(e.getKey());
-            BlockState real = sl.getBlockState(pos);
-            java.util.Optional<LockRegistry.OreOverrideEntry> stillSpoofed =
-                reg.findActiveOreOverride(player, real.getBlock());
-            if (stillSpoofed.isEmpty()) {
-                toRemove.add(e.getKey());
-                it.remove();
-            }
+        PlayerSpoofState st = playerStates.computeIfAbsent(player.getUUID(), k -> new PlayerSpoofState());
+        ResourceLocation dimension = sl.dimension().location();
+        if (st.lastDimension != null && !st.lastDimension.equals(dimension)) {
+            st.currentlySpoofed.clear();
         }
+        st.lastDimension = dimension;
 
-        if (!toRemove.isEmpty()) {
-            // Single batched packet — kills the per-position burst.
-            com.enviouse.progressivestages.common.network.NetworkHandler.OreSpoofPayload pl =
-                new com.enviouse.progressivestages.common.network.NetworkHandler.OreSpoofPayload(
-                    java.util.List.of(), toRemove, false);
-            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, pl);
+        rescanPlayer(player, sl, st);
+        st.ticksSinceScan = 0;
+        st.lastScanCenter = player.blockPosition();
+    }
 
-            // Also send vanilla block-update packets so the visual flips immediately
-            // even before our client-side delta handler runs. Batched per-section if
-            // possible: for now use ClientboundBlockUpdatePacket per position (only
-            // toRemove.size() packets, which is small after the initial fix).
-            for (Long packed : toRemove) {
-                BlockPos pos = BlockPos.of(packed);
-                player.connection.send(new ClientboundBlockUpdatePacket(pos, sl.getBlockState(pos)));
-            }
-        }
-        // Force a rescan next tick to catch up
-        st.lastScanCenter = null;
+    /** Refresh masking after a stage gain. */
+    public void onStageGained(ServerPlayer player) {
+        refreshPlayer(player);
     }
 
     /** Called when a player logs out. */
@@ -476,43 +457,4 @@ public final class OreSpoofManager {
         return cc.targetsByPos;
     }
 
-    /**
-     * Re-send chunks in the player's view distance that contain spoofable
-     * targets, so the chunk-rewriter can flip the masquerade on/off. We
-     * deliberately skip chunks with no spoofables — re-forgetting them would
-     * cause unnecessary client-side rerender and entity re-tracking, costing
-     * a noticeable hitch on every stage change.
-     *
-     * <p>Uses vanilla's ForgetLevelChunkPacket + markChunkPendingToSend to
-     * force a clean resend through the standard pipeline.
-     */
-    public void resendChunksInView(ServerPlayer player) {
-        LockRegistry reg = LockRegistry.getInstance();
-        if (!reg.isOreSpoofActive()) return;
-        if (player == null || player.connection == null) return;
-        if (!(player.level() instanceof ServerLevel sl)) return;
-
-        int viewDist = sl.getServer().getPlayerList().getViewDistance();
-        net.minecraft.world.level.ChunkPos center = player.chunkPosition();
-
-        for (int dx = -viewDist; dx <= viewDist; dx++) {
-            for (int dz = -viewDist; dz <= viewDist; dz++) {
-                int cx = center.x + dx;
-                int cz = center.z + dz;
-                LevelChunk lc = sl.getChunkSource().getChunkNow(cx, cz);
-                if (lc == null) continue;
-
-                // Skip chunks that have no spoofable targets at all — both now
-                // and post-grant they would render identically, so forgetting
-                // them is pure cost.
-                java.util.Map<Long, Block> candidates = getOrBuildChunkCandidates(sl, lc);
-                if (candidates.isEmpty()) continue;
-
-                net.minecraft.world.level.ChunkPos cp = new net.minecraft.world.level.ChunkPos(cx, cz);
-                player.connection.send(new net.minecraft.network.protocol.game
-                    .ClientboundForgetLevelChunkPacket(cp));
-                player.connection.chunkSender.markChunkPendingToSend(lc);
-            }
-        }
-    }
 }

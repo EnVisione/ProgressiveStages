@@ -22,9 +22,8 @@ import java.util.Set;
  * v2.4: applies a stage's {@code [attribute]} modifiers to players while their team owns the stage.
  *
  * <p>Uses TRANSIENT modifiers (not written to player NBT) with a stable id per (stage, index), and
- * fully reconciles on every grant/revoke/login — so there's no duplication across relogs and a
- * revoked stage's bonus disappears cleanly. Reconcile is idempotent: it removes every PS modifier
- * it manages, then re-adds only the ones for currently-owned stages.
+ * fully reconciles on every grant, revoke, and login. Unchanged modifiers remain attached so
+ * scale and eye height cannot flicker during an unrelated stage update.
  */
 public final class StageAttributeApplier {
 
@@ -63,11 +62,7 @@ public final class StageAttributeApplier {
                 AttributeInstance inst = player.getAttribute(holder);
                 if (inst == null) continue;
 
-                ResourceLocation modId = modifierId(def.getId(), i);
-                inst.removeModifier(modId);
-                if (has) {
-                    inst.addTransientModifier(new AttributeModifier(modId, a.amount(), a.operation()));
-                }
+                reconcileModifier(inst, modifierId(def.getId(), i), a, has);
                 if (a.attribute().equals(BuiltInRegistries.ATTRIBUTE.getKey(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH.value()))) {
                     healthTouched = true;
                 }
@@ -78,6 +73,25 @@ public final class StageAttributeApplier {
         if (healthTouched && player.getHealth() > player.getMaxHealth()) {
             player.setHealth(player.getMaxHealth());
         }
+    }
+
+    static void reconcileModifier(AttributeInstance instance, ResourceLocation modifierId,
+                                  StageAttribute configured, boolean shouldExist) {
+        AttributeModifier current = instance.getModifier(modifierId);
+        if (!shouldExist) {
+            if (current != null) instance.removeModifier(modifierId);
+            return;
+        }
+
+        if (current != null
+                && Double.compare(current.amount(), configured.amount()) == 0
+                && current.operation() == configured.operation()) {
+            return;
+        }
+
+        if (current != null) instance.removeModifier(modifierId);
+        instance.addTransientModifier(new AttributeModifier(
+            modifierId, configured.amount(), configured.operation()));
     }
 
     /** Reconcile every online member of a team (call after a team grant/revoke). */
