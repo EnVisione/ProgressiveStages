@@ -41,6 +41,7 @@
 2. [Core Concepts](#2-core-concepts)
 3. [Quick Start — Your First Stage in 90 Seconds](#3-quick-start--your-first-stage-in-90-seconds)
    - [3.1 How to use the complete Diamond Stage reference](#31-how-to-use-the-complete-diamond-stage-reference)
+   - [3.2 No-code localhost stage editor](#32-no-code-localhost-stage-editor)
 4. [Stage Files — The Unified TOML Schema](#4-stage-files--the-unified-toml-schema)
    - [4.1 The Prefix System](#41-the-prefix-system)
    - [4.2 `[stage]` — identity + dependencies](#42-stage--identity--dependencies)
@@ -344,6 +345,52 @@ Every enabled setting in the reference has a nearby explanation. Optional exampl
 commented out, so they teach the syntax without activating dozens of unrelated rules. To use one,
 copy the relevant example into a small test stage first. This makes mistakes easy to identify and
 keeps an experimental rule from changing the production Diamond Age unexpectedly.
+
+### 3.2 No-code localhost stage editor
+
+An operator at permission level 3 may run `/pstages editor` in an integrated single-player world
+or while connected to a dedicated server. The client opens a private loopback website. It does not
+expose a public server port, and no configuration is sent to a hosted editing service.
+
+The editor begins with stages, not files. The left side contains one card for each stage. A schema
+4 stage may use `stage.toml`, `rules.toml`, and `progression.toml` internally, but those filenames
+only appear in the optional `TOML source` view.
+
+To create a stage without knowing TOML:
+
+1. Click the gold plus button beside `Stages`.
+2. Type `Iron Age` in `Stage name`. Do not type `pack:` and do not add `.toml`.
+3. Leave the collapsed pack name at `pack`, or change it to the modpack namespace.
+4. Confirm the preview, such as `pack:iron_age`, and click `Create stage`.
+5. Fill out the stage name, description, icon, required stages, team or server ownership, map
+   category, color, frame, reveal policy, and advancement background.
+6. Click `Add rule`. Choose a category. The action menu changes to the actions supported by that
+   category, and the search catalog changes to the matching registry. Entity rules cannot
+   accidentally choose an item, block rules cannot accidentally choose a fluid, and a mod filter
+   can reduce a large result set to one installed mod.
+7. Choose Exact ID, Whole mod, Tag, or Name match. Choose Lock, Deny, Allow, Unlock, Replace, or
+   viewer-only presentation. Set priority, JEI policy, EMI policy, and an optional exclusion.
+8. For a situational rule, choose a live, duration, session, latched, or scheduled lifetime and a
+   dimension, biome, structure, stage, mob, item, advancement, combat, boss, KubeJS, or other
+   listed activation condition.
+9. Click `Add progression` to make a condition grant or revoke the stage. Choose its count, repeat
+   policy, player/team/server scope, priority, and cooldown. Use the reward and cost cards for
+   items, effects, commands, teleportation, XP, purchase price, refund, and cooldown.
+10. Drag advanced rule cards to organize them. Open `Stage graph` and drag stage nodes to save
+    their map coordinates. The graph stays inside its own scrollable canvas even when a node is
+    moved far from the origin.
+11. Click `Check my work`. Then click `Review and apply`, inspect the file diff, and confirm.
+
+The easy builder writes the same schema that a TOML expert would write. There is no reduced
+runtime, separate simple-rule engine, or client-only shortcut. Priority, exclusions, temporary
+conditions, registry prefixes, viewer policy, server validation, transaction backup, reload, and
+client synchronization all use the normal authoritative implementation.
+
+The source and Inspector tabs remain available. Source mode has one tab for each file in the
+selected stage package and preserves unknown extension fields. The Inspector lists Java and KubeJS
+metadata supplied by the running server, provides registry lookup, explains fields, analyzes
+explicit priorities, and simulates a candidate decision. Normal stage creation never requires a
+browser prompt box, JSON object, inline TOML value, or direct file selection.
 
 ---
 

@@ -23,7 +23,10 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 - **Using schema 4 or the localhost editor:** follow the
   [Schema 4 and Editor Rehaul Guide](REHAUL_GUIDE.md), including all thirty feature groups and
   machine-tested three-file examples. The editor works for permission level 3 operators in
-  single-player worlds and on dedicated servers.
+  single-player worlds and on dedicated servers. Its gold stage-first easy builder creates a stage
+  from a normal name, searches the live modpack registries by category and mod, builds lock,
+  allowance, priority, exception, temporary-condition, progression, reward, and cost cards, and
+  keeps the three TOML files in an optional advanced source view.
 - **Building location, combat, timer, or priority-based access rules:** copy the
   [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
 - **Building or approving a release:** follow the

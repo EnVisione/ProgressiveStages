@@ -39,21 +39,47 @@ This workflow works in an integrated single-player world and on a dedicated serv
 2. Make sure your account has operator permission level 3 or higher.
 3. Run `/pstages editor`.
 4. Your Minecraft client starts a temporary web server on `127.0.0.1` and opens your browser.
-5. Click the plus button beside `Stages and files`.
-6. Enter a namespaced ID such as `my_pack:iron_age`.
-7. Pick `stage.toml` and fill in the name, description, icon, dependency, scope, and appearance.
-8. Pick `rules.toml`. Add locks with the registry search or a prefix mode.
-9. Pick `progression.toml`. Add grant, revoke, modifier, variable, or challenge data.
-10. Click `Validate`. Fix every red error.
-11. Click `Review and apply`. Read the semantic file diff.
-12. Confirm apply. The server writes one transaction, reloads once, and synchronizes connected
+5. Click the gold plus button beside `Stages`.
+6. Enter the friendly name `Iron Age`. Do not type `pack:` or write a file name. The editor turns
+   it into `pack:iron_age` and creates the complete three-file package. Expand `Pack name` only when
+   you want a namespace other than `pack`.
+7. Select the new stage card. The easy builder shows `Stage details`, `Rules`, `Progression`, and
+   `More stage features`. It never makes the three backing files part of the normal workflow.
+8. Fill in the name, description, icon, required stages, ownership scope, map category, color,
+   frame, reveal policy, and advancement background. Use `Browse` to choose an icon from the live
+   item registry.
+9. Click `Add rule`. Choose Items, Blocks, Fluids, Entities, Abilities, or any other supported
+   category. The next menu contains only actions valid for that category. Choose exact ID, whole
+   mod, tag, or name matching. Search results contain only the selected registry type, and `Only
+   show this mod` narrows a large modpack catalog before a target is selected.
+10. Choose Lock, Deny, Allow, Unlock, Replace, or viewer-only presentation. Set priority, JEI and
+    EMI visibility, an optional higher-priority exception, and an optional live, timed, session,
+    latched, or scheduled condition. The editor translates the card to `[[rules]]` or
+    `[[temporary_rules]]` TOML. Drag rule cards to keep the advanced rule order readable.
+11. Click `Add progression` to grant or revoke the stage from a kill, mined block, crafted item,
+    advancement, dimension, structure, KubeJS event, or another listed condition. Select count,
+    repeat policy, player/team/server scope, priority, and cooldown. Rewards and costs have their
+    own guided forms.
+12. Use `Stage graph` to drag nodes around the same dependency map players see. The graph is
+    contained in a scrollable canvas and grows with distant nodes instead of overflowing the page.
+13. Use `TOML source` only when you want direct control. `stage.toml`, `rules.toml`, and
+    `progression.toml` remain available as separate advanced tabs, and unknown extension fields are
+    preserved.
+14. Click `Check my work`. Fix every red error.
+15. Click `Review and apply`. Read the semantic file diff.
+16. Confirm apply. The server writes one transaction, reloads once, and synchronizes connected
     clients. A later player receives the same compiled revision during login.
 
-Nothing is live before step 12. The editor owns a server-side draft with a revision number. Undo,
+Nothing is live before step 16. The editor owns a server-side draft with a revision number. Undo,
 redo, source mode, validation, graph view, registry search, stage create, duplicate, rename, move,
 archive, restore, import, export, delete, collaboration, simulation, apply, backup, audit, and
 rollback all operate on that draft. Archived and migration-backup folders are ignored by package
 discovery, so a saved copy can never silently become a second live stage.
+
+The gold interface is stage-first rather than file-first. The left side contains one card per
+stage, not one row per TOML file. Empty sections say that nothing is currently active and provide a
+single plus button. Create, duplicate, rename, move, import, collaborator, rule, and progression
+forms all open inside the editor page rather than using browser prompt boxes.
 
 The Settings workspace is generated from the running server's entire main configuration spec. Each
 control includes its type, default, help text, and restart requirement. Stage forms are generated

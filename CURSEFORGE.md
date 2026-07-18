@@ -16,6 +16,16 @@ modifiers, variables, formulas, templates, stage states, persistent lifecycle pr
 Java and KubeJS registration APIs, automatic compiled client snapshots, and player-facing why,
 challenge, equipment, and history panels.
 
+The editor is stage-first and designed for authors who have never written TOML. Type `Iron Age`,
+and it creates the namespaced three-file stage package behind one stage card. Guided rule cards ask
+what category to affect, what action to gate, whether to lock or allow, how to select an exact ID,
+whole mod, tag, or name, which mod to search, what priority wins, what exception applies, whether
+JEI or EMI should show it, and which live or triggered condition activates it. The live server
+catalog only shows relevant items, blocks, entities, fluids, structures, professions, or other
+registry entries. Progression, rewards, costs, stage appearance, and dependency layout have guided
+controls too. Rule cards and graph nodes are draggable. Direct TOML and the inspector remain
+available for advanced work without becoming required for normal stage creation.
+
 Complete schema 4 instructions and tested packages are available in the
 [3.0.1 Schema 4 and Editor Guide](https://github.com/EnVisione/ProgressiveStages/blob/master/REHAUL_GUIDE.md).
 
