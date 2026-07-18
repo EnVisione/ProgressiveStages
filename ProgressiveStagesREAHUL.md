@@ -16,12 +16,22 @@ This rehaul has six mandatory foundations:
 1. A compact stage-package layout that is easy for a beginner and scalable for a large modpack.
 2. A translation layer that keeps every current 3.0.1 monolithic stage working.
 3. Symmetric grant and revoke lifecycle rules that use the same complete condition language.
-4. Stage, rule, and individual-selector priority with deterministic lock and unlock arbitration.
+4. Stage, category, advanced-rule, and individual prefix-entry priority with deterministic lock
+   and unlock arbitration.
 5. Contextual item buffs, debuffs, attributes, effects, and ability modifiers.
 6. Ten additional engine features and five UI-only features, all designed around author control.
 
 The goal is not to create more unrelated switches. The goal is one coherent engine with reusable
-selectors, conditions, actions, contexts, policies, and diagnostics.
+prefix entries, conditions, actions, contexts, policies, and diagnostics.
+
+### The KISS authoring decision
+
+- A new stage is normally `stages/<name>/stage.toml`.
+- Everything can be configured inside that one file.
+- Existing category names and simple string lists remain the primary syntax.
+- Extra files are optional includes that use the exact same sections as `stage.toml`.
+- The generic compiled rule model is an engine implementation detail, not required knowledge.
+- Advanced syntax adds capability without replacing or complicating the simple syntax.
 
 ## 2. Non-negotiable product rules
 
@@ -32,7 +42,8 @@ selectors, conditions, actions, contexts, policies, and diagnostics.
 - Built-in behavior is exposed through namespaced registries. Integrations register providers
   through service interfaces instead of adding core dependencies.
 - Defaults exist so a new author can begin quickly, but every gameplay default is overridable in
-  the main config, at the stage level, at the rule level, or at the selector level where relevant.
+  the main config, at the stage level, at the category level, at the advanced-rule level, or at the
+  individual entry level where relevant.
 - Unknown extension fields survive parsing, migration, inspection, and future authoring tools.
 - Every denial message, sound, icon, color, background, threshold, timer, priority, tie policy,
   aggregation policy, and failure action is configurable.
@@ -70,9 +81,9 @@ that cannot be disabled must be documented, intentionally generous, and visible 
 
 ### 2.4 User experience
 
-- The normal three-file package is understandable without reading Java code.
+- The normal package is one `stage.toml` file and uses the familiar category sections from 3.0.1.
 - A one-file legacy stage remains a supported beginner path.
-- Validation errors name the stage, module, file, line or field, invalid value, and a suggested fix.
+- Validation errors name the stage, included file, section, field, invalid value, and a suggested fix.
 - The player UI follows vanilla advancement screen behavior and accessibility conventions.
 - Operator diagnostics explain the actual winning rule rather than merely saying that content is
   locked.
@@ -99,11 +110,11 @@ The rehaul must start from the system that exists, not an imagined clean rewrite
 The rehaul should replace these separate runtime paths gradually. It must not remove working
 enforcement handlers before their equivalent compiled rule path is tested.
 
-## 4. Recommended stage-package layout
+## 4. KISS stage-package layout
 
-### 4.1 The normal layout
+### 4.1 The normal layout is one file
 
-The default package uses three files and no required subfolders:
+The default generated stage is one folder containing one familiar file:
 
 ```text
 config/
@@ -111,112 +122,104 @@ config/
     ├── progressivestages.toml
     └── stages/
         ├── iron_age/
-        │   ├── stage.toml
-        │   ├── rules.toml
-        │   └── lifecycle.toml
+        │   └── stage.toml
         └── end_fight/
-            ├── stage.toml
-            ├── rules.toml
-            └── lifecycle.toml
+            └── stage.toml
 ```
 
-- `stage.toml` is required and is the only marker that makes a directory a stage package.
-- `rules.toml` is optional. It owns access rules, locks, unlocks, modifiers, abilities, contextual
-  effects, and enforcement policies.
-- `lifecycle.toml` is optional. It owns grants, revokes, purchases, duration, costs, rewards, and
-  transition actions.
-- A package directory without `stage.toml` is not a stage and produces a clear warning only when
-  it appears to be an incomplete package.
-- The stage ID comes from `[stage].id`, never from the folder name. The folder is organizational.
-- Files outside a marked package are not guessed to be modules.
+`stage.toml` contains everything for that stage. It uses the existing recognizable sections such
+as `[items]`, `[blocks]`, `[fluids]`, `[structures]`, `[[triggers]]`, `[revoke]`, `[rewards]`, and
+`[display]`, plus equally direct new sections such as `[[revokes]]`, `[[item_modifiers]]`, and
+`[[challenges]]`. A teenager should be able to copy a small example, replace the IDs, and play.
 
-This is deliberately smaller than separate `locks/`, `triggers/`, `revokes/`, `attributes/`, and
-`rewards/` folders. A small stage needs three obvious files, not ten empty directories.
+The folder solves discovery and organization without forcing authors to learn a multi-file module
+system:
 
-### 4.2 Optional fragments for a very large stage
+- A directory is a stage only when it contains `stage.toml`.
+- `stage.toml` is a complete stage by itself.
+- The stage ID still comes from `[stage].id`, so renaming a folder does not corrupt saved ownership.
+- Random TOMLs are not guessed to be stages.
+- No `rules.toml`, `lifecycle.toml`, module declaration, fragment kind, or generic selector object
+  is required.
 
-Large packs can use one optional `parts` directory:
+### 4.2 Splitting a large stage is optional
+
+An author who likes one file never has to split it. An unusually large stage may opt into simple
+includes:
 
 ```text
 stages/
-└── technology/
-    └── applied_energistics/
-        ├── stage.toml
-        ├── rules.toml
-        ├── lifecycle.toml
-        └── parts/
-            ├── crafting.rules.toml
-            ├── machines.rules.toml
-            ├── progression.lifecycle.toml
-            └── pack_extension.toml
+└── applied_energistics/
+    ├── stage.toml
+    ├── items.toml
+    ├── crafting.toml
+    └── boss_trial.toml
 ```
 
-Each fragment declares its kind:
+`stage.toml` names the extra files explicitly:
 
 ```toml
-[module]
-schema = 4
-kind = "rules"
-id = "pack:ae2_machines"
-enabled = true
-```
-
-The stage manifest controls module discovery:
-
-```toml
-[schema]
-version = 4
-
 [stage]
 id = "pack:applied_energistics"
 name = "Applied Energistics"
 priority = 100
 
-[modules]
-files = [
-  "rules.toml",
-  "lifecycle.toml",
-  "parts/*.toml"
-]
+[files]
+include = ["items.toml", "crafting.toml", "boss_trial.toml"]
 ```
 
-Recommended default module patterns may be omitted, but the effective patterns are shown by
-`/pstages package inspect`. Main-config settings control whether undeclared files are ignored,
-warned about, or rejected. Module order is normalized by module ID, not filesystem iteration.
+An included file contains the same ordinary sections that could have been pasted into
+`stage.toml`. It has no stage identity and no module header:
+
+```toml
+[items]
+locked = ["mod:ae2"]
+always_unlocked = ["id:ae2:certus_quartz_crystal"]
+```
+
+This is a filing-cabinet feature, not a second schema. The loader merges included sections into the
+owning stage before validation. The files may be named and arranged however the author finds
+clear. Nested paths such as `combat/boss_trial.toml` are allowed, but there are no required
+subfolders.
+
+Include behavior is intentionally simple:
+
+- Files load in the exact order listed.
+- Lists append and remove exact duplicates while preserving the first occurrence.
+- Array entries such as triggers, revokes, modifiers, and challenges append and require unique IDs.
+- A scalar written twice is an error unless the include entry explicitly chooses `override`.
+- An included file cannot declare `[stage]` or include more files by default.
+- Missing files, path escape attempts, duplicate IDs, and ambiguous overrides reject the reload.
 
 ### 4.3 Datapack equivalent
 
 ```text
 data/<namespace>/progressivestages/stages/<package_path>/stage.toml
-data/<namespace>/progressivestages/stages/<package_path>/rules.toml
-data/<namespace>/progressivestages/stages/<package_path>/lifecycle.toml
-data/<namespace>/progressivestages/stages/<package_path>/parts/*.toml
+data/<namespace>/progressivestages/stages/<package_path>/<optional_included_file>.toml
 ```
 
-The datapack loader and config loader share the same package parser. Config packages override a
-datapack package with the same stage ID. Optional merge mode may be enabled per package, but the
-safe default is complete config override so a local admin does not accidentally combine two
-incompatible definitions.
+The datapack and config loaders share the same parser. Config stages override datapack stages with
+the same ID. A local config may replace the whole datapack stage safely without accidentally
+merging unrelated files.
 
-### 4.4 Legacy one-file layout
+### 4.4 Existing one-file stages stay easy
 
-These remain valid:
+These current files remain valid without being moved:
 
 ```text
 stages/diamond_stage.toml
 stages/technology/ae2.toml
 ```
 
-A TOML outside a directory containing `stage.toml` is treated as a legacy monolithic stage only
-when it contains the legacy `[stage]` table. It is translated in memory into the canonical model.
-Random TOMLs and future shared data files are no longer assumed to be stages.
+A TOML outside a `stage.toml` package is a legacy monolithic stage only when it contains `[stage]`.
+It is translated in memory. The migration command may wrap it in a folder as `stage.toml`, but it
+does not split the contents unless the author explicitly asks it to.
 
-## 5. Schema ownership
+## 5. KISS authoring schema
 
-### 5.1 `stage.toml`
+### 5.1 A complete beginner stage
 
-`stage.toml` stays small. It owns identity, dependency policy, scope, default priority,
-presentation, module inclusion, and extension metadata.
+The common path stays category based. Authors do not need to understand the compiled rule engine:
 
 ```toml
 [schema]
@@ -225,133 +228,163 @@ version = 4
 [stage]
 id = "pack:iron_age"
 name = "Iron Age"
-description = "Master iron before moving into advanced technology."
-icon = "minecraft:iron_ingot"
-scope = "team"
-priority = 100
-tags = ["age", "metal", "main_path"]
-category = "ages"
-hidden = false
-
-[dependencies]
-mode = "all_of"
-stages = ["pack:stone_age"]
-count = 1
-
-[presentation]
-frame = "task"
-reveal = "dependencies"
-color = "#D8D8D8"
-background = "minecraft:textures/gui/advancements/backgrounds/stone.png"
-x = 120
-y = 40
-
-[modules]
-files = ["rules.toml", "lifecycle.toml", "parts/*.toml"]
-```
-
-All fields except `schema.version` and `stage.id` have configurable defaults. Dependencies use the
-same condition compiler internally but retain this simple shorthand for common stage graphs.
-
-### 5.2 `rules.toml`
-
-`rules.toml` owns content decisions. A rule has one effect, one or more targets, optional
-conditions, optional activation, policies, and a priority. The same shape works for items, blocks,
-fluids, entities, recipes, structures, dimensions, abilities, UI visibility, loot, and extension
-targets.
-
-```toml
-[module]
-schema = 4
-kind = "rules"
-id = "pack:iron_age_rules"
-
-[[rules]]
-id = "pack:lock_iron_tools"
-effect = "lock"
-priority = 120
-contexts = ["item.use", "item.attack", "item.hotbar"]
-selectors = [
-  "tag:minecraft:tools",
-  { match = "name:iron", priority = 150 },
-  { match = "id:minecraft:iron_sword", priority = 300, contexts = ["item.attack"] }
-]
-except = ["id:minecraft:iron_nugget"]
-
-[rules.when]
-operator = "stage_missing"
-stage = "pack:iron_age"
-
-[rules.policy]
-id = "progressivestages:deny"
-message = "You need the Iron Age to use {target}."
-sound = "minecraft:block.note_block.bass"
-```
-
-The canonical syntax is structured TOML because comma-separated metadata becomes ambiguous once
-messages, lists, or formulas contain commas. The requested shorthand is also accepted:
-
-```toml
-selectors = [
-  "mod:ae2,priority:1",
-  "id:minecraft:iron_sword,priority:200,context:item.attack"
-]
-```
-
-Writers and migration tools emit the structured form. The compact form exists for hand-written
-convenience and backwards familiarity.
-
-### 5.3 `lifecycle.toml`
-
-Grant and revoke rules are identical except for direction. Both use the full condition tree,
-priority, scope, repeat policy, cooldown, progress storage, transition actions, and diagnostics.
-
-```toml
-[module]
-schema = 4
-kind = "lifecycle"
-id = "pack:iron_age_lifecycle"
-
-[[grants]]
-id = "pack:earn_iron_age"
-priority = 100
-mode = "all_of"
-repeat = "once"
-scope = "team"
 description = "Mine iron and smelt an ingot."
+icon = "minecraft:iron_ingot"
+dependency = "pack:stone_age"
+priority = 100
 
-[[grants.conditions]]
+[items]
+locked = [
+  "name:iron",
+  "mod:ae2"
+]
+always_unlocked = ["id:minecraft:iron_nugget"]
+
+[blocks]
+locked = ["name:iron"]
+
+[[triggers]]
+mode = "all_of"
+description = "Mine iron and smelt one ingot."
+
+[[triggers.conditions]]
 type = "mine"
 target = "id:minecraft:iron_ore"
 count = 1
 
-[[grants.conditions]]
+[[triggers.conditions]]
 type = "has_item"
 target = "id:minecraft:iron_ingot"
 count = 1
 
 [[revokes]]
-id = "pack:lose_trial_on_death"
-priority = 500
 mode = "any_of"
-repeat = "always"
-cooldown = "1s"
-description = "Dying or losing too much health fails the trial."
+description = "The temporary trial is lost on death."
 
 [[revokes.conditions]]
 type = "death"
 count = 1
-window = "current_session"
-
-[[revokes.conditions]]
-type = "health_lost"
-count = 40
-window = "30s"
 ```
 
-Lifecycle rules may target their owning stage by default or explicitly target other stages when
-the author enables cross-stage transitions. Cross-stage transitions must validate dependencies,
-scope, cycles, and transaction permissions.
+The existing `[[triggers]]` name remains the simple grant spelling. `[[grants]]` is an equally
+valid clearer alias. Both compile to the same lifecycle engine. `[revoke]` remains valid for the
+old simple death, XP, and duration cases, while `[[revokes]]` adds full trigger-condition parity.
+
+### 5.2 Priority without selector objects
+
+Most authors set one priority on the stage and stop there. Every category entry inherits it.
+Categories may set a different default with one obvious field:
+
+```toml
+[stage]
+id = "pack:technology"
+priority = 100
+
+[items]
+priority = 150
+locked = ["mod:ae2", "id:ae2:wireless_terminal"]
+```
+
+Individual exceptions use a readable lookup table instead of turning every list entry into an
+object:
+
+```toml
+[items.priorities]
+"mod:ae2" = 150
+"id:ae2:wireless_terminal" = 500
+```
+
+The requested compact spelling is also accepted for authors who prefer it:
+
+```toml
+[items]
+locked = ["mod:ae2,priority:150", "id:ae2:wireless_terminal,priority:500"]
+```
+
+Plain entries remain the recommended beginner form. The documentation introduces per-entry
+priority only in the advanced conflict section.
+
+### 5.3 Direct contextual locks and unlocks
+
+Common temporary behavior gets named sections with human fields rather than a generic rule object:
+
+```toml
+[[temporary_locks]]
+id = "pack:end_no_elytra"
+abilities = ["elytra", "jump"]
+items = ["id:minecraft:diamond_pickaxe"]
+in_dimensions = ["minecraft:the_end"]
+priority = 200
+
+[[temporary_unlocks]]
+id = "pack:allow_stronghold_after_wither"
+structures = ["minecraft:stronghold"]
+with_stages = ["pack:end_fight"]
+priority = 200
+```
+
+Advanced nested conditions remain possible, but simple dimension, biome, structure, stage,
+health, item, effect, and movement fields cover the normal use cases.
+
+### 5.4 Direct item buffs and debuffs
+
+The normal modifier syntax names what it affects and where it must be:
+
+```toml
+[[item_modifiers]]
+id = "pack:mage_using_sword"
+items = ["tag:pack:knight_weapons"]
+while_holding = true
+with_stages = ["pack:mage"]
+priority = 300
+
+[[item_modifiers.attributes]]
+id = "minecraft:generic.attack_damage"
+amount = -0.59
+operation = "multiply_total"
+
+[[item_modifiers.attributes]]
+id = "minecraft:generic.attack_speed"
+amount = -0.25
+operation = "multiply_total"
+```
+
+Aliases such as `while_in_hotbar`, `while_in_inventory`, `while_wearing`, and `while_using` avoid
+requiring context registry IDs in common files. Advanced authors can use registered context IDs
+when an integration adds a new location or activity.
+
+### 5.5 The generic rule language is an escape hatch
+
+Internally, every category compiles into a generic rule model. A public `[[rules]]` section may be
+available for extension authors and unusually complex combinations, but:
+
+- It is never required for a normal stage.
+- It is not generated by default.
+- It is documented after all category-based examples.
+- The UI and migration tools write familiar category sections whenever the behavior fits them.
+- Validation suggests the simpler equivalent when an advanced rule can be represented directly.
+
+The engine can be powerful without making every pack author speak the engine's internal language.
+
+### 5.6 KISS acceptance rules
+
+- The generated starter stage contains one file and fewer than 40 active configuration lines.
+- A first stage can be made by changing the stage ID, name, icon, and one `locked` list.
+- Common grants and revokes do not require explicit rule IDs, condition trees, action arrays, or
+  registry-provider knowledge.
+- Common item modifiers use `items`, `while_holding`, `with_stages`, and `attributes` rather than
+  generic target, context, predicate, and action objects.
+- The beginner guide teaches `[stage]`, one lock category, one trigger, and one revoke before it
+  mentions priority or advanced rules.
+- Generated comments use everyday language. Terms such as AST, DTO, codec, provenance, and event
+  index stay in developer documentation.
+- Every advanced feature has a short-form example before its complete expert form.
+- Validation recommends a direct category field when an author writes an unnecessarily generic
+  rule.
+- The complete Diamond reference remains separate from the tiny generated starter so new users are
+  not greeted by hundreds of options.
+- A teenager unfamiliar with the codebase must be able to complete the documented first-stage and
+  item-debuff walkthrough during manual usability testing without developer assistance.
 
 ## 6. Canonical compiled model
 
@@ -360,8 +393,8 @@ small set of immutable public concepts.
 
 ### 6.1 Source model
 
-- `StagePackageSource` records config or datapack origin, package root, schema version, declared
-  modules, load order, namespace, and override policy.
+- `StagePackageSource` records config or datapack origin, package root, schema version, explicitly
+  included files, load order, namespace, and override policy.
 - `StageManifestSource` records raw stage identity, dependencies, presentation, defaults, and
   preserved extension fields.
 - `RuleSource` records rule-level selectors, contexts, conditions, actions, policies, and source
@@ -385,8 +418,8 @@ small set of immutable public concepts.
   actions.
 - `DecisionTrace` records every matching candidate, its effective priority, why it matched or
   failed, and the selected winner.
-- `ConfigProvenance` records package, module, file, field, schema version, translated legacy field,
-  and extension owner.
+- `ConfigProvenance` records package, included file, section, field, schema version, translated
+  legacy field, and extension owner.
 
 ### 6.3 Compilation pipeline
 
@@ -412,11 +445,11 @@ atomically replace the active snapshot
 
 Every error before the final step rejects the entire candidate and preserves the current snapshot.
 
-## 7. Selector metadata and priority
+## 7. Prefix entries and priority
 
-### 7.1 Supported selector forms
+### 7.1 Supported prefix forms
 
-All current selectors remain valid:
+All current prefix entries remain valid:
 
 - `id:minecraft:diamond`
 - `minecraft:diamond`
@@ -425,31 +458,38 @@ All current selectors remain valid:
 - `#c:gems/diamond`
 - `name:diamond`
 
-The matcher registry adds author-defined selector types without editing a central enum. Built-ins
-may later include component, data-component value, recipe type, rarity, creative tab, equipment
-slot, entity tag, block state, fluid property, enchantment, structure tag, dimension tag, and a
-KubeJS predicate.
+Internally, a matcher registry allows extension mods to add more prefix types without editing a
+central enum. Beginner documentation calls these list entries or prefixes, not selector objects.
+Advanced built-ins may later include component, data-component value, recipe type, rarity,
+creative tab, equipment slot, entity tag, block state, fluid property, enchantment, structure tag,
+dimension tag, and a KubeJS predicate.
 
-### 7.2 Structured selector metadata
+### 7.2 Simple entry metadata
+
+The normal author continues writing plain prefix entries inside familiar category lists. Optional
+per-entry settings live beside the list in a lookup table:
 
 ```toml
-selectors = [
-  { match = "mod:ae2" },
-  { match = "tag:c:tools", priority = 125 },
-  { match = "id:minecraft:bow", priority = 600, contexts = ["item.use", "item.attack"], policy = "progressivestages:warn", message = "Bows are weakened during this trial.", labels = ["ranged", "trial_override"] }
-]
+[items]
+locked = ["mod:ae2", "tag:c:tools", "id:minecraft:bow"]
+
+[items.priorities]
+"tag:c:tools" = 125
+"id:minecraft:bow" = 600
 ```
 
-Omitting selector priority is valid. It falls through to the next configured layer.
+The same key may appear in an optional category table for a message, policy, or context override
+when needed, but the list itself stays readable. Advanced generic rules may use structured
+selector objects internally or explicitly. Omitted entry settings always inherit.
 
 ### 7.3 Priority cascade
 
 Effective priority is resolved in this order:
 
-1. Explicit selector priority.
-2. Explicit rule priority.
-3. Category or module default priority.
-4. Stage priority from `stage.toml`.
+1. Individual prefix-entry priority from a category lookup table or compact suffix.
+2. Explicit advanced-rule priority when the optional generic rule language is used.
+3. Category priority such as `[items].priority`.
+4. Stage priority from `[stage].priority`.
 5. Global default priority from `progressivestages.toml`.
 
 The priority range is configurable within a documented absolute safety range. Higher priority
@@ -461,7 +501,7 @@ The default tie behavior remains safe and compatible:
 
 1. Deny or lock beats allow or unlock.
 2. An exact ID beats a tag, a tag beats a name match, and a name match beats a mod-wide match.
-3. Explicit selector metadata beats inherited metadata.
+3. Explicit prefix-entry settings beat inherited settings.
 4. Canonical rule ID provides the final stable ordering.
 
 Every layer is configurable except the final deterministic ordering. Authors may choose
@@ -472,23 +512,22 @@ the server applies them.
 ### 7.5 Decision example
 
 ```toml
-# stage priority is 100
+[stage]
+id = "pack:technology"
+priority = 100
 
-[[rules]]
-id = "pack:lock_ae2"
-effect = "lock"
-selectors = ["mod:ae2"]
+[items]
+locked = ["mod:ae2"]
 
-[[rules]]
-id = "pack:allow_terminal"
-effect = "unlock"
+[unlocks]
+items = ["id:ae2:wireless_terminal"]
 priority = 200
-selectors = [
-  { match = "id:ae2:wireless_terminal", priority = 500 }
-]
+
+[unlocks.priorities]
+"id:ae2:wireless_terminal" = 500
 ```
 
-The mod-wide lock inherits 100. The allow rule normally uses 200. The terminal selector uses 500,
+The mod-wide lock inherits 100. The unlock section normally uses 200. The terminal entry uses 500,
 so it wins for that exact item without changing any other AE2 item.
 
 ## 8. One condition language for everything
@@ -596,39 +635,37 @@ Opposing grants and revokes can otherwise fight forever. The lifecycle transacti
 
 ## 9. Contextual buffs, debuffs, attributes, and item behavior
 
-### 9.1 A general modifier rule
+### 9.1 A direct item modifier section
 
-Item attributes should not be a special parser bolted onto `[attribute]`. They become modifier
-rules using the same selectors, conditions, contexts, priority, and diagnostics as access rules.
+Item attributes should not require authors to learn a generic rule language. The direct
+`[[item_modifiers]]` section uses ordinary item lists and plain location fields while compiling to
+the same internal condition and priority engine.
 
 ```toml
-[[modifiers]]
+[[item_modifiers]]
 id = "pack:iron_sword_training"
-selectors = [
-  { match = "id:minecraft:iron_sword", priority = 250 }
-]
-contexts = ["item.main_hand"]
+items = ["id:minecraft:iron_sword"]
+while_holding = true
+with_stages = ["pack:knight"]
 aggregation = "once"
-priority = 100
+priority = 250
 
-[modifiers.when]
-operator = "stage_owned"
-stage = "pack:knight"
-
-[[modifiers.attributes]]
+[[item_modifiers.attributes]]
 id = "minecraft:generic.max_health"
 amount = 10.0
 operation = "add_value"
 
-[[modifiers.attributes]]
+[[item_modifiers.attributes]]
 id = "minecraft:generic.attack_speed"
 amount = 0.15
-operation = "add_multiplied_total"
+operation = "multiply_total"
 ```
 
 ### 9.2 Supported inventory contexts
 
-Built-in context IDs include:
+Simple author-facing location fields include `while_holding`, `while_in_main_hand`,
+`while_in_off_hand`, `while_in_hotbar`, `while_selected`, `while_in_inventory`, `while_wearing`,
+`while_in_curios`, `while_using`, and `while_attacking`. Advanced registered context IDs include:
 
 - `item.main_hand`.
 - `item.off_hand`.
@@ -642,8 +679,8 @@ Built-in context IDs include:
 - `item.container` for a currently open container when explicitly enabled.
 - `item.use`, `item.attack`, `item.break`, `item.place`, `item.pickup`, and `item.drop`.
 
-Extension mods can register more context sources. The author may combine contexts using all, any,
-not, and minimum-count logic.
+Extension mods can register more context sources. Most authors never need their IDs. Advanced
+authors may combine contexts using all, any, not, and minimum-count logic.
 
 ### 9.3 Aggregation and stacking
 
@@ -652,13 +689,14 @@ Inventory modifiers must define how multiple matching stacks behave:
 - `once` applies one modifier if any stack matches.
 - `per_stack` applies once per matching stack up to a configured cap.
 - `per_item` multiplies by item count up to a configured cap.
-- `highest` applies the strongest matching selector.
-- `lowest` applies the weakest matching selector.
+- `highest` applies the strongest matching prefix entry.
+- `lowest` applies the weakest matching prefix entry.
 - `sum` adds every compatible result.
 - `exclusive` selects the priority winner only.
 
 Attribute stacking policy may be replace, add, multiply, highest, lowest, deny-on-conflict, or a
-registered custom policy. Stable modifier IDs derive from rule, selector, attribute, subject, and
+registered custom policy. Stable modifier IDs derive from modifier, prefix entry, attribute,
+subject, and
 aggregation bucket. Reconciliation happens only when relevant inventory, equipment, stage,
 context, or rule state becomes dirty.
 
@@ -667,28 +705,24 @@ context, or rule state becomes dirty.
 Both roles may use the other role's weapons, but the foreign weapon is weaker rather than denied:
 
 ```toml
-[[modifiers]]
+[[item_modifiers]]
 id = "pack:mage_using_knight_weapon"
-selectors = ["tag:pack:knight_weapons"]
-contexts = ["item.main_hand", "item.attack"]
+items = ["tag:pack:knight_weapons"]
+while_holding = true
+while_attacking = true
+with_stages = ["pack:mage"]
+without_stages = ["pack:knight_training"]
 priority = 300
 
-[modifiers.when]
-operator = "all"
-nodes = [
-  { type = "stage_owned", stage = "pack:mage" },
-  { type = "stage_missing", stage = "pack:knight_training" }
-]
-
-[[modifiers.attributes]]
+[[item_modifiers.attributes]]
 id = "minecraft:generic.attack_damage"
 amount = -0.59
-operation = "add_multiplied_total"
+operation = "multiply_total"
 
-[[modifiers.attributes]]
+[[item_modifiers.attributes]]
 id = "minecraft:generic.attack_speed"
 amount = -0.25
-operation = "add_multiplied_total"
+operation = "multiply_total"
 ```
 
 The same mechanism can reduce spell power for knights when a magic mod exposes an attribute. If a
@@ -716,35 +750,23 @@ warn and disable the modifier, or ignore it.
 ## 10. Required boss hit-limit design
 
 The conversation's boss idea is implemented as a reusable challenge budget, not a boss-specific
-hardcoded check.
+hardcoded check. The common boss trial has a short form:
 
 ```toml
 [[challenges]]
 id = "pack:wither_no_hit_trial"
-start_when = { type = "combat_started", entity = "id:minecraft:wither" }
-end_when = { type = "combat_ended", entity = "id:minecraft:wither" }
+boss = "id:minecraft:wither"
+maximum_hits_taken = 3
+count_zero_damage_hits = false
+count_blocked_hits = false
 scope = "player"
-sharing = "individual"
-
-[[challenges.budgets]]
-id = "hits"
-measure = "hits_taken"
-maximum = 3
-filters = { attacker = "id:minecraft:wither", require_final_damage = true }
-
-[challenges.success]
-when = { type = "kill", target = "id:minecraft:wither", count = 1 }
-actions = [
-  { type = "grant_stage", stage = "pack:wither_mastery" }
-]
-
-[challenges.failure]
-when = { type = "budget_exceeded", budget = "hits" }
-actions = [
-  { type = "revoke_stage", stage = "pack:wither_trial" },
-  { type = "message", text = "Trial failed. You were hit {current} times." }
-]
+grant_on_success = "pack:wither_mastery"
+revoke_on_failure = "pack:wither_trial"
+failure_message = "Trial failed. You were hit {current} times."
 ```
+
+Advanced authors may add several `[[challenges.budgets]]`, custom start and end conditions, and
+full action lists. The short fields compile into those advanced objects internally.
 
 Configurable challenge decisions include:
 
@@ -766,7 +788,7 @@ mod.
 
 ## 11. Ten additional engine features
 
-The package schema, legacy translation, symmetric grant and revoke engine, selector priority,
+The package schema, legacy translation, symmetric grant and revoke engine, prefix-entry priority,
 health and death conditions, contextual item modifiers, and hit-limit requirement are mandatory
 foundations. The following are ten additional engine feature groups.
 
@@ -785,7 +807,8 @@ and multiple failure tiers.
 
 ### Engine feature 3. Affinity, proficiency, and mastery profiles
 
-Authors define role or class affinity for selector groups. A profile may deny, weaken, strengthen,
+Authors define role or class affinity for item or content groups. A profile may deny, weaken,
+strengthen,
 increase cost, change cooldown, or replace behavior at proficiency levels. Proficiency can be a
 stage, variable, scoreboard, custom counter, currency, or formula. Mage and knight cross-weapon
 penalties are one configuration, not a built-in class system.
@@ -856,7 +879,7 @@ IDs and source files.
 
 When content is blocked or modified, a vanilla-style expandable panel shows the winning decision
 and, when allowed, the other candidates it defeated. It displays effective priority, inherited
-priority source, selector specificity, current conditions, remaining duration, and the applicable
+priority source, prefix specificity, current conditions, remaining duration, and the applicable
 allow or deny policy.
 
 ### UI feature 3. Challenge HUD
@@ -923,7 +946,7 @@ for at least the following policies:
 active_version = 4
 legacy_mode = "translate"
 unknown_field_policy = "preserve_and_warn"
-undeclared_module_policy = "warn"
+unlisted_file_policy = "ignore"
 config_overrides_datapack = true
 package_merge_policy = "replace"
 
@@ -972,8 +995,8 @@ show_challenge_hud = true
 show_history = true
 ```
 
-All defaults must be documented in the generated config. Package, stage, module, rule, and
-selector overrides must state whether they replace, merge, append, or inherit.
+All defaults must be documented in the generated config. Package, stage, category, advanced-rule,
+and individual-entry overrides must state whether they replace, merge, append, or inherit.
 
 ## 15. Legacy translation layer
 
@@ -989,39 +1012,45 @@ selector overrides must state whether they replace, merge, append, or inherit.
 | Current 3.0.1 section | New destination | Translation rule |
 |---|---|---|
 | `[stage]` identity and metadata | `stage.toml` `[stage]` | Preserve ID, name, description, icon, dependencies, scope, tags, hidden, category, color, duration metadata, and source provenance. Missing stage priority becomes the compatible global static priority, normally zero. |
-| `[items]` | `rules.toml` | Create item-context lock rules and preserve `always_unlocked` as selector exceptions or higher-priority allows. |
-| `[blocks]` | `rules.toml` | Create placement, break, interaction, and presentation rules using current enforcement defaults. |
-| `[fluids]` | `rules.toml` | Create pickup, placement, flow, submersion, and recipe-viewer rules. |
-| `[recipes]` | `rules.toml` | Preserve recipe-ID and output-item gates as separate target contexts. |
-| `[crops]` | `rules.toml` | Preserve planting, growth, bonemeal, and harvest behavior. |
-| `[dimensions]` | `rules.toml` | Preserve portal and teleport gating. |
-| `[enchants]` and max levels | `rules.toml` | Preserve enchant access, strip behavior, viewer hiding, and maximum level transforms. |
-| `[entities]` | `rules.toml` | Preserve attack and interaction gating. |
-| `[[interactions]]` | `rules.toml` | Convert held-selector and target-selector pairs into interaction-context rules. |
-| `[loot]` | `rules.toml` | Preserve loot filtering contexts and current nearest-player or owner semantics. |
-| `[mobs]` and replacements | `rules.toml` | Preserve spawn deny and replacement policies as registered spawn actions. |
-| `[pets]` | `rules.toml` | Preserve tame, breed, command, and ride contexts. |
-| `[screens]` | `rules.toml` | Preserve block and held-item screen gates. |
-| `[trades]` | `rules.toml` | Preserve offer-result filtering and completion enforcement. |
-| `[professions]` | `rules.toml` | Preserve profession selectors and trade contexts. |
-| `[advancements]` | `rules.toml` | Preserve advancement visibility policy. |
-| `[structures]` | `rules.toml` | Preserve entry, chest, block, explosion, and spawn policies. |
-| `[[regions]]` | `rules.toml` | Preserve boxes, dimensions, entry behavior, enforcement flags, and debuffs. |
-| `[curios]` | `rules.toml` | Preserve optional Curios slot gating and ejection behavior. |
-| `[[ores.overrides]]` | `rules.toml` | Preserve visual substitute and guarded drop policies. |
-| `[unlocks]` | `rules.toml` | Convert carve-outs into matching allow rules or selector exceptions at a compatible priority. |
-| `[enforcement]` | `rules.toml` | Convert exemptions and toggle overrides into explicit per-context policy settings. |
-| `[display]` | `stage.toml` presentation and `rules.toml` presentation policies | Preserve stage map layout, reveal, tooltip, masking, icon, background, and encrypted block behavior. |
-| `[[triggers]]` | `lifecycle.toml` `[[grants]]` | Preserve rule OR behavior, condition mode, counts, descriptions, targets, progress keys, and retroactivity. |
-| `[[attribute]]` or `[attribute]` | `rules.toml` modifiers | Create stage-owned unconditional modifier rules with stable compatibility IDs. |
-| `[revoke]` | `lifecycle.toml` `[[revokes]]` | Translate death and maintained-XP behavior into shared conditions. |
-| `[stage].duration` | `lifecycle.toml` revoke rule | Translate expiry into a stage-held-duration condition with existing real-time behavior. |
-| `[cost]` | `lifecycle.toml` | Preserve purchase items, XP, cooldown, and refund policy. |
-| `[unlock]` | `lifecycle.toml` transition presentation | Preserve sounds, particles, titles, and messages as grant actions. |
-| `[abilities]` | `rules.toml` | Preserve sprint, swim, climb, elytra, jump, and registered ability locks. |
-| `[rewards]` | `lifecycle.toml` grant actions | Preserve items, effects, commands, teleport, and XP. |
-| Temporary and triggered rules | `rules.toml` | Preserve effect, activation, priority, owner stage state, targets, exceptions, contexts, trigger filters, duration, and refresh behavior. |
-| Structure active locks and session stages | `rules.toml` and `lifecycle.toml` | Preserve provider IDs, exact session source, leases, present-stage selectors, leave outcomes, and team-safe ownership. |
+| `[items]` | `stage.toml` `[items]` | Keep the familiar section and preserve `locked`, `always_unlocked`, and enforcement behavior. It compiles internally into item-context decisions. |
+| `[blocks]` | `stage.toml` `[blocks]` | Keep the familiar section and preserve placement, break, interaction, and presentation behavior. |
+| `[fluids]` | `stage.toml` `[fluids]` | Keep the familiar section and preserve pickup, placement, flow, submersion, and recipe-viewer behavior. |
+| `[recipes]` | `stage.toml` `[recipes]` | Keep recipe-ID and output-item gates as the same author-facing fields. |
+| `[crops]` | `stage.toml` `[crops]` | Keep planting, growth, bonemeal, and harvest settings. |
+| `[dimensions]` | `stage.toml` `[dimensions]` | Keep portal and teleport settings. |
+| `[enchants]` and max levels | `stage.toml` `[enchants]` | Keep enchant access, stripping, viewer hiding, and maximum level fields. |
+| `[entities]` | `stage.toml` `[entities]` | Keep attack and interaction fields. |
+| `[[interactions]]` | `stage.toml` `[[interactions]]` | Preserve the existing held-item and target fields. |
+| `[loot]` | `stage.toml` `[loot]` | Preserve loot filtering and existing owner semantics. |
+| `[mobs]` and replacements | `stage.toml` `[mobs]` | Preserve spawn denial and replacement entries. |
+| `[pets]` | `stage.toml` `[pets]` | Preserve tame, breed, command, and ride fields. |
+| `[screens]` | `stage.toml` `[screens]` | Preserve block and held-item screen gates. |
+| `[trades]` | `stage.toml` `[trades]` | Preserve offer filtering and completion enforcement. |
+| `[professions]` | `stage.toml` `[professions]` | Preserve profession entries. |
+| `[advancements]` | `stage.toml` `[advancements]` | Preserve advancement visibility entries. |
+| `[structures]` | `stage.toml` `[structures]` | Preserve entry, chest, block, explosion, and spawn settings. |
+| `[[regions]]` | `stage.toml` `[[regions]]` | Preserve boxes, dimensions, flags, and debuffs. |
+| `[curios]` | `stage.toml` `[curios]` | Preserve optional Curios slot settings. |
+| `[[ores.overrides]]` | `stage.toml` `[[ores.overrides]]` | Preserve visual substitutes and guarded drops. |
+| `[unlocks]` | `stage.toml` `[unlocks]` | Keep the simple carve-out section and compile its entries as compatible higher-priority allows internally. |
+| `[enforcement]` | `stage.toml` `[enforcement]` | Keep exemptions and toggle overrides as direct fields. |
+| `[display]` | `stage.toml` `[display]` | Preserve map layout, reveal, tooltip, masking, icon, background, and encrypted-block behavior. |
+| `[[triggers]]` | `stage.toml` `[[triggers]]` | Keep the existing spelling and behavior. Also accept `[[grants]]` as an alias for new files. |
+| `[[attribute]]` or `[attribute]` | `stage.toml` existing attribute section | Preserve stage-owned modifiers. New contextual behavior uses the direct `[[item_modifiers]]` section. |
+| `[revoke]` | `stage.toml` `[revoke]` | Keep simple death and maintained-XP fields. Compile them into the shared revoke engine. |
+| `[stage].duration` | `stage.toml` `[stage].duration` | Keep the field and compile it into a stage-held-duration revoke condition. |
+| `[cost]` | `stage.toml` `[cost]` | Preserve purchase items, XP, cooldown, and refund fields. |
+| `[unlock]` | `stage.toml` `[unlock]` | Preserve sounds, particles, titles, and messages. |
+| `[abilities]` | `stage.toml` `[abilities]` | Preserve sprint, swim, climb, elytra, jump, and registered ability entries. |
+| `[rewards]` | `stage.toml` `[rewards]` | Preserve items, effects, commands, teleport, and XP. |
+| Temporary and triggered rules | Same named sections in `stage.toml` | Preserve effect, activation, priority, owner state, targets, exceptions, contexts, filters, duration, and refresh behavior. Add simpler direct-field aliases where possible. |
+| Structure active locks and session stages | Same named sections in `stage.toml` | Preserve provider IDs, exact sessions, leases, present-stage entries, leave outcomes, and team-safe ownership. |
+
+Migration is therefore mostly organizational, not a forced language rewrite. The normal migrated
+result is the old file copied safely to `<stage_folder>/stage.toml` with a schema marker and only
+the minimum necessary field normalization. Automatic migration does not produce `rules.toml`,
+`lifecycle.toml`, selector objects, or a collection of fragments. Optional splitting is a separate
+author-requested operation.
 
 ### 15.3 Migration commands
 
@@ -1174,7 +1203,7 @@ regression rather than guessed in this design document.
 
 ## 19. Security and safety
 
-- Normalize and contain module paths so includes cannot escape the stage package or approved shared
+- Normalize and contain include paths so files cannot escape the stage package or approved shared
   template roots.
 - Commands and action providers declare permission requirements.
 - Client packets never choose ownership, priority winners, modifier amounts, or challenge results.
@@ -1202,9 +1231,10 @@ verification record. A phase is not complete because the classes compile.
 
 ### Phase 2. Define schema 4 and provenance
 
-- Implement source DTOs for manifests, modules, rules, lifecycle, selectors, and extensions.
+- Implement source DTOs for the one-file authoring sections, optional includes, compiled rules,
+  lifecycle entries, prefix entries, and extensions.
 - Attach file and field provenance to every source value.
-- Publish machine-readable schema descriptions and examples.
+- Publish machine-readable schema descriptions and one-file examples.
 - Gate: malformed package fixtures produce precise errors without touching runtime state.
 
 ### Phase 3. Build the immutable compiled model
@@ -1217,9 +1247,10 @@ verification record. A phase is not complete because the classes compile.
 ### Phase 4. Implement package discovery
 
 - Change config and datapack discovery to use `stage.toml` markers.
-- Add manifest-controlled module patterns and the optional `parts` folder.
+- Add the optional explicit `[files].include` list and deterministic section merging.
 - Retain monolithic legacy discovery only for files with `[stage]` outside a package.
-- Gate: helper TOMLs are never mistaken for stages, and config override behavior is deterministic.
+- Gate: helper TOMLs are never mistaken for stages, include order is deterministic, and a complete
+  stage needs only `stage.toml`.
 
 ### Phase 5. Implement in-memory legacy translation
 
@@ -1230,10 +1261,11 @@ verification record. A phase is not complete because the classes compile.
 
 ### Phase 6. Upgrade selectors
 
-- Add `SelectorSpec`, structured metadata, compact metadata shorthand, registry matchers, and
-  validation.
+- Add plain prefix-entry priority lookup tables, compact metadata shorthand, the internal
+  `SelectorSpec`, registry matchers, and validation.
 - Keep plain `PrefixEntry` adapters while old handlers remain.
-- Gate: all current prefixes match identically and selector metadata inheritance is fully tested.
+- Gate: all current prefix lists remain the recommended syntax, match identically, and inherit
+  category, stage, and global priority correctly.
 
 ### Phase 7. Unify decision priority
 
@@ -1332,9 +1364,9 @@ verification record. A phase is not complete because the classes compile.
 
 ### 21.1 Unit tests
 
-- Package marker and module glob normalization.
+- Package marker, explicit include path, include order, and section merge behavior.
 - Legacy detection.
-- Structured and compact selector parsing.
+- Plain prefix lists, priority lookup tables, and compact priority suffix parsing.
 - Prefix compatibility and selector metadata.
 - Priority inheritance and every tie policy.
 - Boolean condition truth tables.
@@ -1353,8 +1385,9 @@ verification record. A phase is not complete because the classes compile.
 - Item use, pickup, mouse pickup, hotbar, inventory, attack, place, break, and drop contexts.
 - Block, fluid, recipe, crop, dimension, enchant, entity, interaction, loot, mob, pet, screen, trade,
   profession, advancement, structure, region, Curios, ore, beacon, brewing, and ability rules.
-- Per-selector priority overrides a stage-wide mod lock.
-- A missing selector priority inherits rule, module, stage, then global priority.
+- Per-entry priority overrides a stage-wide mod lock.
+- A missing entry priority inherits advanced rule when applicable, category, stage, then global
+  priority.
 - Grant on health gained and revoke on health lost.
 - Revoke on death with configured cause filters.
 - Repeating grant and revoke rules do not oscillate.
@@ -1404,7 +1437,7 @@ verification record. A phase is not complete because the classes compile.
 ## 22. Documentation deliverables
 
 - A schema 4 overview for beginners.
-- A three-file first-stage tutorial.
+- A one-file first-stage tutorial.
 - A complete field reference generated from codecs where possible.
 - Selector and priority reference with conflict diagrams.
 - Condition reference with value type, events, scope, persistence, and examples.
@@ -1431,7 +1464,7 @@ Examples that merely look correct are not enough.
 ### 23.1 Structure weapon rules
 
 - Inside a configured structure, all weapons except swords are denied.
-- A second higher-priority selector allows one named bow.
+- A second higher-priority prefix entry allows one named bow.
 - On structure exit, the temporary rule ends without changing permanent stage ownership.
 - The why panel identifies both the broad lock and the winning exception.
 
@@ -1482,11 +1515,13 @@ The rehaul is complete only when all of the following are true:
 
 - Package stages and untouched 3.0.1 stages can coexist.
 - Random helper TOMLs are not parsed as stages.
-- The normal package needs no more than `stage.toml`, `rules.toml`, and `lifecycle.toml`.
+- The normal package needs only `stage.toml`.
 - Grant and revoke use the same condition registry and complete condition tree.
 - Death, health gained, health lost, damage, and hit conditions work with documented persistence.
-- Selector priority works in structured form and the requested compact shorthand.
-- Missing selector priority correctly inherits stage priority through the documented cascade.
+- Entry priority works through the simple category lookup table and the requested compact
+  shorthand without changing ordinary prefix lists.
+- Missing entry priority correctly inherits category, stage, then global priority through the
+  documented cascade.
 - Contextual item attributes, buffs, debuffs, and transforms reconcile without visual or position
   snapping.
 - The generic budget engine supports the boss hit-limit scenario.
@@ -1502,7 +1537,7 @@ The rehaul is complete only when all of the following are true:
 ## 25. Recommended first implementation step after approval
 
 Begin with Phase 1 and Phase 2 only. Freeze the current behavior in golden fixtures, define schema
-4 source records with provenance, and publish tested examples for the three-file package. Do not
+4 source records with provenance, and publish tested examples for the one-file package. Do not
 replace enforcement, triggers, revokes, or attributes until the translator and compiled model can
 prove equivalent behavior. This preserves the working 3.0.1 branch while giving every later phase
 a stable contract.
