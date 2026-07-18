@@ -1,10 +1,10 @@
-# ProgressiveStages 3.0
+# ProgressiveStages 3.0.1
 
 ProgressiveStages is a deeply customizable stage progression framework for Minecraft 1.21.1 on NeoForge. It gives modpack authors one place to define what players may use, where they may go, what automatically advances them, what a stage rewards, and how the entire progression graph appears in game.
 
 Build a short stone to iron to diamond path, several independent technology and magic branches, a server wide story arc, temporary challenge stages, purchasable skill nodes, or a large quest driven pack. Stages are ordinary TOML files and every shipped feature is optional.
 
-ProgressiveStages 3.0 is the stable 3.0 release.
+ProgressiveStages 3.0.1 is the current 3.0 release.
 
 ---
 
@@ -71,6 +71,20 @@ Situational rules can lock or permit content only while their context or timer i
 - Start timers from combat, attack, hurt, kill, `/pstages rule`, KubeJS, or the Java API.
 
 Normal stage gates use priority zero. Conditional rules default to priority one hundred. The highest matching priority wins, and a lock wins an equal priority conflict. Per rule exceptions make broad policies practical without creating a hardcoded weapon list.
+
+## Exact structure sessions in 3.0.1
+
+Assignment, dungeon, arena, and quest mods can register a generic exact structure provider without ProgressiveStages depending on them.
+
+- One generated instance is identified by dimension, structure ID, stable start, and immutable bounds.
+- Static stage locks remain authoritative. Provider denial wins and a provider permit cannot bypass a missing normal stage.
+- Server committed enter, completion, and debounced leave events include visit sequence, owner, stages, bounds, and typed outcome.
+- Team safe leases grant an in progress stage to the first participant and revoke it after the final participant leaves only when the lease introduced it.
+- `[active_locks]` can block selected item use only while that leased stage is present inside its matching session.
+- `leave_structure` triggers support structure tags, provider filters, required session stages, and incomplete, completed, death, teleport, dimension change, disconnect, cancelled, or recovery outcomes.
+- `/pstages structure` commands list providers and sessions, reconcile state, and provide an explicit confirmation gated recovery close.
+
+The full provider contract and acceptance matrix are documented at https://github.com/EnVisione/ProgressiveStages/blob/master/STRUCTURE_SESSION_COMPATIBILITY.md.
 
 ---
 
@@ -209,7 +223,7 @@ Grant and revoke methods return whether ownership actually changed. Bulk methods
 
 ## Java API and integration design
 
-`ProgressiveStagesAPI` exposes ownership, dependency, definition, trigger progress, counter, bulk mutation, and synchronization operations. NeoForge events report grant and revoke changes with their cause.
+`ProgressiveStagesAPI` exposes ownership, dependency, definition, trigger progress, counter, bulk mutation, synchronization, structure provider registration, structure completion, reconciliation, active session views, and detailed item use decisions. NeoForge events report stage changes plus committed structure enter, completion, leave, and access denial notifications.
 
 Optional integrations are isolated behind compatibility seams and guarded mixins. The core does not require optional mod classes to load.
 

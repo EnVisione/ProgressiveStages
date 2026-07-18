@@ -31,4 +31,13 @@ class TriggerConditionTypeTest {
         assertTrue(TriggerConditionType.SCOREBOARD.requiresTarget());
         assertTrue(TriggerConditionType.SCRIPT_VALUE.requiresTarget());
     }
+
+    @Test
+    void resolvesEveryStructureLeaveAlias() {
+        assertEquals(TriggerConditionType.LEAVE_STRUCTURE, TriggerConditionType.fromString("leave_structure"));
+        assertEquals(TriggerConditionType.LEAVE_STRUCTURE, TriggerConditionType.fromString("exit_structure"));
+        assertEquals(TriggerConditionType.LEAVE_STRUCTURE, TriggerConditionType.fromString("structure_exit"));
+        assertEquals(TriggerConditionType.LEAVE_STRUCTURE, TriggerConditionType.fromString("leave_structures"));
+        assertTrue(TriggerConditionType.LEAVE_STRUCTURE.requiresTarget());
+    }
 }

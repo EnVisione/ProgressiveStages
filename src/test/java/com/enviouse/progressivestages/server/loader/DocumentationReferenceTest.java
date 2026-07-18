@@ -25,6 +25,9 @@ class DocumentationReferenceTest {
         assertTrue(reference.contains("TEMPORARY AND TRIGGERED LOCKS GUIDE"));
         assertTrue(reference.contains("[[temporary_locks]]"));
         assertTrue(reference.contains("[[triggered_locks]]"));
+        assertTrue(reference.contains("STRUCTURE SESSION COMPATIBILITY GUIDE"));
+        assertTrue(reference.contains("[active_locks]"));
+        assertTrue(reference.contains("type = \"leave_structure\""));
 
         StageFileParser.ParseResult result = StageFileParser.parseWithErrors(DIAMOND_REFERENCE);
         assertTrue(result.isSuccess(), result::getErrorMessage);
@@ -40,6 +43,10 @@ class DocumentationReferenceTest {
         assertTrue(documentation.contains("[Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md)"));
         assertTrue(documentation.contains("[Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md)"));
         assertTrue(documentation.contains("### 4.34 Temporary, triggered, and priority-based lock rules"));
+        assertTrue(documentation.contains("### 4.35 Structure session providers, leased stages, and active locks"));
+        assertTrue(documentation.contains("[STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md)"));
+        assertTrue(Files.readString(PROJECT.resolve("STRUCTURE_SESSION_COMPATIBILITY.md"))
+            .contains("## 16. Acceptance test matrix"));
     }
 
     @Test

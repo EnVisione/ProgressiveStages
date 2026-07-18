@@ -58,7 +58,8 @@ public enum TriggerConditionType {
     FOOD,           // current food level (20 at full hunger)
     STAGE_COUNT,    // number of stages the player's team currently owns
     ONLINE_TEAM_SIZE, // number of currently-online team members
-    SCRIPT_VALUE;   // numeric progress supplied by a KubeJS callback
+    SCRIPT_VALUE,   // numeric progress supplied by a KubeJS callback
+    LEAVE_STRUCTURE;
 
     /**
      * Resolve a TOML {@code type = "..."} value (with generous aliases) to a type, or
@@ -105,6 +106,7 @@ public enum TriggerConditionType {
             case "stage_count", "stages_owned", "owned_stages" -> STAGE_COUNT;
             case "online_team_size", "team_size", "online_members" -> ONLINE_TEAM_SIZE;
             case "script_value", "script_progress", "kubejs_value", "progress_provider" -> SCRIPT_VALUE;
+            case "leave_structure", "leave_structures", "exit_structure", "structure_exit" -> LEAVE_STRUCTURE;
             default -> null;
         };
     }

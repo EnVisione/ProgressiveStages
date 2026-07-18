@@ -30,6 +30,14 @@ command, KubeJS, Java, validation, documentation, and regression-test surfaces. 
 compatibility feature and foundation, not a claim that the broader registry-backed universal AST
 in feature group one is complete.
 
+The 3.0.1 extension also includes the generic exact structure session seam. Companion mods can
+register read-only providers without a reverse core dependency. ProgressiveStages arbitrates
+static and provider gates, commits debounced session transitions, manages team-safe stage leases,
+posts immutable lifecycle events, reconciles login state, evaluates contextual present-stage item
+locks, and supplies the repeatable event-driven `leave_structure` trigger. The full ownership,
+failure, command, API, configuration, and acceptance contracts are maintained in
+`STRUCTURE_SESSION_COMPATIBILITY.md`.
+
 Phases B through F are the approved development roadmap. Their registry kernel, universal
 condition tree, transaction engine, policy and action registries, advanced progression modes,
 Author Studio, pack tooling, journal, and performance framework are not marked complete until

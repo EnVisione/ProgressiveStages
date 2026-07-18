@@ -1,7 +1,12 @@
 package com.enviouse.progressivestages.common.trigger;
 
+import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome;
+import net.minecraft.resources.ResourceLocation;
+
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * One condition inside a {@link TriggerRule} — "kill 10 endermen", "travel 100000 blocks",
@@ -22,22 +27,37 @@ public final class TriggerCondition {
     private final String target; // "" when the type takes no target (play_time/level/xp)
     private final long count;     // threshold, clamped to >= 1
     private final String with;    // v2.4 KILL_WITH: the held item id; "" otherwise
+    private final ResourceLocation provider;
+    private final StageId requiredSessionStage;
+    private final Set<StructureLeaveOutcome> outcomes;
 
     public TriggerCondition(TriggerConditionType type, String target, long count) {
         this(type, target, count, "");
     }
 
     public TriggerCondition(TriggerConditionType type, String target, long count, String with) {
+        this(type, target, count, with, null, null, Set.of());
+    }
+
+    public TriggerCondition(TriggerConditionType type, String target, long count, String with,
+                            ResourceLocation provider, StageId requiredSessionStage,
+                            Set<StructureLeaveOutcome> outcomes) {
         this.type = Objects.requireNonNull(type, "type");
         this.target = target == null ? "" : target.trim();
         this.count = Math.max(1L, count);
         this.with = with == null ? "" : with.trim();
+        this.provider = provider;
+        this.requiredSessionStage = requiredSessionStage;
+        this.outcomes = outcomes == null ? Set.of() : Set.copyOf(outcomes);
     }
 
     public TriggerConditionType type() { return type; }
     public String target()             { return target; }
     public long count()                { return count; }
     public String with()               { return with; }
+    public ResourceLocation provider() { return provider; }
+    public StageId requiredSessionStage() { return requiredSessionStage; }
+    public Set<StructureLeaveOutcome> outcomes() { return outcomes; }
 
     /** True if {@link #target} names a tag rather than a single id. */
     public boolean targetIsTag() {

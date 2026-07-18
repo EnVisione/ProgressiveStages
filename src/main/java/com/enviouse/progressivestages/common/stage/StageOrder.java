@@ -313,6 +313,16 @@ public class StageOrder {
         Set<StageId> stageIds = definitions.stream().map(StageDefinition::getId).collect(java.util.stream.Collectors.toSet());
         Map<net.minecraft.resources.ResourceLocation, StageId> ruleOwners = new LinkedHashMap<>();
         for (StageDefinition definition : definitions) {
+            for (var rule : definition.getTriggers()) {
+                for (var condition : rule.conditions()) {
+                    if (condition.type() == com.enviouse.progressivestages.common.trigger.TriggerConditionType.LEAVE_STRUCTURE
+                            && condition.requiredSessionStage() != null
+                            && !stageIds.contains(condition.requiredSessionStage())) {
+                        errors.add("Structure leave trigger on '" + definition.getId()
+                            + "' references missing session stage '" + condition.requiredSessionStage() + "'");
+                    }
+                }
+            }
             for (ConditionalRule rule : definition.getConditionalRules()) {
                 StageId previous = ruleOwners.putIfAbsent(rule.id(), definition.getId());
                 if (previous != null) {

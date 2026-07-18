@@ -3,12 +3,18 @@ package com.enviouse.progressivestages.common.api;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
+import com.enviouse.progressivestages.common.api.structure.StructureContextProvider;
+import com.enviouse.progressivestages.common.api.structure.StructureSessionId;
+import com.enviouse.progressivestages.common.api.structure.StructureSessionView;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
 import com.enviouse.progressivestages.server.triggers.StageCounterData;
 import com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator;
+import com.enviouse.progressivestages.server.structure.StructureContextRegistry;
+import com.enviouse.progressivestages.server.structure.StructureSessionManager;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
@@ -271,6 +277,34 @@ public final class ProgressiveStagesAPI {
 
     public static Set<net.minecraft.resources.ResourceLocation> getConditionalRuleIds() {
         return Set.copyOf(ConditionalLockEngine.ruleIds());
+    }
+
+    public static void registerStructureContextProvider(ResourceLocation id,
+                                                        StructureContextProvider provider) {
+        StructureContextRegistry.getInstance().register(id, provider);
+    }
+
+    public static boolean unregisterStructureContextProvider(ResourceLocation id) {
+        return StructureContextRegistry.getInstance().unregister(id);
+    }
+
+    public static boolean markStructureSessionComplete(ServerPlayer player,
+                                                       StructureSessionId sessionId) {
+        return StructureSessionManager.getInstance().markComplete(player, sessionId);
+    }
+
+    public static List<StructureSessionView> getActiveStructureSessions(ServerPlayer player) {
+        return StructureSessionManager.getInstance().activeSessions(player);
+    }
+
+    public static List<StructureSessionView> reconcileStructureSessions(ServerPlayer player) {
+        return StructureSessionManager.getInstance().reconcile(player, true);
+    }
+
+    public static ItemUseDecision evaluateItemUse(ServerPlayer player,
+                                                  net.minecraft.world.item.ItemStack stack) {
+        return com.enviouse.progressivestages.server.enforcement.ItemEnforcer
+            .evaluateItemUse(player, stack);
     }
 
     // ========== Named counters (commands/KubeJS/custom integrations) ==========

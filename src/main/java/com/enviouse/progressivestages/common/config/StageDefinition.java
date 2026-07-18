@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.common.config;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
+import com.enviouse.progressivestages.common.lock.ActiveLockDefinition;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
 import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.trigger.TriggerRule;
@@ -75,6 +76,7 @@ public class StageDefinition {
     private final StageRewards rewards; // v3.0: items/effects/commands/teleport/xp granted on unlock
     private final java.util.Set<String> lockedAbilities; // e.g. "elytra" — blocked until this stage is owned
     private final List<ConditionalRule> conditionalRules;
+    private final ActiveLockDefinition activeLocks;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -135,6 +137,7 @@ public class StageDefinition {
             ? java.util.Set.copyOf(builder.lockedAbilities) : java.util.Set.of();
         this.conditionalRules = builder.conditionalRules != null
             ? Collections.unmodifiableList(new ArrayList<>(builder.conditionalRules)) : Collections.emptyList();
+        this.activeLocks = builder.activeLocks != null ? builder.activeLocks : ActiveLockDefinition.EMPTY;
     }
 
     public StageId getId() {
@@ -352,6 +355,8 @@ public class StageDefinition {
     /** Priority based temporary and triggered lock rules owned by this stage. */
     public List<ConditionalRule> getConditionalRules() { return conditionalRules; }
 
+    public ActiveLockDefinition getActiveLocks() { return activeLocks; }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -405,6 +410,7 @@ public class StageDefinition {
         private StageRewards rewards = StageRewards.NONE;
         private java.util.Set<String> lockedAbilities = java.util.Set.of();
         private List<ConditionalRule> conditionalRules = new ArrayList<>();
+        private ActiveLockDefinition activeLocks = ActiveLockDefinition.EMPTY;
 
         private Builder(StageId id) {
             this.id = id;
@@ -564,6 +570,7 @@ public class StageDefinition {
         public Builder rewards(StageRewards v) { this.rewards = v != null ? v : StageRewards.NONE; return this; }
         public Builder lockedAbilities(java.util.Set<String> v) { this.lockedAbilities = v != null ? v : java.util.Set.of(); return this; }
         public Builder conditionalRules(List<ConditionalRule> v) { this.conditionalRules = v != null ? v : new ArrayList<>(); return this; }
+        public Builder activeLocks(ActiveLockDefinition v) { this.activeLocks = v != null ? v : ActiveLockDefinition.EMPTY; return this; }
 
         public StageDefinition build() {
             return new StageDefinition(this);

@@ -8,11 +8,14 @@ import com.enviouse.progressivestages.common.team.TeamProvider;
 import com.enviouse.progressivestages.common.team.TeamStageSync;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.enviouse.progressivestages.common.util.CraftingRecipeTracker;
+import com.enviouse.progressivestages.common.api.structure.StructureAction;
+import com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome;
 import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.server.commands.StageCommand;
 import com.enviouse.progressivestages.server.enforcement.*;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
 import com.enviouse.progressivestages.server.triggers.*;
+import com.enviouse.progressivestages.server.structure.StructureSessionManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -28,7 +31,9 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityMountEvent;
+import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
 import net.neoforged.neoforge.event.entity.player.BonemealEvent;
@@ -40,6 +45,7 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.level.block.CropGrowEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 
@@ -68,6 +74,7 @@ public class ServerEventHandler {
 
         // Initialize stage manager
         StageManager.getInstance().initialize(event.getServer());
+        StructureSessionManager.getInstance().bind(event.getServer());
 
         // Initialize team stage sync
         TeamStageSync.initialize(event.getServer());
@@ -110,6 +117,11 @@ public class ServerEventHandler {
     }
 
     @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        StructureSessionManager.getInstance().shutdown(event.getServer());
+    }
+
+    @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         lastScanTime.clear();
         lastDimensionCheck.clear();
@@ -123,6 +135,7 @@ public class ServerEventHandler {
         DimensionEnforcer.resetRuntimeState();
         StructureEnforcer.resetRuntimeState();
         ConditionalLockEngine.resetRuntimeState();
+        StructureSessionManager.getInstance().shutdown(event.getServer());
         com.enviouse.progressivestages.common.compat.ScriptHooks.reset();
         OreSpoofManager.get().resetRuntimeState();
         StageFileLoader.getInstance().shutdown();
@@ -163,6 +176,7 @@ public class ServerEventHandler {
                 NetworkHandler.sendCreativeBypass(player, true);
                 CreativeBypassNotifier.sendPopupIfEligible(player);
             }
+            StructureSessionManager.getInstance().reconcile(player, true);
         }
     }
 
@@ -244,9 +258,10 @@ public class ServerEventHandler {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onItemUse(PlayerInteractEvent.RightClickItem event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            if (!ItemEnforcer.canUseItem(player, event.getItemStack())) {
+            var decision = ItemEnforcer.evaluateItemUse(player, event.getItemStack());
+            if (!decision.allowed()) {
                 event.setCanceled(true);
-                ItemEnforcer.notifyLockedWithCooldown(player, event.getItemStack().getItem());
+                ItemEnforcer.notifyLockedWithCooldown(player, decision, event.getItemStack().getItem());
                 return;
             }
             // Screen-lock for item-opened GUIs (backpacks, portable crafting, etc.).
@@ -260,9 +275,10 @@ public class ServerEventHandler {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onItemStartUse(LivingEntityUseItemEvent.Start event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            if (!ItemEnforcer.canUseItem(player, event.getItem())) {
+            var decision = ItemEnforcer.evaluateItemUse(player, event.getItem());
+            if (!decision.allowed()) {
                 event.setCanceled(true);
-                ItemEnforcer.notifyLockedWithCooldown(player, event.getItem().getItem());
+                ItemEnforcer.notifyLockedWithCooldown(player, decision, event.getItem().getItem());
             }
         }
     }
@@ -272,10 +288,10 @@ public class ServerEventHandler {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            // Block mining/breaking when the held tool/item is locked
-            if (!event.getItemStack().isEmpty() && !ItemEnforcer.canUseItem(player, event.getItemStack())) {
+            var decision = ItemEnforcer.evaluateItemUse(player, event.getItemStack());
+            if (!event.getItemStack().isEmpty() && !decision.allowed()) {
                 event.setCanceled(true);
-                ItemEnforcer.notifyLockedWithCooldown(player, event.getItemStack().getItem());
+                ItemEnforcer.notifyLockedWithCooldown(player, decision, event.getItemStack().getItem());
             }
         }
     }
@@ -311,6 +327,7 @@ public class ServerEventHandler {
 
         UUID playerId = player.getUUID();
         long currentTime = player.level().getGameTime();
+        StructureSessionManager.getInstance().tick(player);
 
         // ── Tick-based dimension enforcement (safety net for mods that bypass both events) ──
         // v2.3: also run when a stage opts in via a per-stage override (global may be off).
@@ -447,12 +464,12 @@ public class ServerEventHandler {
             // so loot can't be spilled by breaking the block.
             if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
                 if (StructureEnforcer.isContainerAt(sl, pos)) {
-                    var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, pos, player);
-                    if (entryStage.isPresent()
+                    var structure = StructureEnforcer.evaluate(player, pos, StructureAction.CONTAINER_OPEN);
+                    if (!structure.allowed()
                             && !(StageConfig.isAllowCreativeBypass() && player.isCreative())) {
                         event.setCanceled(true);
-                        ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(),
-                            StageConfig.getMsgTypeLabelStructureContents());
+                        if (structure.displayStage() != null) ItemEnforcer.notifyLockedWithCooldown(
+                            player, structure.displayStage(), StageConfig.getMsgTypeLabelStructureContents());
                         return;
                     }
                 }
@@ -506,11 +523,14 @@ public class ServerEventHandler {
             // fired. The guard runs for every block click inside a locked structure, not just
             // containers — picking open a locked tomb's pressure plate is equally gated.
             if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
-                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getPos(), player);
-                if (entryStage.isPresent()
+                StructureAction structureAction = StructureEnforcer.isContainerAt(sl, event.getPos())
+                    ? StructureAction.CONTAINER_OPEN : StructureAction.BLOCK_INTERACT;
+                var structure = StructureEnforcer.evaluate(player, event.getPos(), structureAction);
+                if (!structure.allowed()
                         && !(StageConfig.isAllowCreativeBypass() && player.isCreative())) {
                     event.setCanceled(true);
-                    ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(), StageConfig.getMsgTypeLabelStructureContents());
+                    if (structure.displayStage() != null) ItemEnforcer.notifyLockedWithCooldown(
+                        player, structure.displayStage(), StageConfig.getMsgTypeLabelStructureContents());
                     return;
                 }
             }
@@ -531,9 +551,10 @@ public class ServerEventHandler {
 
             // Also check if the held item is locked (for item-on-block interactions)
             if (!event.getItemStack().isEmpty()) {
-                if (!ItemEnforcer.canUseItem(player, event.getItemStack())) {
+                var decision = ItemEnforcer.evaluateItemUse(player, event.getItemStack());
+                if (!decision.allowed()) {
                     event.setCanceled(true);
-                    ItemEnforcer.notifyLocked(player, event.getItemStack().getItem());
+                    ItemEnforcer.notifyLockedWithCooldown(player, decision, event.getItemStack().getItem());
                     return;
                 }
 
@@ -576,6 +597,7 @@ public class ServerEventHandler {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onDimensionChanged(PlayerEvent.PlayerChangedDimensionEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
+            StructureSessionManager.getInstance().closeAll(player, StructureLeaveOutcome.DIMENSION_CHANGE);
             DimensionEnforcer.handlePostTravelSafetyNet(player, event.getFrom(), event.getTo());
         }
     }
@@ -639,12 +661,13 @@ public class ServerEventHandler {
             // with loot, and other entity-based containers sitting inside a locked structure
             // must refuse interaction for players lacking the stage.
             if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel sl) {
-                var entryStage = StructureEnforcer.getLockedEntryStageAt(sl, event.getTarget().blockPosition(), player);
-                if (entryStage.isPresent()
+                var structure = StructureEnforcer.evaluate(player, event.getTarget().blockPosition(),
+                    StructureAction.ENTITY_INTERACT);
+                if (!structure.allowed()
                         && !(StageConfig.isAllowCreativeBypass() && player.isCreative())) {
                     event.setCanceled(true);
-                    ItemEnforcer.notifyLockedWithCooldown(player, entryStage.get(),
-                        StageConfig.getMsgTypeLabelStructureContents());
+                    if (structure.displayStage() != null) ItemEnforcer.notifyLockedWithCooldown(
+                        player, structure.displayStage(), StageConfig.getMsgTypeLabelStructureContents());
                     return;
                 }
             }
@@ -653,6 +676,14 @@ public class ServerEventHandler {
                 event.setCanceled(true);
                 InteractionEnforcer.notifyEntityInteractionLocked(player, event.getItemStack(), entityType);
                 return;
+            }
+            if (!event.getItemStack().isEmpty()) {
+                var itemDecision = ItemEnforcer.evaluateItemUse(player, event.getItemStack());
+                if (!itemDecision.allowed()) {
+                    event.setCanceled(true);
+                    ItemEnforcer.notifyLockedWithCooldown(player, itemDecision, event.getItemStack().getItem());
+                    return;
+                }
             }
             // Pet taming/breeding gate
             if (!PetEnforcer.canInteract(player, entityType, event.getTarget())) {
@@ -676,9 +707,10 @@ public class ServerEventHandler {
 
             // Also check if the held weapon/item is locked (can't attack with a locked sword, etc.)
             var heldItem = player.getMainHandItem();
-            if (!heldItem.isEmpty() && !ItemEnforcer.canUseItem(player, heldItem)) {
+            var decision = ItemEnforcer.evaluateItemUse(player, heldItem);
+            if (!heldItem.isEmpty() && !decision.allowed()) {
                 event.setCanceled(true);
-                ItemEnforcer.notifyLockedWithCooldown(player, heldItem.getItem());
+                ItemEnforcer.notifyLockedWithCooldown(player, decision, heldItem.getItem());
             }
         }
     }
@@ -820,6 +852,7 @@ public class ServerEventHandler {
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
+            StructureSessionManager.getInstance().closeAll(player, StructureLeaveOutcome.DISCONNECT);
             lastScanTime.remove(player.getUUID());
             lastDimensionCheck.remove(player.getUUID());
             lastRegionCheck.remove(player.getUUID());
@@ -829,6 +862,21 @@ public class ServerEventHandler {
             DimensionEnforcer.cleanupPlayer(player.getUUID());
             StructureEnforcer.cleanupPlayer(player.getUUID());
             OreSpoofManager.get().onPlayerLogout(player);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onStructureParticipantDeath(LivingDeathEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            StructureSessionManager.getInstance().closeAll(player, StructureLeaveOutcome.DEATH);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onStructureParticipantTeleport(EntityTeleportEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            StructureSessionManager.getInstance().closeOutsideTeleport(player,
+                net.minecraft.core.BlockPos.containing(event.getTargetX(), event.getTargetY(), event.getTargetZ()));
         }
     }
 

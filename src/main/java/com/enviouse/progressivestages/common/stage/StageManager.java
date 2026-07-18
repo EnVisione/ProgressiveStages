@@ -282,6 +282,35 @@ public class StageManager {
         else syncToTeamMembers(teamId);
     }
 
+    public UUID getStorageOwner(ServerPlayer player, StageId stageId) {
+        return storageTeam(TeamProvider.getInstance().getTeamId(player), stageId);
+    }
+
+    public boolean grantTemporaryStage(ServerPlayer player, StageId stageId, StageCause cause) {
+        if (!StageOrder.getInstance().stageExists(stageId)) return false;
+        UUID teamId = TeamProvider.getInstance().getTeamId(player);
+        UUID owner = storageTeam(teamId, stageId);
+        if (!getTeamStageData().grantStage(owner, stageId)) return false;
+        fireStageChangeEvent(player, owner, stageId, StageChangeType.GRANTED, cause);
+        if (isServerScoped(stageId)) syncAllPlayers();
+        else syncToTeamMembers(teamId);
+        return true;
+    }
+
+    public boolean revokeTemporaryStage(ServerPlayer player, StageId stageId, StageCause cause) {
+        return revokeTemporaryStage(player, getStorageOwner(player, stageId), stageId, cause);
+    }
+
+    public boolean revokeTemporaryStage(ServerPlayer player, UUID owner,
+                                        StageId stageId, StageCause cause) {
+        if (!StageOrder.getInstance().stageExists(stageId) || owner == null) return false;
+        if (!getTeamStageData().revokeStage(owner, stageId)) return false;
+        fireStageChangeEvent(player, owner, stageId, StageChangeType.REVOKED, cause);
+        if (isServerScoped(stageId)) syncAllPlayers();
+        else syncToTeamMembers(owner);
+        return true;
+    }
+
     /**
      * Revoke a stage from a player (optionally with dependents based on config)
      * Also revokes from all team members if team mode is enabled.

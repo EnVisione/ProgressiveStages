@@ -480,6 +480,11 @@ compat/
 ## Changelog
 
 ### v3.0.1
+- **Generic exact-structure session API** — one-way provider registration for assignment and dungeon mods, immutable instance/bounds/session contracts, three-way `PASS`/`PERMIT`/`DENY` arbitration, cached fail-closed claims, and no hard dependency on companion mods.
+- **Committed structure lifecycle** — debounced enter/leave state, idempotent completion, typed death/teleport/dimension/disconnect/recovery outcomes, post-commit NeoForge events, login reconciliation, and team-safe temporary stage leases.
+- **Contextual active item locks** — `[active_locks] scope = "structure_session"` blocks selected item use only while the leased in-progress stage is present inside its matching exact session. Inventory, pickup, crafting, loot, tooltips, JEI, and EMI remain untouched.
+- **Event-driven structure exits** — `leave_structure` and its aliases support exact IDs or tags, provider filters, required session stages, and typed outcome filters without permanently consuming future visits.
+- **Structure diagnostics** — `/pstages structure providers`, `sessions`, `reconcile`, and confirmation-gated `close`, plus a complete provider and forty-step acceptance guide.
 - **Conditional access engine** — live location/state rules and event-driven timers can lock or unlock eight target families with explicit priority, safe tie behavior, per-rule exceptions, stage ownership modes, combat entity filters, `/pstages rule` operations, KubeJS bindings, Java APIs, validation, and worked Stronghold/Wither/End examples.
 - **Conflict-free map command** — `/pstages` is the dedicated player-facing map command, leaving the previously used short command available to other mods.
 - **Nineteen-phase pack-building guide** — a copy-ready path now covers installation, every lock and trigger family, the vanilla-style map, commands, KubeJS, Java integration, optional mods, migration, testing, and release evidence.

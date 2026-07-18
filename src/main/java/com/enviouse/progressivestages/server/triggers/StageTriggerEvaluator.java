@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.server.triggers;
 import com.enviouse.progressivestages.common.api.ProgressiveStagesAPI;
 import com.enviouse.progressivestages.common.api.StageCause;
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.api.structure.StructureSessionLeaveEvent;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.stage.StageOrder;
@@ -94,6 +95,7 @@ public final class StageTriggerEvaluator {
     private static final Set<StageId> nudgeStages = ConcurrentHashMap.newKeySet();
     private static final Map<String, Boolean> sentNudges = new ConcurrentHashMap<>(); // "uuid|stage|threshold"
     private static final Map<UUID, String> lastGoalSent = new ConcurrentHashMap<>();
+    private static final Set<String> committedLeaveDedupe = ConcurrentHashMap.newKeySet();
     private static final int[] NUDGE_THRESHOLDS = {50, 75, 90};
 
     /** Distance movement keyword -> the custom statistic that tracks it (in centimetres). */
@@ -184,6 +186,7 @@ public final class StageTriggerEvaluator {
         sentNudges.clear();
         lastGoalSent.clear();
         biomeTickRemainders.clear();
+        committedLeaveDedupe.clear();
     }
 
     /** v2.4: true if the stage has no trigger rules, or at least one of its rules is satisfied. */
@@ -320,6 +323,72 @@ public final class StageTriggerEvaluator {
         if (event.getEntity() instanceof ServerPlayer player) {
             scheduleEvaluate(player);
         }
+    }
+
+    @SubscribeEvent
+    public static void onStructureLeave(StructureSessionLeaveEvent event) {
+        if (!active) return;
+        ServerPlayer player = event.getPlayer();
+        int stageIndex = 0;
+        for (Map.Entry<StageId, List<TriggerRule>> entry : RULES.entrySet()) {
+            StageId stageId = entry.getKey();
+            if (ProgressiveStagesAPI.hasStage(player, stageId) || !dependenciesSatisfied(player, stageId)) {
+                stageIndex++;
+                continue;
+            }
+            int ruleIndex = 0;
+            for (TriggerRule rule : entry.getValue()) {
+                boolean containsLeave = rule.conditions().stream()
+                    .anyMatch(condition -> condition.type() == TriggerConditionType.LEAVE_STRUCTURE);
+                if (!containsLeave || !ruleSatisfiedForLeave(player, stageId, rule, event)) {
+                    ruleIndex++;
+                    continue;
+                }
+                String dedupe = event.getProviderId() + "|" + event.getSession().sessionId()
+                    + "|" + event.getPlayerId() + "|" + event.getEffectiveOwner()
+                    + "|" + event.getVisitSequence() + "|" + event.getOutcome()
+                    + "|" + stageIndex + "|" + ruleIndex;
+                if (committedLeaveDedupe.size() >= 16_384) committedLeaveDedupe.clear();
+                if (committedLeaveDedupe.add(dedupe)) {
+                    ProgressiveStagesAPI.grantStage(player, stageId, StageCause.TRIGGER);
+                }
+                break;
+            }
+            stageIndex++;
+        }
+    }
+
+    private static boolean ruleSatisfiedForLeave(ServerPlayer player, StageId stageId,
+                                                 TriggerRule rule,
+                                                 StructureSessionLeaveEvent event) {
+        boolean any = false;
+        for (TriggerCondition condition : rule.conditions()) {
+            boolean satisfied = condition.type() == TriggerConditionType.LEAVE_STRUCTURE
+                ? matchesLeaveCondition(player, condition, event)
+                : currentProgress(player, stageId, condition) >= condition.count();
+            if (rule.mode() == TriggerMode.ALL_OF && !satisfied) return false;
+            any |= satisfied;
+        }
+        return rule.mode() == TriggerMode.ALL_OF || any;
+    }
+
+    private static boolean matchesLeaveCondition(ServerPlayer player, TriggerCondition condition,
+                                                 StructureSessionLeaveEvent event) {
+        if (condition.provider() != null && !condition.provider().equals(event.getProviderId())) return false;
+        if (condition.requiredSessionStage() != null
+                && event.getSession().inProgressStage()
+                    .filter(condition.requiredSessionStage()::equals).isEmpty()) return false;
+        if (!condition.outcomes().isEmpty() && !condition.outcomes().contains(event.getOutcome())) return false;
+        if (event.getOutcome() == com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome.COMPLETED
+                && !event.getSession().participants().isEmpty()) return false;
+        ResourceLocation target = resolve(condition.targetBody());
+        if (target == null) return false;
+        ResourceLocation actual = event.getSession().instance().structureId();
+        if (!condition.targetIsTag()) return target.equals(actual);
+        var registry = player.serverLevel().registryAccess().registryOrThrow(Registries.STRUCTURE);
+        var key = net.minecraft.resources.ResourceKey.create(Registries.STRUCTURE, actual);
+        var holder = registry.getHolder(key).orElse(null);
+        return holder != null && holder.is(TagKey.create(Registries.STRUCTURE, target));
     }
 
     @SubscribeEvent(priority = EventPriority.LOW)
@@ -513,6 +582,7 @@ public final class StageTriggerEvaluator {
                     .getTeamId(player), player).size();
             case SCRIPT_VALUE -> com.enviouse.progressivestages.common.compat.ScriptHooks
                 .evalProgress(c.targetBody(), player);
+            case LEAVE_STRUCTURE -> 0L;
         };
     }
 

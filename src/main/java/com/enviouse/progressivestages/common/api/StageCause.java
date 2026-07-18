@@ -91,6 +91,12 @@ public enum StageCause {
     /** Stage changed by KubeJS or another server-side script. */
     SCRIPT,
 
+    STRUCTURE_ENTER,
+
+    STRUCTURE_LEAVE,
+
+    STRUCTURE_COMPLETE,
+
     /**
      * Unknown or unspecified cause
      */

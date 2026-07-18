@@ -1,10 +1,21 @@
 package com.enviouse.progressivestages.server.enforcement;
 
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.api.structure.StructureAccessDecision;
+import com.enviouse.progressivestages.common.api.structure.StructureAccessArbitration;
+import com.enviouse.progressivestages.common.api.structure.StructureAccessDeniedEvent;
+import com.enviouse.progressivestages.common.api.structure.StructureAccessRequest;
+import com.enviouse.progressivestages.common.api.structure.StructureAction;
+import com.enviouse.progressivestages.common.api.structure.StructureBounds;
+import com.enviouse.progressivestages.common.api.structure.StructureInstanceKey;
+import com.enviouse.progressivestages.common.api.structure.StructureSessionId;
+import com.enviouse.progressivestages.common.api.structure.StructureOwnershipScope;
+import com.enviouse.progressivestages.common.api.structure.StructureSessionAvailability;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.stage.StageManager;
+import com.enviouse.progressivestages.common.team.TeamProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
@@ -14,9 +25,13 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.neoforged.neoforge.common.NeoForge;
+import com.enviouse.progressivestages.server.structure.StructureContextRegistry;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,72 +61,184 @@ public final class StructureEnforcer {
      */
     private record SafePos(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim,
                            double x, double y, double z) {}
+    private record LookupKey(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+                             BlockPos position, ResourceLocation structureId, long tick) {}
     private static final Map<UUID, SafePos> SAFE_POS = new ConcurrentHashMap<>();
+    private static final Map<LookupKey, Optional<StructureBounds>> LOOKUP_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, Long> DENIAL_EVENT_TICKS = new ConcurrentHashMap<>();
+    private static long lookupCacheTick = Long.MIN_VALUE;
+
+    public record EvaluationResult(boolean allowed, StructureAccessDecision.Reason reason,
+                                   StageId displayStage, StructureBounds bounds,
+                                   StructureSessionId sessionId, ResourceLocation providerId,
+                                   StructureInstanceKey instance) {}
 
     // ---------------------------------------------------------------
     // Public API
     // ---------------------------------------------------------------
 
     public static void checkPlayerEntry(ServerPlayer player) {
-        if (!StageConfig.isBlockStructureEntry()) return;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return;
-
         ServerLevel level = (ServerLevel) player.level();
-        LockRegistry.StructureRulesAggregate agg = LockRegistry.getInstance().getStructures();
-        if (agg.lockedEntry.isEmpty()
-                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.STRUCTURE)) return;
-
-        BlockPos pos = player.blockPosition();
-        Registry<Structure> structureRegistry =
-            level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-
-        for (ResourceLocation structureId : candidateStructures(structureRegistry, agg)) {
-            Structure structure = structureRegistry.get(structureId);
-            if (structure == null) continue;
-            StructureStart start = level.structureManager().getStructureAt(pos, structure);
-            if (start == StructureStart.INVALID_START) continue;
-            if (!start.getBoundingBox().isInside(pos)) continue;
-            java.util.Optional<StageId> missing = firstMissing(player,
-                agg.lockedEntry.getOrDefault(structureId, java.util.Set.of()));
-            ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
-                ConditionalRule.TargetType.STRUCTURE, structureId, null, missing.isPresent());
-            if (decision == null || decision.effect() != ConditionalRule.Effect.LOCK) continue;
-            StageId source = decision.ownerStage() != null ? decision.ownerStage() : missing.orElse(null);
-            if (source == null) continue;
-
-            // Apply mining fatigue while inside a locked structure that sets prevent_block_break.
-            // This is the §2.12 "Indestructibility" signal — block breaks are already cancelled
-            // by canBreakBlock(), so this adds the tactile slowdown players expect.
-            if (agg.preventBlockBreak) {
+        EvaluationResult result = evaluate(player, player.blockPosition(), StructureAction.ENTRY);
+        if (!result.allowed()) {
+            LockRegistry.StructureRulesAggregate aggregate = LockRegistry.getInstance().getStructures();
+            if (aggregate.preventBlockBreak) {
                 player.addEffect(new net.minecraft.world.effect.MobEffectInstance(
                     net.minecraft.world.effect.MobEffects.DIG_SLOWDOWN, 60, 4, true, false));
             }
-
-            repel(player, start.getBoundingBox(), agg.entryPadding);
-            ItemEnforcer.notifyLockedWithCooldown(player, source, "This structure");
+            StructureBounds bounds = result.bounds() != null ? result.bounds()
+                : new StructureBounds(player.getBlockX(), player.getBlockY(), player.getBlockZ(),
+                    player.getBlockX(), player.getBlockY(), player.getBlockZ());
+            repel(player, bounds.toBoundingBox(), aggregate.entryPadding);
+            if (result.displayStage() != null) {
+                ItemEnforcer.notifyLockedWithCooldown(player, result.displayStage(), "This structure");
+            }
             return;
         }
-
-        // Outside every locked structure → remember this as the safe spot to bounce back to.
         SAFE_POS.put(player.getUUID(),
             new SafePos(level.dimension(), player.getX(), player.getY(), player.getZ()));
+    }
+
+    public static EvaluationResult evaluate(ServerPlayer player, BlockPos pos, StructureAction action) {
+        if (player.isSpectator()
+                || StageConfig.isAllowCreativeBypass() && player.isCreative()) return allowedResult();
+        ServerLevel level = player.serverLevel();
+        LockRegistry.StructureRulesAggregate aggregate = LockRegistry.getInstance().getStructures();
+        Registry<Structure> registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        EvaluationResult staticDenial = null;
+        StructureInstanceKey candidate = null;
+
+        if (StageConfig.isBlockStructureEntry()) {
+            for (ResourceLocation structureId : candidateStructures(registry, aggregate)) {
+                Structure structure = registry.get(structureId);
+                if (structure == null) continue;
+                Optional<StructureBounds> foundBounds = cachedBounds(level, pos, structureId, structure);
+                if (foundBounds.isEmpty()) continue;
+                StructureBounds bounds = foundBounds.get();
+                candidate = new StructureInstanceKey(level.dimension(), structureId,
+                    new BlockPos(bounds.minX(), bounds.minY(), bounds.minZ()));
+                Optional<StageId> missing = firstMissing(player,
+                    aggregate.lockedEntry.getOrDefault(structureId, Set.of()));
+                ConditionalLockEngine.Decision conditional = ConditionalLockEngine.resolve(player,
+                    ConditionalRule.TargetType.STRUCTURE, structureId, null, missing.isPresent());
+                boolean locked = conditional != null && conditional.effect() == ConditionalRule.Effect.LOCK;
+                if (!locked || !staticProtects(action, aggregate)) continue;
+                StageId display = conditional.ownerStage() != null
+                    ? conditional.ownerStage() : missing.orElse(null);
+                staticDenial = new EvaluationResult(false,
+                    StructureAccessDecision.Reason.STATIC_STAGE_REQUIRED, display, bounds,
+                    null, null, candidate);
+                break;
+            }
+        }
+
+        StructureAccessRequest request = new StructureAccessRequest(player, level, pos, action,
+            Optional.ofNullable(candidate));
+        if (staticDenial != null) {
+            StructureAccessDecision decision = StructureAccessDecision.deny(staticDenial.reason(),
+                staticDenial.displayStage(), null, staticDenial.bounds());
+            postDenied(request, decision, null);
+            return staticDenial;
+        }
+        StructureContextRegistry.Evaluation provider = StructureContextRegistry.getInstance().evaluate(request);
+        StructureAccessDecision.Result finalResult = StructureAccessArbitration.combine(
+            false, provider.decision().result());
+        if (finalResult == StructureAccessDecision.Result.DENY
+                && provider.decision().result() == StructureAccessDecision.Result.DENY) {
+            StructureAccessDecision decision = provider.decision();
+            EvaluationResult denied = new EvaluationResult(false, decision.reason(),
+                decision.displayStage().orElse(null), decision.bounds().orElse(null),
+                decision.sessionId().orElse(null), provider.providerId(), candidate);
+            postDenied(request, decision, provider.providerId());
+            return denied;
+        }
+        if (finalResult == StructureAccessDecision.Result.PERMIT) {
+            var known = provider.decision().sessionId().flatMap(sessionId ->
+                StructureContextRegistry.getInstance().knownSession(player, provider.providerId(), sessionId));
+            if (known.isEmpty()) {
+                StructureAccessDecision deniedDecision = StructureAccessDecision.deny(
+                    StructureAccessDecision.Reason.SESSION_CLOSED,
+                    provider.decision().displayStage().orElse(null),
+                    provider.decision().sessionId().orElse(null),
+                    provider.decision().bounds().orElse(null));
+                postDenied(request, deniedDecision, provider.providerId());
+                return new EvaluationResult(false, StructureAccessDecision.Reason.SESSION_CLOSED,
+                    provider.decision().displayStage().orElse(null),
+                    provider.decision().bounds().orElse(null),
+                    provider.decision().sessionId().orElse(null), provider.providerId(), candidate);
+            }
+            if (known.isPresent()) {
+                var spec = known.get();
+                UUID effectiveOwner = spec.ownershipScope() == StructureOwnershipScope.PLAYER
+                    ? player.getUUID() : TeamProvider.getInstance().getTeamId(player);
+                StructureAccessDecision.Reason coreReason = null;
+                if (!effectiveOwner.equals(spec.assignmentOwner())) {
+                    coreReason = StructureAccessDecision.Reason.WRONG_OWNER;
+                } else if (!spec.instance().dimension().equals(level.dimension())
+                        || !spec.bounds().contains(pos)
+                        || request.candidateInstance().isPresent()
+                            && (!request.candidateInstance().get().dimension().equals(spec.instance().dimension())
+                                || !request.candidateInstance().get().structureId()
+                                    .equals(spec.instance().structureId()))) {
+                    coreReason = StructureAccessDecision.Reason.WRONG_INSTANCE;
+                } else if (spec.availability() != StructureSessionAvailability.AVAILABLE) {
+                    coreReason = StructureAccessDecision.Reason.UNAVAILABLE;
+                } else if (!StageManager.getInstance().hasStage(player, spec.accessStage())) {
+                    coreReason = StructureAccessDecision.Reason.MISSING_ACCESS_STAGE;
+                }
+                if (coreReason != null) {
+                    StructureAccessDecision deniedDecision = StructureAccessDecision.deny(coreReason,
+                        spec.accessStage(), spec.sessionId(), spec.bounds());
+                    postDenied(request, deniedDecision, provider.providerId());
+                    return new EvaluationResult(false, coreReason, spec.accessStage(), spec.bounds(),
+                        spec.sessionId(), provider.providerId(), spec.instance());
+                }
+                return new EvaluationResult(true, StructureAccessDecision.Reason.NONE,
+                    provider.decision().displayStage().orElse(null), spec.bounds(),
+                    spec.sessionId(), provider.providerId(), spec.instance());
+            }
+        }
+        return new EvaluationResult(true, StructureAccessDecision.Reason.NONE,
+            null, null, null, null, candidate);
+    }
+
+    private static boolean staticProtects(StructureAction action,
+                                          LockRegistry.StructureRulesAggregate aggregate) {
+        return switch (action) {
+            case ENTRY -> true;
+            case BLOCK_BREAK -> aggregate.preventBlockBreak;
+            case BLOCK_PLACE -> aggregate.preventBlockPlace;
+            case CONTAINER_OPEN, BLOCK_INTERACT, ENTITY_INTERACT -> true;
+            case ITEM_USE -> false;
+        };
+    }
+
+    private static EvaluationResult allowedResult() {
+        return new EvaluationResult(true, StructureAccessDecision.Reason.NONE,
+            null, null, null, null, null);
     }
 
     /** Drop the per-player safe-position record on logout. */
     public static void cleanupPlayer(UUID playerId) {
         SAFE_POS.remove(playerId);
+        String prefix = playerId + "|";
+        DENIAL_EVENT_TICKS.keySet().removeIf(key -> key.startsWith(prefix));
     }
 
     public static void resetRuntimeState() {
         SAFE_POS.clear();
+        LOOKUP_CACHE.clear();
+        DENIAL_EVENT_TICKS.clear();
+        lookupCacheTick = Long.MIN_VALUE;
     }
 
     public static boolean canBreakBlock(ServerPlayer player, BlockPos pos) {
-        return canDoInStructure(player, pos, StructureFlag.BREAK);
+        return evaluate(player, pos, StructureAction.BLOCK_BREAK).allowed();
     }
 
     public static boolean canPlaceBlock(ServerPlayer player, BlockPos pos) {
-        return canDoInStructure(player, pos, StructureFlag.PLACE);
+        return evaluate(player, pos, StructureAction.BLOCK_PLACE).allowed();
     }
 
     /**
@@ -125,51 +252,11 @@ public final class StructureEnforcer {
         return be instanceof net.minecraft.world.Container;
     }
 
-    /**
-     * Returns the required stage if {@code pos} is inside a locked structure and the
-     * player lacks it; empty otherwise. Used by the chest-locking guard.
-     */
-    public static java.util.Optional<StageId> getLockedEntryStageAt(ServerLevel level, BlockPos pos) {
-        LockRegistry.StructureRulesAggregate agg = LockRegistry.getInstance().getStructures();
-        if (agg.lockedEntry.isEmpty()) return java.util.Optional.empty();
-        Registry<Structure> structureRegistry =
-            level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
-            Structure structure = structureRegistry.get(entry.getKey());
-            if (structure == null) continue;
-            StructureStart start = level.structureManager().getStructureAt(pos, structure);
-            if (start == StructureStart.INVALID_START) continue;
-            if (!start.getBoundingBox().isInside(pos)) continue;
-            return entry.getValue().stream().findFirst();
-        }
-        return java.util.Optional.empty();
-    }
-
     /** First structure gate at {@code pos} that this player is still missing. */
     public static java.util.Optional<StageId> getLockedEntryStageAt(ServerLevel level, BlockPos pos,
                                                                     ServerPlayer player) {
-        LockRegistry.StructureRulesAggregate agg = LockRegistry.getInstance().getStructures();
-        if (agg.lockedEntry.isEmpty()
-                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.STRUCTURE)) {
-            return java.util.Optional.empty();
-        }
-        Registry<Structure> structureRegistry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        for (ResourceLocation structureId : candidateStructures(structureRegistry, agg)) {
-            Structure structure = structureRegistry.get(structureId);
-            if (structure == null) continue;
-            StructureStart start = level.structureManager().getStructureAt(pos, structure);
-            if (start != StructureStart.INVALID_START && start.getBoundingBox().isInside(pos)) {
-                java.util.Optional<StageId> missing = firstMissing(player,
-                    agg.lockedEntry.getOrDefault(structureId, java.util.Set.of()));
-                ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
-                    ConditionalRule.TargetType.STRUCTURE, structureId, null, missing.isPresent());
-                if (decision != null && decision.effect() == ConditionalRule.Effect.LOCK) {
-                    if (decision.ownerStage() != null) return java.util.Optional.of(decision.ownerStage());
-                    if (missing.isPresent()) return missing;
-                }
-            }
-        }
-        return java.util.Optional.empty();
+        EvaluationResult result = evaluate(player, pos, StructureAction.BLOCK_INTERACT);
+        return result.allowed() ? Optional.empty() : Optional.ofNullable(result.displayStage());
     }
 
     public static void filterExplosionBlocks(ServerLevel level, List<BlockPos> affected) {
@@ -215,41 +302,29 @@ public final class StructureEnforcer {
     // Internals
     // ---------------------------------------------------------------
 
-    private static boolean canDoInStructure(ServerPlayer player, BlockPos pos, StructureFlag flag) {
-        if (!StageConfig.isBlockStructureEntry()) return true;
-        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
-
-        LockRegistry.StructureRulesAggregate agg = LockRegistry.getInstance().getStructures();
-        boolean flagOn = switch (flag) {
-            case BREAK -> agg.preventBlockBreak;
-            case PLACE -> agg.preventBlockPlace;
-        };
-        if (!flagOn || (agg.lockedEntry.isEmpty()
-                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.STRUCTURE))) return true;
-
-        ServerLevel level = (ServerLevel) player.level();
-        Registry<Structure> structureRegistry =
-            level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-
-        for (ResourceLocation structureId : candidateStructures(structureRegistry, agg)) {
-            Structure structure = structureRegistry.get(structureId);
-            if (structure == null) continue;
-            StructureStart start = level.structureManager().getStructureAt(pos, structure);
-            if (start == StructureStart.INVALID_START) continue;
-            if (!start.getBoundingBox().isInside(pos)) continue;
-            boolean staticBlocked = firstMissing(player,
-                agg.lockedEntry.getOrDefault(structureId, java.util.Set.of())).isPresent();
-            if (ConditionalLockEngine.isBlocked(player, ConditionalRule.TargetType.STRUCTURE,
-                    structureId, null, staticBlocked)) return false;
-        }
-        return true;
-    }
-
     private static java.util.Set<ResourceLocation> candidateStructures(
             Registry<Structure> registry, LockRegistry.StructureRulesAggregate aggregate) {
         java.util.Set<ResourceLocation> ids = new java.util.LinkedHashSet<>(aggregate.lockedEntry.keySet());
         ids.addAll(ConditionalLockEngine.structureTargetIds(registry));
         return ids;
+    }
+
+    private static Optional<StructureBounds> cachedBounds(ServerLevel level, BlockPos position,
+                                                          ResourceLocation structureId,
+                                                          Structure structure) {
+        long tick = level.getGameTime();
+        if (lookupCacheTick != tick) {
+            LOOKUP_CACHE.clear();
+            lookupCacheTick = tick;
+        }
+        LookupKey key = new LookupKey(level.dimension(), position.immutable(), structureId, tick);
+        return LOOKUP_CACHE.computeIfAbsent(key, ignored -> {
+            StructureStart start = level.structureManager().getStructureAt(position, structure);
+            if (start == StructureStart.INVALID_START || !start.getBoundingBox().isInside(position)) {
+                return Optional.empty();
+            }
+            return Optional.of(StructureBounds.of(start.getBoundingBox()));
+        });
     }
 
     private static java.util.Optional<StageId> firstMissing(ServerPlayer player,
@@ -258,6 +333,19 @@ public final class StructureEnforcer {
             if (!StageManager.getInstance().hasStage(player, stage)) return java.util.Optional.of(stage);
         }
         return java.util.Optional.empty();
+    }
+
+    private static void postDenied(StructureAccessRequest request, StructureAccessDecision decision,
+                                   ResourceLocation providerId) {
+        long now = request.level().getGameTime();
+        String key = request.player().getUUID() + "|" + providerId + "|"
+            + decision.sessionId().map(Object::toString).orElse("") + "|"
+            + request.action() + "|" + decision.reason();
+        Long previous = DENIAL_EVENT_TICKS.get(key);
+        if (previous == null || now - previous >= 20L) {
+            DENIAL_EVENT_TICKS.put(key, now);
+            NeoForge.EVENT_BUS.post(new StructureAccessDeniedEvent(request, decision, providerId));
+        }
     }
 
     /**
@@ -299,6 +387,4 @@ public final class StructureEnforcer {
 
         player.teleportTo(tx, player.getY(), tz);
     }
-
-    private enum StructureFlag { BREAK, PLACE }
 }

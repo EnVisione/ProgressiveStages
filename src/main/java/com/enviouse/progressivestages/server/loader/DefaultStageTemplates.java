@@ -155,6 +155,9 @@ public final class DefaultStageTemplates {
             # TEMPORARY AND TRIGGERED LOCKS GUIDE
             # https://github.com/EnVisione/ProgressiveStages/blob/master/TEMPORARY_AND_TRIGGERED_LOCKS.md
             #
+            # STRUCTURE SESSION COMPATIBILITY GUIDE
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/STRUCTURE_SESSION_COMPATIBILITY.md
+            #
             # BUILD AND RELEASE TESTING GUIDE
             # https://github.com/EnVisione/ProgressiveStages/blob/master/TESTING.md
             #
@@ -1622,6 +1625,44 @@ public final class DefaultStageTemplates {
             #
             # See section 25 for [attribute] / [revoke] worked examples,
             # and section 23 for the full [[triggers]] schema.
+            #
+            # ─────────────────────────────────────────────────────────────────────────
+            # 27.11 STRUCTURE SESSION COMPATIBILITY AND ACTIVE LOCKS v3.0.1
+            # ─────────────────────────────────────────────────────────────────────────
+            # A companion mod can register an exact structure assignment provider through
+            # the public Java API. ProgressiveStages does not import that companion mod.
+            # The provider describes the exact instance, owner, bounds, access stage,
+            # optional in-progress stage, completion, cleanup, and availability.
+            #
+            # Full provider code, lifecycle rules, commands, and acceptance tests.
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/STRUCTURE_SESSION_COMPATIBILITY.md
+            #
+            # Put active locks in the dedicated in-progress stage file, not necessarily in
+            # this permanent Diamond Age stage. They block because the stage is present
+            # inside its matching structure session, which is opposite to normal locks.
+            #
+            # [active_locks]
+            # scope = "structure_session"
+            #   [active_locks.items]
+            #   locked = ["id:minecraft:bow", "id:minecraft:crossbow"]
+            #   always_unlocked = []
+            #   [active_locks.enforcement]
+            #   block_item_use = true
+            #
+            # Put a leave trigger in the stage that should be granted after committed exit.
+            # [[triggers]]
+            # type = "leave_structure"
+            # structure = "minecraft:stronghold"
+            # provider = "mypack:assignments"
+            # required_session_stage = "stronghold_active"
+            # outcomes = ["completed"]
+            # description = "Complete the assigned Stronghold and leave it."
+            #
+            # Operator diagnostics.
+            # /pstages structure providers
+            # /pstages structure sessions [player]
+            # /pstages structure reconcile <player>
+            # /pstages structure close <player> <session_uuid> <outcome> confirm
             # ============================================================================
             """);
     }

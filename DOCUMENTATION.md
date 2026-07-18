@@ -74,6 +74,7 @@
    - [4.32 `[display].encrypt_blocks` — encrypted-block visual](#432-displayencrypt_blocks--encrypted-block-visual) — **New in 3.0**
    - [4.33 `[enchants].max_levels`, `[beacon]`, `[brewing]` — finer-grained gates](#433-enchantsmax_levels-beacon-brewing--finer-grained-gates) — **New in 3.0**
    - [4.34 Temporary, triggered, and priority-based lock rules](#434-temporary-triggered-and-priority-based-lock-rules) — **New in 3.0.1**
+   - [4.35 Structure session providers, leased stages, and active locks](#435-structure-session-providers-leased-stages-and-active-locks) — **New in 3.0.1**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -2104,6 +2105,63 @@ and nonexistent stage ids in `.when.stages` or `.when.missing_stages`.
 
 ---
 
+### 4.35 Structure session providers, leased stages, and active locks
+
+3.0.1 exposes a generic exact-instance compatibility layer for assignment, dungeon, arena, and
+quest mods. A companion mod registers a `StructureContextProvider`; ProgressiveStages remains the
+only authority that grants or revokes stages, rejects actions, repels players, and commits enter,
+completion, or leave events. ProgressiveStages does not depend on the companion mod.
+
+Use ordinary `[structures]` for the broad access gate. Use an optional in-progress stage as a
+team-safe lease while the participant is inside the provider's exact bounds. Use `[active_locks]`
+when an owned in-progress stage should block item use only inside its matching session.
+
+```toml
+[stage]
+id = "stronghold_active"
+display_name = "Stronghold Run Active"
+
+[active_locks]
+scope = "structure_session"
+
+[active_locks.items]
+locked = ["id:minecraft:bow", "id:minecraft:crossbow"]
+always_unlocked = []
+
+[active_locks.enforcement]
+block_item_use = true
+```
+
+This is intentionally separate from `[items]`:
+
+- `[items]` blocks because its stage is missing.
+- `[active_locks.items]` blocks because its stage is present inside the matching live session.
+- Active locks do not change inventory holding, pickup, crafting, loot, tooltips, JEI, or EMI.
+
+The event-driven leave trigger grants its owning stage only from a committed session transition:
+
+```toml
+[stage]
+id = "stronghold_cleared"
+
+[[triggers]]
+type = "leave_structure"
+structure = "minecraft:stronghold"
+provider = "mypack:assignments"
+required_session_stage = "stronghold_active"
+outcomes = ["completed"]
+```
+
+Aliases are `leave_structure`, `leave_structures`, `exit_structure`, and `structure_exit`.
+Structure tags are supported. Outcomes are `incomplete`, `completed`, `cancelled`, `death`,
+`teleport`, `dimension_change`, `disconnect`, and `recovery`; omit the filter or use `any` to
+accept every outcome.
+
+The complete provider contract, copy-ready Java example, arbitration truth table, stage files,
+lease rules, team behavior, lifecycle semantics, commands, failure handling, and forty-step
+acceptance matrix are in
+[STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md).
+
 ## 5. Triggers — The Per-Stage `[[triggers]]` System
 
 Triggers are declared **per stage**, inside that stage's own TOML, in one or
@@ -2713,6 +2771,10 @@ permission level 2; authoring/reload/validation operations require level 3.
 | `/pstages rule activate <player> <rule> [seconds]` | Start a triggered rule. Omit seconds to use its TOML duration. Requires permission 2. |
 | `/pstages rule clear <player> <rule>` | Stop one active triggered rule. Requires permission 2. |
 | `/pstages rule clearall <player>` | Stop all active triggered rules. Requires permission 2. |
+| `/pstages structure providers` | List registered structure context providers and cached session counts. Requires permission 2. |
+| `/pstages structure sessions [player]` | Show exact instance, owner, stages, completion, visit, participants, and pending exit. Another player requires permission 2. |
+| `/pstages structure reconcile <player>` | Refresh provider data and repair session leases without a fake gameplay enter. Requires permission 2. |
+| `/pstages structure close <player> <session> <outcome> confirm` | Explicit operator recovery close. Requires permission 3 and a final confirmation literal. |
 
 > **Using `/stage progress`.** Three views, one rendering:
 >
@@ -3259,6 +3321,19 @@ Map<ResourceLocation, Long> remaining = ProgressiveStagesAPI.getActiveConditiona
 Set<ResourceLocation> conditionalIds = ProgressiveStagesAPI.getConditionalRuleIds();
 Optional<ConditionalRule> conditionalDefinition =
     ProgressiveStagesAPI.getConditionalRule("progressivestages:end_fight/manual_permission");
+
+// Generic exact-structure compatibility
+ProgressiveStagesAPI.registerStructureContextProvider(
+    ResourceLocation.parse("mypack:assignments"), provider);
+List<StructureSessionView> sessions =
+    ProgressiveStagesAPI.getActiveStructureSessions(player);
+ProgressiveStagesAPI.markStructureSessionComplete(player, sessionId);
+ProgressiveStagesAPI.reconcileStructureSessions(player);
+ProgressiveStagesAPI.unregisterStructureContextProvider(
+    ResourceLocation.parse("mypack:assignments"));
+
+// One authoritative result for ordinary and contextual item-use locks
+ItemUseDecision itemDecision = ProgressiveStagesAPI.evaluateItemUse(player, stack);
 ```
 
 ### 15.2 StageId
@@ -3278,7 +3353,8 @@ The enum tracks the source of a stage change for events and logging:
 **`PURCHASE`** (skill-tree `[cost]` buy — 2.4), **`REGRESSION`** (a `[revoke]`
 or temporary-stage `duration` loss — 2.4), `ADVANCEMENT`, `ITEM_PICKUP`,
 `INVENTORY_CHECK`, `QUEST_REWARD`, `DIMENSION_ENTRY`, `BOSS_KILL`,
-`MULTI_TRIGGER` (legacy), `TEAM_SYNC`, `FTB`, `AUTO`, `STARTING_STAGE`, `API`,
+`MULTI_TRIGGER` (legacy), `TEAM_SYNC`, `AUTO`, `STARTING_STAGE`, `API`, `SCRIPT`,
+`STRUCTURE_ENTER`, `STRUCTURE_LEAVE`, `STRUCTURE_COMPLETE`,
 `UNKNOWN`.
 
 (The legacy `*_TRIGGER`/`*_ENTRY` causes are retained for binary compatibility;
@@ -3309,6 +3385,11 @@ Event classes:
 - [`StageChangeEvent`](src/main/java/com/enviouse/progressivestages/common/api/StageChangeEvent.java)
 - [`StagesBulkChangedEvent`](src/main/java/com/enviouse/progressivestages/common/api/StagesBulkChangedEvent.java)
 - [`StageChangeType`](src/main/java/com/enviouse/progressivestages/common/api/StageChangeType.java)
+
+Structure integration events are `StructureSessionEnterEvent`,
+`StructureSessionCompletionEvent`, `StructureSessionLeaveEvent`, and
+`StructureAccessDeniedEvent`. They are immutable, post-commit, and noncancellable. See the
+[structure session compatibility guide](STRUCTURE_SESSION_COMPATIBILITY.md#12-events).
 
 ---
 

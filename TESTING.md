@@ -97,11 +97,22 @@ The test sources live under `src/test/java`.
 | `OreSpoofCameraStabilityTest` | Stage and game-mode refreshes never unload the chunk beneath the player. |
 | `StageAttributeApplierTest` | Unchanged scale modifiers remain attached while changed and revoked modifiers reconcile correctly. |
 | `TriggerConditionTypeTest` | Trigger aliases and invalid condition types. |
+| `StructureCompatibilityTypesTest` | Stable session IDs, normalized immutable bounds, and defensive session views. |
+| `StructureAccessArbitrationTest` | Static and provider deny or permit truth table. |
+| `StructureContextRegistryTest` | Unique provider registration and idempotent unregister behavior. |
+| `StructureLeaseDataTest` | Restart persistence for lease-introduced stages, storage owners, and participant references. |
+| `StructureLeasePolicyTest` | Duplicate acquire safety, multiple participants, final release, and pre-owned stage preservation. |
+| `StructureSessionPolicyTest` | Access revocation only on the final committed completed exit, never on lifecycle interruption. |
+| `StructureVisitTransitionsTest` | Enter deduplication, expanded bounds, leave debounce, re-entry cancellation, and committed leave timing. |
 | `BeginnerExamplePackTest` | Every copy-ready beginner TOML parses and its graph validates. |
 | `DocumentationReferenceTest` | The Diamond Stage, nineteen-phase guide, release presentation, and documentation links stay connected. |
 
 When fixing a defect, add a test that fails before the fix and passes after it whenever the
 behavior can be isolated. Manual-only fixes must receive a written reproduction recipe.
+
+The complete exact-structure provider, transition, lease, contextual item-lock, lifecycle, and
+companion-mod acceptance matrix is in
+[STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md#16-acceptance-test-matrix).
 
 ## 5. Validate a stage pack in game
 

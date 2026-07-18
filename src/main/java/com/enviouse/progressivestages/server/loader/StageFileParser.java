@@ -12,6 +12,8 @@ import com.enviouse.progressivestages.common.config.StageRewards;
 import com.enviouse.progressivestages.common.config.UnlockEffects;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
+import com.enviouse.progressivestages.common.lock.ActiveLockDefinition;
+import com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
@@ -198,6 +200,7 @@ public final class StageFileParser {
         builder.rewards(parseRewards(config));
         builder.lockedAbilities(parseAbilities(config));
         builder.conditionalRules(parseConditionalRules(config, stageId));
+        builder.activeLocks(parseActiveLocks(config));
 
         return ParseResult.success(builder.build());
     }
@@ -721,7 +724,39 @@ public final class StageFileParser {
         // here — "cow" -> "minecraft:cow" — so a namespaceless config value still matches at read time.
         target = canonicalizeSubject(type, target);
         if (type == TriggerConditionType.KILL_WITH) with = canonicalizeId(with);
-        return new TriggerCondition(type, target, count, with);
+        ResourceLocation provider = null;
+        StageId requiredSessionStage = null;
+        java.util.Set<StructureLeaveOutcome> outcomes = java.util.Set.of();
+        if (type == TriggerConditionType.LEAVE_STRUCTURE) {
+            Object providerRaw = c.get("provider");
+            if (providerRaw instanceof String value && !value.isBlank()) {
+                provider = ResourceLocation.tryParse(value.trim());
+                if (provider == null) throw new IllegalArgumentException("Invalid structure provider id. " + value);
+            }
+            Object stageRaw = c.get("required_session_stage");
+            if (stageRaw == null) stageRaw = c.get("session_stage");
+            if (stageRaw instanceof String value && !value.isBlank()) {
+                requiredSessionStage = StageId.parse(value);
+            }
+            java.util.Set<StructureLeaveOutcome> parsedOutcomes = new java.util.LinkedHashSet<>();
+            for (String value : stringList(c, "outcomes")) {
+                if (value.equalsIgnoreCase("any")) continue;
+                try { parsedOutcomes.add(StructureLeaveOutcome.parse(value)); }
+                catch (IllegalArgumentException error) {
+                    throw new IllegalArgumentException("Invalid structure leave outcome. " + value);
+                }
+            }
+            Object outcomeRaw = c.get("outcome");
+            if (outcomeRaw instanceof String value && !value.isBlank()
+                    && !value.equalsIgnoreCase("any")) {
+                try { parsedOutcomes.add(StructureLeaveOutcome.parse(value)); }
+                catch (IllegalArgumentException error) {
+                    throw new IllegalArgumentException("Invalid structure leave outcome. " + value);
+                }
+            }
+            outcomes = java.util.Set.copyOf(parsedOutcomes);
+        }
+        return new TriggerCondition(type, target, count, with, provider, requiredSessionStage, outcomes);
     }
 
     /** Canonicalize an exact-id subject for the event-counted condition types; tags/keywords untouched. */
@@ -765,6 +800,7 @@ public final class StageFileParser {
             case CUSTOM_COUNTER                              -> new String[]{"counter", "key", "id", "target"};
             case SCOREBOARD                                  -> new String[]{"objective", "scoreboard", "id", "target"};
             case SCRIPT_VALUE                                -> new String[]{"id", "provider", "script", "target"};
+            case LEAVE_STRUCTURE                             -> new String[]{"structure", "id", "target"};
             case PLAY_TIME, LEVEL, XP, DAY_COUNT, WORLD_TIME,
                  REACH_Y, FISH, SLEEP, RIDE, HEALTH, FOOD,
                  STAGE_COUNT, ONLINE_TEAM_SIZE               -> new String[]{};
@@ -896,6 +932,44 @@ public final class StageFileParser {
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid dependency ID. " + s, e);
         }
+    }
+
+    private static ActiveLockDefinition parseActiveLocks(Config config) {
+        Config section = config.get("active_locks");
+        if (section == null) return ActiveLockDefinition.EMPTY;
+        for (var entry : section.entrySet()) {
+            String key = entry.getKey();
+            if (!java.util.Set.of("scope", "items", "enforcement").contains(key)) {
+                throw new IllegalArgumentException("Unknown active lock category. " + key);
+            }
+        }
+        String rawScope = section.getOrElse("scope", "structure_session");
+        ActiveLockDefinition.Scope scope = switch (rawScope.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "structure_session" -> ActiveLockDefinition.Scope.STRUCTURE_SESSION;
+            default -> throw new IllegalArgumentException("Unknown active lock scope. " + rawScope);
+        };
+        Config items = section.get("items");
+        if (items != null) {
+            for (var entry : items.entrySet()) {
+                String key = entry.getKey();
+                if (!java.util.Set.of("locked", "always_unlocked").contains(key)) {
+                    throw new IllegalArgumentException("Unknown active item lock field. " + key);
+                }
+            }
+        }
+        CategoryLocks itemLocks = items == null ? CategoryLocks.EMPTY
+            : parseCategoryLists(items, "locked", "always_unlocked");
+        Config enforcement = section.get("enforcement");
+        if (enforcement != null) {
+            for (var entry : enforcement.entrySet()) {
+                String key = entry.getKey();
+                if (!key.equals("block_item_use")) {
+                    throw new IllegalArgumentException("Unknown active lock enforcement field. " + key);
+                }
+            }
+        }
+        boolean blockItemUse = enforcement == null || enforcement.getOrElse("block_item_use", true);
+        return new ActiveLockDefinition(scope, itemLocks, blockItemUse);
     }
 
     // -------------------- locks --------------------

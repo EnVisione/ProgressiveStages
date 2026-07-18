@@ -1,6 +1,8 @@
 package com.enviouse.progressivestages.server.commands;
 
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome;
+import com.enviouse.progressivestages.common.api.structure.StructureSessionId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
@@ -11,6 +13,8 @@ import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.compat.ftbquests.FtbQuestsHooks;
 import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
+import com.enviouse.progressivestages.server.structure.StructureContextRegistry;
+import com.enviouse.progressivestages.server.structure.StructureSessionManager;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
@@ -230,6 +234,29 @@ public class StageCommand {
                     .then(Commands.argument("player", EntityArgument.player())
                         .executes(StageCommand::clearAllConditionalRules))))
 
+            .then(Commands.literal("structure")
+                .then(Commands.literal("providers")
+                    .requires(source -> source.hasPermission(2))
+                    .executes(StageCommand::listStructureProviders))
+                .then(Commands.literal("sessions")
+                    .executes(ctx -> listStructureSessions(ctx,
+                        ctx.getSource().getPlayerOrException()))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .requires(source -> source.hasPermission(2))
+                        .executes(ctx -> listStructureSessions(ctx,
+                            EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("reconcile")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .executes(StageCommand::reconcileStructureSessions)))
+                .then(Commands.literal("close")
+                    .requires(source -> source.hasPermission(3))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("session", StringArgumentType.word())
+                            .then(Commands.argument("outcome", StringArgumentType.word())
+                                .then(Commands.literal("confirm")
+                                    .executes(StageCommand::closeStructureSession)))))))
+
             // /stage gui — open the in-game stage-tree viewer for the calling player
             .then(Commands.literal("gui")
                 .executes(StageCommand::openGui))
@@ -293,6 +320,71 @@ public class StageCommand {
     private static int openGui(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
         com.enviouse.progressivestages.common.network.NetworkHandler.sendStageGuiData(player);
+        return 1;
+    }
+
+    private static int listStructureProviders(CommandContext<CommandSourceStack> context) {
+        List<StructureContextRegistry.ProviderStatus> statuses =
+            StructureContextRegistry.getInstance().statuses();
+        context.getSource().sendSuccess(() -> Component.literal(
+            "Registered structure providers. " + statuses.size()), false);
+        for (var status : statuses) {
+            context.getSource().sendSuccess(() -> Component.literal(status.id() + ". "
+                + status.implementation() + ". Cached sessions " + status.cachedSessions()), false);
+        }
+        return statuses.size();
+    }
+
+    private static int listStructureSessions(CommandContext<CommandSourceStack> context,
+                                             ServerPlayer player) {
+        var sessions = StructureSessionManager.getInstance().activeSessions(player);
+        context.getSource().sendSuccess(() -> Component.literal("Structure sessions for "
+            + player.getName().getString() + ". " + sessions.size()), false);
+        for (var session : sessions) {
+            String inProgress = session.inProgressStage().map(Object::toString).orElse("none");
+            context.getSource().sendSuccess(() -> Component.literal(
+                session.sessionId() + ". Provider " + session.providerId()
+                    + ". Instance " + session.instance().structureId()
+                    + ". Dimension " + session.instance().dimension().location()
+                    + ". Owner " + session.assignmentOwner()
+                    + ". Access " + session.accessStage()
+                    + ". In progress " + inProgress
+                    + ". Complete " + session.complete()
+                    + ". Visit " + session.visitSequence()
+                    + ". Participants " + session.participants().size()
+                    + ". Exit pending " + session.exitPending()), false);
+        }
+        return sessions.size();
+    }
+
+    private static int reconcileStructureSessions(CommandContext<CommandSourceStack> context)
+            throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
+        var sessions = StructureSessionManager.getInstance().reconcile(player, true);
+        context.getSource().sendSuccess(() -> Component.literal("Reconciled " + sessions.size()
+            + " structure sessions for " + player.getName().getString()), true);
+        return sessions.size();
+    }
+
+    private static int closeStructureSession(CommandContext<CommandSourceStack> context)
+            throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
+        StructureSessionId sessionId;
+        StructureLeaveOutcome outcome;
+        try {
+            sessionId = StructureSessionId.parse(StringArgumentType.getString(context, "session"));
+            outcome = StructureLeaveOutcome.parse(StringArgumentType.getString(context, "outcome"));
+        } catch (IllegalArgumentException error) {
+            context.getSource().sendFailure(Component.literal("Invalid session id or outcome"));
+            return 0;
+        }
+        boolean closed = StructureSessionManager.getInstance().close(player, sessionId, outcome);
+        if (!closed) {
+            context.getSource().sendFailure(Component.literal("No active participant session matched"));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("Closed structure session "
+            + sessionId + " with outcome " + outcome.name().toLowerCase(java.util.Locale.ROOT)), true);
         return 1;
     }
 
@@ -1242,11 +1334,42 @@ public class StageCommand {
 
         // Check for order conflicts among loaded stages
         // v1.3: Check for dependency issues instead of order conflicts
-        List<String> depErrors = StageOrder.getInstance().validateDependencies();
+        List<String> depErrors = StageOrder.validateDefinitions(stages);
         for (String depError : depErrors) {
             warnings++;
             context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
                 StageConfig.getMsgCmdValidateDepWarning().replace("{message}", depError)), false);
+        }
+
+        Set<net.minecraft.resources.ResourceLocation> registeredProviders =
+            StructureContextRegistry.getInstance().statuses().stream()
+                .map(StructureContextRegistry.ProviderStatus::id)
+                .collect(java.util.stream.Collectors.toSet());
+        for (StageDefinition stage : stages) {
+            if (!stage.getActiveLocks().isEmpty()
+                    && (stage.isPurchasable() || !stage.getRewards().isEmpty()
+                        || !stage.getDependencies().isEmpty() || stage.getRevoke().cascade()
+                        || stage.hasTriggers())) {
+                warnings++;
+                String warning = "Active lock stage " + stage.getId()
+                    + " has purchase rewards or dependencies and should not be used as a leased stage";
+                context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                    StageConfig.getMsgCmdValidateDepWarning().replace("{message}", warning)), false);
+            }
+            for (var rule : stage.getTriggers()) {
+                for (var condition : rule.conditions()) {
+                    if (condition.type()
+                            == com.enviouse.progressivestages.common.trigger.TriggerConditionType.LEAVE_STRUCTURE
+                            && condition.provider() != null
+                            && !registeredProviders.contains(condition.provider())) {
+                        warnings++;
+                        String warning = "Leave trigger on " + stage.getId()
+                            + " filters unregistered provider " + condition.provider();
+                        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                            StageConfig.getMsgCmdValidateDepWarning().replace("{message}", warning)), false);
+                    }
+                }
+            }
         }
 
         // Check for empty starting stages

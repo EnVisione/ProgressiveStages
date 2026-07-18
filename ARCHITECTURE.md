@@ -506,6 +506,19 @@ The repository root contains the maintained release surfaces:
 
 The release logo lives at `src/main/resources/progressivestages.png`. `neoforge.mods.toml` names that root resource with `logoFile`, so it appears in compatible mod-list screens and can be uploaded as the CurseForge project image.
 
+### Generic exact structure compatibility
+
+The public provider and value contracts live under
+`common/api/structure`. `StructureContextRegistry` owns provider registration, three-way
+arbitration, last-known claims, thread checks, and rate-limited provider failures.
+`StructureSessionManager` owns committed participants, visit sequencing, exit debounce,
+completion, lifecycle outcomes, reconciliation, and team-safe stage leases. `StructureEnforcer`
+combines the normal static gate with provider decisions. This is a one-way extension seam:
+companion mods depend on ProgressiveStages and ProgressiveStages never imports the companion API.
+
+See [STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md) for the complete
+contract and acceptance matrix.
+
 The built JAR is created under `build/libs/`. Generated metadata under `build/` is disposable output and should never be treated as the source of truth.
 
 ## 14. Non-negotiable boundaries

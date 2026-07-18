@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages.server.loader;
 
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
+import com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -230,6 +231,81 @@ class StageFileParserTest {
 
         assertFalse(result.isSuccess());
         assertTrue(result.getErrorMessage().contains("Duplicate conditional rule id"), result.getErrorMessage());
+    }
+
+    @Test
+    void parsesStructureSessionActiveLocksAndLeaveTriggers() throws IOException {
+        Path file = write("structure_session.toml", """
+            [stage]
+            id = "dungeon_active"
+
+            [active_locks]
+            scope = "structure_session"
+
+            [active_locks.items]
+            locked = ["id:minecraft:bow", "tag:minecraft:pickaxes"]
+            always_unlocked = ["id:minecraft:wooden_pickaxe"]
+
+            [active_locks.enforcement]
+            block_item_use = true
+
+            [[triggers]]
+            type = "leave_structure"
+            structure = "#minecraft:stronghold"
+            provider = "questtokens:assignments"
+            required_session_stage = "dungeon_active"
+            outcomes = ["completed", "recovery"]
+            """);
+
+        StageFileParser.ParseResult result = StageFileParser.parseWithErrors(file);
+
+        assertTrue(result.isSuccess(), result.getErrorMessage());
+        var stage = result.getStageDefinition();
+        assertFalse(stage.getActiveLocks().isEmpty());
+        assertEquals(2, stage.getActiveLocks().items().locked().size());
+        var leave = stage.getTriggers().getFirst().conditions().getFirst();
+        assertEquals("questtokens:assignments", leave.provider().toString());
+        assertEquals("progressivestages:dungeon_active", leave.requiredSessionStage().toString());
+        assertEquals(java.util.Set.of(StructureLeaveOutcome.COMPLETED, StructureLeaveOutcome.RECOVERY),
+            leave.outcomes());
+    }
+
+    @Test
+    void rejectsUnknownActiveLockScopesAndLeaveOutcomes() throws IOException {
+        StageFileParser.ParseResult scope = StageFileParser.parseWithErrors(write("bad_scope.toml", """
+            [stage]
+            id = "bad_scope"
+            [active_locks]
+            scope = "everywhere_forever"
+            """));
+        StageFileParser.ParseResult outcome = StageFileParser.parseWithErrors(write("bad_outcome.toml", """
+            [stage]
+            id = "bad_outcome"
+            [[triggers]]
+            type = "leave_structure"
+            structure = "minecraft:stronghold"
+            outcome = "victoriousish"
+            """));
+
+        assertFalse(scope.isSuccess());
+        assertTrue(scope.getErrorMessage().contains("Unknown active lock scope"));
+        assertFalse(outcome.isSuccess());
+        assertTrue(outcome.getErrorMessage().contains("Invalid structure leave outcome"));
+    }
+
+    @Test
+    void rejectsUnsupportedActiveLockCategories() throws IOException {
+        StageFileParser.ParseResult result = StageFileParser.parseWithErrors(write("bad_category.toml", """
+            [stage]
+            id = "bad_category"
+            [active_locks]
+            scope = "structure_session"
+            [active_locks.blocks]
+            locked = ["minecraft:stone"]
+            """));
+
+        assertFalse(result.isSuccess());
+        assertTrue(result.getErrorMessage().contains("Unknown active lock category"));
     }
 
     private Path write(String name, String contents) throws IOException {
