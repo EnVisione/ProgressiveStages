@@ -9,6 +9,8 @@ For every available field and advanced feature, use the
 verification, use the [testing handbook](TESTING.md).
 For a detailed start-to-release workflow with copy-ready examples for all nineteen phases, use the
 [Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md).
+For the new three-file schema 4 packages and `/pstages editor`, follow the
+[Schema 4 and Editor Rehaul Guide](REHAUL_GUIDE.md). Its first tutorial requires no file editing.
 
 ## 1. What this mod does
 

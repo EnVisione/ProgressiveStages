@@ -610,6 +610,63 @@ public final class StageTreeScreen extends Screen {
             y += 3;
         }
 
+        if (!data.challenges().isEmpty()) {
+            g.drawString(font, Component.translatable("gui.progressivestages.tree.challenges"), x, y,
+                0xFFFFAA55, false);
+            y += 11;
+            for (ClientTriggerProgress.Challenge challenge : data.challenges()) {
+                g.drawString(font, challenge.id().getPath() + ". " + challenge.status(), x + 3, y,
+                    challenge.status().equals("succeeded") ? 0xFF55AA55 : 0xFFDDCC88, false);
+                y += 10;
+                for (String budget : challenge.budgets()) {
+                    g.drawString(font, "  " + budget, x + 3, y, 0xFFCCCCCC, false);
+                    y += 10;
+                }
+            }
+            y += 3;
+        }
+
+        if (!data.modifiers().isEmpty()) {
+            g.drawString(font, Component.translatable("gui.progressivestages.tree.modifiers"), x, y,
+                0xFFAA88FF, false);
+            y += 11;
+            for (String modifier : data.modifiers()) {
+                for (FormattedCharSequence wrapped : font.split(Component.literal(modifier), innerW - 5)) {
+                    g.drawString(font, wrapped, x + 3, y, 0xFFCCCCCC, false);
+                    y += 10;
+                }
+            }
+            y += 3;
+        }
+
+        if (!data.why().isEmpty()) {
+            g.drawString(font, Component.translatable("gui.progressivestages.tree.why"), x, y,
+                0xFF55DDDD, false);
+            y += 11;
+            for (ClientTriggerProgress.Why why : data.why().stream()
+                    .skip(Math.max(0, data.why().size() - 5)).toList()) {
+                String line = why.effect() + ". " + why.category() + ". " + why.target();
+                for (FormattedCharSequence wrapped : font.split(Component.literal(line), innerW - 5)) {
+                    g.drawString(font, wrapped, x + 3, y, why.blocked() ? 0xFFFF7777 : 0xFF77DD77, false);
+                    y += 10;
+                }
+            }
+            y += 3;
+        }
+
+        if (!data.history().isEmpty()) {
+            g.drawString(font, Component.translatable("gui.progressivestages.tree.history"), x, y,
+                0xFFAAAAAA, false);
+            y += 11;
+            for (ClientTriggerProgress.History history : data.history().stream()
+                    .skip(Math.max(0, data.history().size() - 5)).toList()) {
+                String line = history.direction() + ". " + (history.committed() ? "committed" : "rejected");
+                g.drawString(font, line, x + 3, y, history.committed() ? 0xFF77DD77 : 0xFFFF7777, false);
+                y += 10;
+            }
+            y += 3;
+        }
+
         if (data.unlockTotal() > 0) {
             g.drawString(font, Component.translatable("gui.progressivestages.tree.unlocks",
                 data.unlockTotal()), x, y, 0xFFAAAAAA, false);

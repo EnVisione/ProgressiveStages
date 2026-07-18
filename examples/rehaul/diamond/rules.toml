@@ -1,0 +1,36 @@
+[items]
+locked = ["mod:example", "id:example:sword|priority=600"]
+priority = 100
+
+[items.priorities]
+"mod:example" = 125
+
+[items.presentation."id:example:sword"]
+viewer = "show"
+priority = 700
+
+[unlocks]
+items = ["example:training_sword"]
+priority = 500
+
+[[temporary_rules]]
+id = "examples:end_tools"
+effect = "deny"
+lifetime = "duration"
+priority = 800
+duration = "30s"
+targets.items = ["tag:c:tools"]
+while = { type = "dimension", id = "minecraft:the_end" }
+
+[[item_modifiers]]
+id = "examples:diamond_training"
+items = ["tag:c:swords"]
+while_holding = true
+with_stages = ["examples:diamond"]
+aggregation = "once"
+priority = 300
+
+[[item_modifiers.attributes]]
+id = "minecraft:generic.attack_damage"
+amount = 1.0
+operation = "add_value"

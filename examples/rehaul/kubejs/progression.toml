@@ -1,0 +1,8 @@
+[[grants]]
+id = "examples:kubejs_grant"
+repeat = "edge"
+condition = { type = "kubejs", id = "pack:ready_for_stage" }
+
+actions = [
+  { type = "pack:announce_stage", message = "The KubeJS stage is ready" }
+]

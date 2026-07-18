@@ -1,0 +1,9 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:mage"
+display_name = "Mage"
+description = "Magic affinity with a penalty for heavy weapons."
+icon = "minecraft:amethyst_shard"
+priority = 200

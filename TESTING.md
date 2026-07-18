@@ -6,6 +6,8 @@ servers, multiplayer scope, optional integrations, regressions, and a release ev
 
 Use [GETTING_STARTED.md](GETTING_STARTED.md) if you are learning stage authoring. Use
 [DOCUMENTATION.md](DOCUMENTATION.md) for the full schema and API reference.
+Schema 4 package, editor bridge, migration, client snapshot, persistence, and rehaul release gates
+are documented in [REHAUL_GUIDE.md](REHAUL_GUIDE.md).
 
 ## 1. Testing vocabulary
 

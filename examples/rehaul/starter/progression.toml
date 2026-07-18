@@ -1,0 +1,4 @@
+[[grants]]
+id = "examples:grant_starter"
+repeat = "once"
+condition = { type = "mine", id = "minecraft:stone", count = 16 }

@@ -1,0 +1,20 @@
+[structures]
+locked = ["minecraft:stronghold"]
+priority = 200
+
+[[item_modifiers]]
+id = "examples:mage_heavy_weapon_penalty"
+items = ["tag:c:tools", "name:*axe", "name:*hammer"]
+while_holding = true
+with_stages = ["examples:mage"]
+aggregation = "once"
+priority = 400
+
+[[item_modifiers.attributes]]
+id = "minecraft:generic.attack_speed"
+amount = -0.35
+operation = "add_multiplied_total"
+
+[[item_modifiers.transforms]]
+type = "progressivestages:outgoing_damage"
+multiply = 0.75

@@ -107,7 +107,9 @@ public final class ConditionalLockEngine {
 
     public static boolean hasRules(ConditionalRule.TargetType type) {
         List<ConditionalRule> rules = rulesByTarget.get(type);
-        return rules != null && !rules.isEmpty();
+        return rules != null && !rules.isEmpty()
+            || com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
+                .hasRules(compiledCategory(type));
     }
 
     public static Set<ResourceLocation> ruleIds() {
@@ -133,17 +135,58 @@ public final class ConditionalLockEngine {
         Decision winner = staticBlocked
             ? new Decision(ConditionalRule.Effect.LOCK, 0, null, null) : null;
         List<ConditionalRule> rules = rulesByTarget.get(type);
-        if (player == null || type == null || id == null || rules == null || rules.isEmpty()) return winner;
+        if (player == null || type == null || id == null) return winner;
 
         long now = System.currentTimeMillis();
-        for (ConditionalRule rule : rules) {
-            if (!stageStateMatches(player, rule)) continue;
-            if (rule.isTriggered() && !isTimerActive(player.getUUID(), rule.id(), now)) continue;
-            if (!contextMatches(player, rule.context())) continue;
-            if (!targetMatches(rule, type, id, holder)) continue;
-            winner = choose(winner, new Decision(rule.effect(), rule.priority(), rule.id(), rule.ownerStage()));
+        if (rules != null) {
+            for (ConditionalRule rule : rules) {
+                if (!stageStateMatches(player, rule)) continue;
+                if (rule.isTriggered() && !isTimerActive(player.getUUID(), rule.id(), now)) continue;
+                if (!contextMatches(player, rule.context())) continue;
+                if (!targetMatches(rule, type, id, holder)) continue;
+                winner = choose(winner, new Decision(rule.effect(), rule.priority(), rule.id(), rule.ownerStage()));
+            }
+        }
+        var compiled = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
+            .resolve(player, compiledCategory(type), compiledAction(type), id, holder).orElse(null);
+        if (compiled != null && compiled.winningEffect() != null && compiled.winningRule() != null) {
+            var rule = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
+                .findRule(compiled.winningRule()).orElse(null);
+            if (rule != null && (compiled.winningEffect() == com.enviouse.progressivestages.common.rehaul.RuleEffect.LOCK
+                    || compiled.winningEffect() == com.enviouse.progressivestages.common.rehaul.RuleEffect.DENY
+                    || compiled.winningEffect() == com.enviouse.progressivestages.common.rehaul.RuleEffect.ALLOW
+                    || compiled.winningEffect() == com.enviouse.progressivestages.common.rehaul.RuleEffect.UNLOCK)) {
+                ConditionalRule.Effect effect = compiled.blocked()
+                    ? ConditionalRule.Effect.LOCK : ConditionalRule.Effect.UNLOCK;
+                winner = choose(winner, new Decision(effect, rule.priority(), rule.id(), rule.ownerStage()));
+            }
         }
         return winner;
+    }
+
+    private static String compiledCategory(ConditionalRule.TargetType type) {
+        if (type == null) return "";
+        return switch (type) {
+            case ITEM -> "items";
+            case BLOCK -> "blocks";
+            case FLUID -> "fluids";
+            case ENTITY -> "entities";
+            case RECIPE -> "recipes";
+            case DIMENSION -> "dimensions";
+            case STRUCTURE -> "structures";
+            case ABILITY -> "abilities";
+        };
+    }
+
+    private static String compiledAction(ConditionalRule.TargetType type) {
+        if (type == null) return "";
+        return switch (type) {
+            case ITEM -> "use";
+            case BLOCK, FLUID, ENTITY -> "interact";
+            case RECIPE -> "craft";
+            case DIMENSION, STRUCTURE -> "enter";
+            case ABILITY -> "perform";
+        };
     }
 
     public static boolean isBlocked(ServerPlayer player, ConditionalRule.TargetType type,

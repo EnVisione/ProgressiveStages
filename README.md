@@ -20,6 +20,9 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
   [Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md).
 - **Need every field, command, integration, and API:** use the
   [Complete Documentation](DOCUMENTATION.md).
+- **Using schema 4 or the localhost editor:** follow the
+  [Schema 4 and Editor Rehaul Guide](REHAUL_GUIDE.md), including all thirty feature groups and
+  machine-tested three-file examples.
 - **Building location, combat, timer, or priority-based access rules:** copy the
   [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
 - **Building or approving a release:** follow the

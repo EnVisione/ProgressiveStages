@@ -1,0 +1,9 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:kubejs"
+display_name = "KubeJS Callback Stage"
+description = "References registered callbacks by ID without storing browser code."
+icon = "minecraft:command_block"
+priority = 100

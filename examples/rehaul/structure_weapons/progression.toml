@@ -1,0 +1,4 @@
+[[grants]]
+id = "examples:grant_structure_rules"
+repeat = "once"
+condition = { type = "enter_structure", id = "minecraft:ocean_monument", count = 1 }

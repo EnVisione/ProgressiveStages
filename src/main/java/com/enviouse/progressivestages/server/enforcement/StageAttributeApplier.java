@@ -73,6 +73,7 @@ public final class StageAttributeApplier {
         if (healthTouched && player.getHealth() > player.getMaxHealth()) {
             player.setHealth(player.getMaxHealth());
         }
+        ContextualModifierApplier.reconcile(player);
     }
 
     static void reconcileModifier(AttributeInstance instance, ResourceLocation modifierId,

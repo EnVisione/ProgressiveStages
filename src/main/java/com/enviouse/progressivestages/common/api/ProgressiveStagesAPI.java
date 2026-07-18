@@ -244,6 +244,7 @@ public final class ProgressiveStagesAPI {
         com.enviouse.progressivestages.common.network.NetworkHandler.sendStageSync(player, getStages(player));
         com.enviouse.progressivestages.common.network.NetworkHandler.sendCreativeBypass(player,
             StageConfig.isAllowCreativeBypass() && player.isCreative());
+        com.enviouse.progressivestages.common.network.NetworkHandler.sendCompiledSnapshot(player);
     }
 
     public static boolean activateConditionalRule(ServerPlayer player, String ruleId, long durationMillis) {

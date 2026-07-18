@@ -13,6 +13,9 @@ import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.compat.ftbquests.FtbQuestsHooks;
 import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
+import com.enviouse.progressivestages.common.config.ConfigPaths;
+import com.enviouse.progressivestages.server.editor.EditorSessionService;
+import com.enviouse.progressivestages.server.migration.LegacyMigrationService;
 import com.enviouse.progressivestages.server.structure.StructureContextRegistry;
 import com.enviouse.progressivestages.server.structure.StructureSessionManager;
 import com.mojang.brigadier.CommandDispatcher;
@@ -35,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -257,6 +261,127 @@ public class StageCommand {
                                 .then(Commands.literal("confirm")
                                     .executes(StageCommand::closeStructureSession)))))))
 
+            .then(Commands.literal("editor")
+                .requires(source -> source.hasPermission(3))
+                .executes(StageCommand::openEditor)
+                .then(Commands.literal("status").executes(StageCommand::editorStatus))
+                .then(Commands.literal("sessions").executes(StageCommand::editorSessions))
+                .then(Commands.literal("drafts").executes(StageCommand::editorDrafts))
+                .then(Commands.literal("resume")
+                    .then(Commands.argument("draft", StringArgumentType.word())
+                        .executes(StageCommand::editorResume)))
+                .then(Commands.literal("discard")
+                    .then(Commands.argument("draft", StringArgumentType.word())
+                        .then(Commands.literal("confirm").executes(StageCommand::editorDiscard))))
+                .then(Commands.literal("revoke")
+                    .then(Commands.argument("session", StringArgumentType.word())
+                        .executes(StageCommand::editorRevoke))))
+
+            .then(Commands.literal("migrate")
+                .requires(source -> source.hasPermission(3))
+                .then(Commands.literal("scan").executes(StageCommand::migrationScan))
+                .then(Commands.literal("plan")
+                    .executes(ctx -> migrationPlan(ctx, "all"))
+                    .then(Commands.argument("stage", StringArgumentType.word())
+                        .suggests(StageCommand::suggestStages)
+                        .executes(ctx -> migrationPlan(ctx, StringArgumentType.getString(ctx, "stage")))))
+                .then(Commands.literal("write")
+                    .then(Commands.argument("stage", StringArgumentType.word())
+                        .then(Commands.literal("confirm").executes(StageCommand::migrationWrite))))
+                .then(Commands.literal("verify").executes(StageCommand::migrationVerify))
+                .then(Commands.literal("rollback")
+                    .then(Commands.argument("migration", StringArgumentType.word())
+                        .then(Commands.literal("confirm").executes(StageCommand::migrationRollback)))))
+
+            .then(Commands.literal("package")
+                .then(Commands.literal("list").executes(StageCommand::packageList))
+                .then(Commands.literal("inspect")
+                    .then(Commands.argument("stage", StringArgumentType.word())
+                        .suggests(StageCommand::suggestStages)
+                        .executes(StageCommand::packageInspect)))
+                .then(Commands.literal("scaffold")
+                    .requires(source -> source.hasPermission(3))
+                    .then(Commands.argument("id", StringArgumentType.word())
+                        .executes(StageCommand::newStage))))
+
+            .then(Commands.literal("validate")
+                .requires(source -> source.hasPermission(3))
+                .executes(StageCommand::validateStages)
+                .then(Commands.argument("stage", StringArgumentType.word())
+                    .suggests(StageCommand::suggestStages)
+                    .executes(StageCommand::validateSelectedStage)))
+            .then(Commands.literal("reload")
+                .requires(source -> source.hasPermission(3))
+                .executes(StageCommand::reloadStages)
+                .then(Commands.literal("diff").executes(StageCommand::validateStages)))
+            .then(Commands.literal("history")
+                .requires(source -> source.hasPermission(2))
+                .executes(context -> rehaulHistory(context, null))
+                .then(Commands.argument("player", EntityArgument.player())
+                    .executes(context -> rehaulHistory(context, EntityArgument.getPlayer(context, "player")))))
+            .then(Commands.literal("lifecycle")
+                .then(Commands.literal("progress")
+                    .then(Commands.argument("stage", StringArgumentType.word())
+                        .executes(context -> lifecycleProgress(context, context.getSource().getPlayerOrException()))
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .requires(source -> source.hasPermission(2))
+                            .executes(context -> lifecycleProgress(context, EntityArgument.getPlayer(context, "player"))))))
+                .then(Commands.literal("arm")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.argument("rule", StringArgumentType.word())
+                        .executes(context -> lifecycleMutation(context, context.getSource().getPlayerOrException(), true))
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .executes(context -> lifecycleMutation(context, EntityArgument.getPlayer(context, "player"), true)))))
+                .then(Commands.literal("reset")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.argument("rule", StringArgumentType.word())
+                        .executes(context -> lifecycleMutation(context, context.getSource().getPlayerOrException(), false))
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .executes(context -> lifecycleMutation(context, EntityArgument.getPlayer(context, "player"), false))))))
+            .then(Commands.literal("challenge")
+                .then(Commands.literal("list")
+                    .executes(ctx -> challengeList(ctx, ctx.getSource().getPlayerOrException()))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .requires(source -> source.hasPermission(2))
+                        .executes(ctx -> challengeList(ctx, EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("reset")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.argument("challenge", StringArgumentType.word())
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .executes(StageCommand::challengeReset))))
+                .then(Commands.literal("inspect")
+                    .then(Commands.argument("challenge", StringArgumentType.word())
+                        .executes(context -> challengeInspect(context, context.getSource().getPlayerOrException()))
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .requires(source -> source.hasPermission(2))
+                            .executes(context -> challengeInspect(context, EntityArgument.getPlayer(context, "player")))))))
+            .then(Commands.literal("explain")
+                .then(Commands.literal("stage")
+                    .then(Commands.argument("stage", StringArgumentType.word())
+                        .suggests(StageCommand::suggestStages)
+                        .executes(context -> explainStage(context, context.getSource().getPlayerOrException()))
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .requires(source -> source.hasPermission(2))
+                            .executes(context -> explainStage(context, EntityArgument.getPlayer(context, "player"))))))
+                .then(Commands.literal("target")
+                    .then(Commands.argument("context", StringArgumentType.word())
+                        .then(Commands.argument("target", StringArgumentType.word())
+                            .executes(ctx -> explainTarget(ctx, ctx.getSource().getPlayerOrException()))
+                            .then(Commands.argument("player", EntityArgument.player())
+                                .requires(source -> source.hasPermission(2))
+                                .executes(ctx -> explainTarget(ctx, EntityArgument.getPlayer(ctx, "player"))))))))
+            .then(Commands.literal("simulate")
+                .then(Commands.literal("event")
+                    .then(Commands.argument("event", StringArgumentType.word())
+                        .executes(context -> simulateEvent(context, context.getSource().getPlayerOrException()))
+                        .then(Commands.argument("player", EntityArgument.player())
+                            .requires(source -> source.hasPermission(2))
+                            .executes(context -> simulateEvent(context, EntityArgument.getPlayer(context, "player")))))))
+            .then(Commands.literal("rollback")
+                .requires(source -> source.hasPermission(3))
+                .then(Commands.argument("transaction", StringArgumentType.word())
+                    .then(Commands.literal("confirm").executes(StageCommand::rollbackTransaction))))
+
             // /stage gui — open the in-game stage-tree viewer for the calling player
             .then(Commands.literal("gui")
                 .executes(StageCommand::openGui))
@@ -317,6 +442,309 @@ public class StageCommand {
     }
 
     /** /stage gui — push the player's live trigger progress, which opens the GUI client-side. */
+    private static int openEditor(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        if (!context.getSource().getServer().isDedicatedServer()) {
+            context.getSource().sendFailure(Component.literal("The localhost editor is available only while connected to a dedicated server"));
+            return 0;
+        }
+        try {
+            var session = EditorSessionService.get().open(player);
+            com.enviouse.progressivestages.common.network.NetworkHandler.sendEditorOpen(player, session);
+            context.getSource().sendSuccess(() -> Component.literal("Opening the private ProgressiveStages editor on this computer"), false);
+            return 1;
+        } catch (RuntimeException error) {
+            context.getSource().sendFailure(Component.literal("Could not open the editor. " + error.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int editorStatus(CommandContext<CommandSourceStack> context) {
+        var sessions = EditorSessionService.get().sessions();
+        context.getSource().sendSuccess(() -> Component.literal("Active editor sessions. " + sessions.size()
+            + ". Configuration revision. " + StageFileLoader.getInstance().getCompiledSnapshot().revision()), false);
+        return sessions.size();
+    }
+
+    private static int editorSessions(CommandContext<CommandSourceStack> context) {
+        var sessions = EditorSessionService.get().sessions();
+        for (var session : sessions) context.getSource().sendSuccess(() -> Component.literal(
+            session.sessionId() + ". Owner. " + session.owner() + ". Draft. " + session.draftId()
+                + ". Expires. " + session.expiresAt()), false);
+        return sessions.size();
+    }
+
+    private static int editorDrafts(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        var drafts = EditorSessionService.get().drafts(context.getSource().getPlayerOrException().getUUID());
+        context.getSource().sendSuccess(() -> Component.literal("Available editor drafts. " + drafts), false);
+        return drafts.size();
+    }
+
+    private static int editorRevoke(CommandContext<CommandSourceStack> context) {
+        try {
+            UUID session = UUID.fromString(StringArgumentType.getString(context, "session"));
+            boolean removed = EditorSessionService.get().revoke(session);
+            if (!removed) context.getSource().sendFailure(Component.literal("Editor session was not found"));
+            return removed ? 1 : 0;
+        } catch (IllegalArgumentException error) {
+            context.getSource().sendFailure(Component.literal("Invalid editor session id"));
+            return 0;
+        }
+    }
+
+    private static int editorResume(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        try {
+            UUID draft = UUID.fromString(StringArgumentType.getString(context, "draft"));
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            var session = EditorSessionService.get().resume(player, draft);
+            com.enviouse.progressivestages.common.network.NetworkHandler.sendEditorOpen(player, session);
+            context.getSource().sendSuccess(() -> Component.literal("Resumed the editor draft and opened the private local editor"), false);
+            return 1;
+        } catch (RuntimeException error) {
+            context.getSource().sendFailure(Component.literal("Could not resume the draft. " + error.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int editorDiscard(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        try {
+            UUID draft = UUID.fromString(StringArgumentType.getString(context, "draft"));
+            boolean removed = EditorSessionService.get().discard(
+                context.getSource().getPlayerOrException().getUUID(), draft);
+            if (!removed) context.getSource().sendFailure(Component.literal("The draft was not found or is owned by another operator"));
+            else context.getSource().sendSuccess(() -> Component.literal("Discarded editor draft. " + draft), true);
+            return removed ? 1 : 0;
+        } catch (IllegalArgumentException error) {
+            context.getSource().sendFailure(Component.literal("Invalid editor draft id"));
+            return 0;
+        }
+    }
+
+    private static LegacyMigrationService migrations() {
+        return new LegacyMigrationService(ConfigPaths.stagesDirectory());
+    }
+
+    private static int migrationScan(CommandContext<CommandSourceStack> context) {
+        var entries = migrations().scan();
+        context.getSource().sendSuccess(() -> Component.literal("Legacy stages found. " + entries.size()), false);
+        for (var entry : entries) context.getSource().sendSuccess(() -> Component.literal(
+            (entry.stage() == null ? "invalid" : entry.stage()) + ". " + entry.source().getFileName()
+                + ". Valid. " + entry.valid() + ". " + String.join(". ", entry.errors())), false);
+        return entries.size();
+    }
+
+    private static int migrationPlan(CommandContext<CommandSourceStack> context, String requested) {
+        var service = migrations();
+        var entries = service.scan();
+        int shown = 0;
+        for (var entry : entries) {
+            if (!entry.valid() || entry.stage() == null) continue;
+            if (!requested.equalsIgnoreCase("all") && !entry.stage().toString().equalsIgnoreCase(requested)
+                    && !entry.stage().getPath().equalsIgnoreCase(requested)) continue;
+            var plan = service.plan(entry.source());
+            context.getSource().sendSuccess(() -> Component.literal("Migration plan. " + plan.stage()
+                + ". Target. " + plan.targetDirectory().getFileName() + ". Files. " + plan.generatedFiles().keySet()
+                + ". Source checksum. " + plan.sourceChecksum()), false);
+            shown++;
+        }
+        if (shown == 0) context.getSource().sendFailure(Component.literal("No matching legacy stage was found"));
+        return shown;
+    }
+
+    private static int migrationWrite(CommandContext<CommandSourceStack> context) {
+        String requested = StringArgumentType.getString(context, "stage");
+        var service = migrations();
+        int migrated = 0;
+        for (var entry : service.scan()) {
+            if (!entry.valid() || entry.stage() == null) continue;
+            if (!requested.equalsIgnoreCase("all") && !entry.stage().toString().equalsIgnoreCase(requested)
+                    && !entry.stage().getPath().equalsIgnoreCase(requested)) continue;
+            var result = service.write(service.plan(entry.source()));
+            if (!result.success()) context.getSource().sendFailure(Component.literal("Migration failed. " + result.explanation()));
+            else {
+                context.getSource().sendSuccess(() -> Component.literal("Migrated and verified. " + entry.stage()
+                    + ". Backup. " + result.migrationId()), true);
+                migrated++;
+            }
+        }
+        if (migrated > 0 && StageFileLoader.getInstance().reload()) StageFileLoader.getInstance().syncPlayersAfterReload();
+        return migrated;
+    }
+
+    private static int migrationVerify(CommandContext<CommandSourceStack> context) {
+        var results = StageFileLoader.getInstance().validateAllStages();
+        long failures = results.stream().filter(result -> !result.success).count();
+        if (failures > 0) context.getSource().sendFailure(Component.literal("Migration verification found " + failures + " invalid stage packages"));
+        else context.getSource().sendSuccess(() -> Component.literal("All " + results.size() + " stage sources are valid"), false);
+        return failures == 0 ? results.size() : 0;
+    }
+
+    private static int migrationRollback(CommandContext<CommandSourceStack> context) {
+        String migration = StringArgumentType.getString(context, "migration");
+        var result = migrations().rollback(migration);
+        if (!result.success()) { context.getSource().sendFailure(Component.literal("Rollback failed. " + result.explanation())); return 0; }
+        if (StageFileLoader.getInstance().reload()) StageFileLoader.getInstance().syncPlayersAfterReload();
+        context.getSource().sendSuccess(() -> Component.literal("Migration rollback completed. " + migration), true);
+        return 1;
+    }
+
+    private static int packageList(CommandContext<CommandSourceStack> context) {
+        var snapshot = StageFileLoader.getInstance().getCompiledSnapshot();
+        for (var stage : snapshot.stages().values()) context.getSource().sendSuccess(() -> Component.literal(
+            stage.id() + ". Schema. " + stage.schemaVersion() + ". Source. " + stage.sourceId()
+                + ". Rules. " + stage.rules().size()), false);
+        return snapshot.stages().size();
+    }
+
+    private static int packageInspect(CommandContext<CommandSourceStack> context) {
+        try {
+            StageId id = StageId.parse(StringArgumentType.getString(context, "stage"));
+            var stage = StageFileLoader.getInstance().getCompiledSnapshot().stages().get(id);
+            if (stage == null) { context.getSource().sendFailure(Component.literal("Stage was not found")); return 0; }
+            context.getSource().sendSuccess(() -> Component.literal(stage.id() + ". " + stage.displayName()
+                + ". Schema. " + stage.schemaVersion() + ". Priority. " + stage.priority()
+                + ". Source. " + stage.sourceId() + ". Rules. " + stage.rules().size()
+                + ". Grants and revokes. " + stage.progression().lifecycleRules().size()
+                + ". Challenges. " + stage.progression().challenges().size()), false);
+            return 1;
+        } catch (IllegalArgumentException error) {
+            context.getSource().sendFailure(Component.literal("Invalid stage id"));
+            return 0;
+        }
+    }
+
+    private static int rehaulHistory(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        var entries = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().transitionHistory().entries();
+        var selected = entries.stream().filter(entry -> player == null
+            || entry.subject().equals(player.getUUID().toString())).toList();
+        for (var entry : selected.stream().skip(Math.max(0, selected.size() - 25)).toList()) {
+            context.getSource().sendSuccess(() -> Component.literal(entry.timestamp() + ". " + entry.subject()
+                + ". " + entry.direction().name().toLowerCase(java.util.Locale.ROOT) + ". " + entry.stage()
+                + ". Committed. " + entry.committed() + ". " + entry.explanation()), false);
+        }
+        return selected.size();
+    }
+
+    private static int lifecycleProgress(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        StageId stage = StageId.tryParse(StringArgumentType.getString(context, "stage"));
+        if (stage == null) { context.getSource().sendFailure(Component.literal("Invalid stage id")); return 0; }
+        var values = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get()
+            .lifecycleProgress(player, Set.of("manual"));
+        var selected = values.stream().filter(value -> value.get("stage").equals(stage.toString())).toList();
+        for (var value : selected) context.getSource().sendSuccess(() -> Component.literal(
+            value.get("rule") + ". " + value.get("direction") + ". Matched. " + value.get("matched")
+                + ". Progress. " + value.get("current") + " of " + value.get("required")
+                + ". " + value.get("explanation")), false);
+        return selected.size();
+    }
+
+    private static int lifecycleMutation(CommandContext<CommandSourceStack> context, ServerPlayer player,
+                                         boolean arm) {
+        var rule = net.minecraft.resources.ResourceLocation.tryParse(StringArgumentType.getString(context, "rule"));
+        if (rule == null) { context.getSource().sendFailure(Component.literal("Invalid lifecycle rule id")); return 0; }
+        var runtime = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get();
+        if (arm) runtime.armLifecycle(player, rule);
+        else runtime.resetLifecycle(player, rule);
+        context.getSource().sendSuccess(() -> Component.literal((arm ? "Armed " : "Reset ") + rule
+            + " for " + player.getName().getString()), true);
+        return 1;
+    }
+
+    private static int challengeList(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        var sessions = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().challenges()
+            .sessions(player.getUUID().toString());
+        for (var session : sessions) context.getSource().sendSuccess(() -> Component.literal(
+            session.challenge() + ". " + session.status().name().toLowerCase(java.util.Locale.ROOT)
+                + ". Step. " + session.currentStep() + ". Attempts. " + session.attempts()
+                + ". Budgets. " + session.budgetValues()), false);
+        return sessions.size();
+    }
+
+    private static int challengeReset(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
+        net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse(
+            StringArgumentType.getString(context, "challenge"));
+        boolean reset = id != null && com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().challenges()
+            .reset(player.getUUID().toString(), id);
+        if (!reset) context.getSource().sendFailure(Component.literal("Challenge session was not found"));
+        return reset ? 1 : 0;
+    }
+
+    private static int challengeInspect(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        var id = net.minecraft.resources.ResourceLocation.tryParse(StringArgumentType.getString(context, "challenge"));
+        if (id == null) { context.getSource().sendFailure(Component.literal("Invalid challenge id")); return 0; }
+        var session = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().challenges()
+            .session(player.getUUID().toString(), id);
+        if (session.isEmpty()) { context.getSource().sendFailure(Component.literal("Challenge session was not found")); return 0; }
+        var value = session.orElseThrow();
+        context.getSource().sendSuccess(() -> Component.literal(value.challenge() + ". Status. " + value.status()
+            + ". Step. " + value.currentStep() + ". Attempts. " + value.attempts()
+            + ". Started. " + value.startedAt() + ". Ended. " + value.endedAt()
+            + ". Budgets. " + value.budgetValues()), false);
+        return 1;
+    }
+
+    private static int explainStage(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        StageId id = StageId.tryParse(StringArgumentType.getString(context, "stage"));
+        var stage = id == null ? null : StageFileLoader.getInstance().getCompiledSnapshot().stages().get(id);
+        if (stage == null) { context.getSource().sendFailure(Component.literal("Stage was not found")); return 0; }
+        boolean owned = StageManager.getInstance().hasStage(player, id);
+        var missing = StageManager.getInstance().getMissingDependencies(player, id);
+        context.getSource().sendSuccess(() -> Component.literal(stage.id() + ". Owned. " + owned
+            + ". Missing dependencies. " + missing + ". Schema. " + stage.schemaVersion()
+            + ". Priority. " + stage.priority() + ". Source. " + stage.sourceId()), false);
+        context.getSource().sendSuccess(() -> Component.literal("Rules. " + stage.rules().size()
+            + ". Lifecycle rules. " + stage.progression().lifecycleRules().size()
+            + ". Challenges. " + stage.progression().challenges().size()
+            + ". Modifiers. " + stage.rules().stream().filter(rule -> rule.category().equals("modifiers")).count()), false);
+        return 1;
+    }
+
+    private static int simulateEvent(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        String event = StringArgumentType.getString(context, "event");
+        var values = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get()
+            .lifecycleProgress(player, Set.of(event));
+        long matches = values.stream().filter(value -> Boolean.TRUE.equals(value.get("matched"))).count();
+        context.getSource().sendSuccess(() -> Component.literal("Simulation only. Event. " + event
+            + ". Matching lifecycle conditions. " + matches + ". No stages or counters were changed"), false);
+        for (var value : values.stream().filter(entry -> Boolean.TRUE.equals(entry.get("matched"))).limit(25).toList()) {
+            context.getSource().sendSuccess(() -> Component.literal(value.get("rule") + ". "
+                + value.get("direction") + " " + value.get("stage") + ". " + value.get("explanation")), false);
+        }
+        return (int) Math.min(Integer.MAX_VALUE, matches);
+    }
+
+    private static int rollbackTransaction(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String transaction = StringArgumentType.getString(context, "transaction");
+        var result = EditorSessionService.get().rollback(context.getSource().getServer(),
+            context.getSource().getPlayerOrException().getUUID(), transaction, true);
+        if (!result.success()) { context.getSource().sendFailure(Component.literal(result.explanation())); return 0; }
+        context.getSource().sendSuccess(() -> Component.literal(result.explanation()), true);
+        return 1;
+    }
+
+    private static int explainTarget(CommandContext<CommandSourceStack> context, ServerPlayer player) {
+        String requested = StringArgumentType.getString(context, "context");
+        String[] pieces = requested.split("\\.", 2);
+        String category = pieces[0];
+        String action = pieces.length > 1 ? pieces[1] : "";
+        net.minecraft.resources.ResourceLocation target = net.minecraft.resources.ResourceLocation.tryParse(
+            StringArgumentType.getString(context, "target"));
+        if (target == null) { context.getSource().sendFailure(Component.literal("Invalid target id")); return 0; }
+        var trace = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
+            .resolve(player, category, action, target, null);
+        if (trace.isEmpty()) { context.getSource().sendSuccess(() -> Component.literal("No compiled rule matched this target"), false); return 0; }
+        var decision = trace.orElseThrow();
+        context.getSource().sendSuccess(() -> Component.literal("Decision. " + decision.winningEffect()
+            + ". Winner. " + decision.winner().map(Object::toString).orElse("none")
+            + ". Blocked. " + decision.blocked() + ". " + decision.explanation()), false);
+        for (var candidate : decision.candidates()) context.getSource().sendSuccess(() -> Component.literal(
+            candidate.ruleId() + ". " + candidate.effect() + ". Priority. " + candidate.priority()
+                + ". Active. " + candidate.conditionMatched() + ". Selected. " + candidate.selected()
+                + ". " + candidate.explanation()), false);
+        return 1;
+    }
+
     private static int openGui(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
         com.enviouse.progressivestages.common.network.NetworkHandler.sendStageGuiData(player);
@@ -844,63 +1272,69 @@ public class StageCommand {
         String relative = stageId.isDefaultNamespace()
             ? stageId.getPath() : stageId.getNamespace() + "/" + stageId.getPath();
         java.nio.file.Path root = dir.toAbsolutePath().normalize();
-        java.nio.file.Path file = root.resolve(relative + ".toml").normalize();
-        if (!file.startsWith(root)) {
+        java.nio.file.Path packageDirectory = root.resolve(relative).normalize();
+        if (!packageDirectory.startsWith(root)) {
             context.getSource().sendFailure(TextUtil.parseColorCodes("&cInvalid stage file path."));
             return 0;
         }
-        if (java.nio.file.Files.exists(file)) {
-            context.getSource().sendFailure(TextUtil.parseColorCodes("&cA stage file already exists at &f" + file + "&c."));
+        if (java.nio.file.Files.exists(packageDirectory.resolve("stage.toml"))) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cA stage package already exists at &f" + packageDirectory + "&c."));
             return 0;
         }
         try {
-            java.nio.file.Files.createDirectories(file.getParent());
-            java.nio.file.Files.writeString(file, scaffold(configId));
+            java.nio.file.Files.createDirectories(packageDirectory);
+            java.nio.file.Files.writeString(packageDirectory.resolve("stage.toml"), scaffoldStage(configId));
+            java.nio.file.Files.writeString(packageDirectory.resolve("rules.toml"), scaffoldRules());
+            java.nio.file.Files.writeString(packageDirectory.resolve("progression.toml"), scaffoldProgression());
         } catch (java.io.IOException e) {
             context.getSource().sendFailure(TextUtil.parseColorCodes("&cFailed to write: " + e.getMessage()));
             return 0;
         }
         context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
-            "&aCreated &f" + file + "&a. Edit it, then run &e/stage reload&a."), true);
+            "&aCreated the three file package at &f" + packageDirectory + "&a. Edit it, then run &e/pstages reload&a."), true);
         return 1;
     }
 
-    private static String scaffold(String id) {
+    private static String scaffoldStage(String id) {
         String path = id.contains(":") ? id.substring(id.indexOf(':') + 1) : id;
         String leaf = path.substring(path.lastIndexOf('/') + 1);
         String display = leaf.substring(0, 1).toUpperCase(java.util.Locale.ROOT)
             + leaf.substring(1).replace('_', ' ');
-        return "# Stage file scaffolded by /stage new. See the diamond_age.toml for the full reference.\n"
+        return "[schema]\n"
+            + "version = 4\n\n"
             + "[stage]\n"
             + "id = \"" + id + "\"\n"
             + "display_name = \"" + display + "\"\n"
             + "description = \"\"\n"
-            + "# icon = \"minecraft:diamond\"\n"
-            + "# dependency = [\"iron_age\"]      # prerequisite stage(s)\n"
-            + "# dependency_mode = \"all\"         # all | any | at_least\n"
-            + "# dependency_count = 1              # used by at_least\n"
-            + "# tags = [\"tier1\"]               # for /stage tag grant ...\n\n"
+            + "icon = \"minecraft:stone\"\n"
+            + "dependencies = []\n"
+            + "priority = 0\n"
+            + "scope = \"team\"\n\n"
             + "[display]\n"
-            + "# x = 0                              # explicit map position; omit x+y for auto-layout\n"
-            + "# y = 0\n"
-            + "frame = \"task\"                    # task | goal | challenge\n"
-            + "reveal = \"always\"                 # always | dependencies | unlocked\n"
-            + "# background = \"minecraft:block/stone\"\n"
-            + "# sort_order = 0                     # stable order within auto-layout layers\n\n"
-            + "# --- what this stage LOCKS (omit any you don't need) ---\n"
-            + "[items]\n"
-            + "locked = []   # [\"id:minecraft:diamond\", \"mod:create\", \"tag:c:ingots\", \"name:*sword\"]\n\n"
-            + "# [blocks]\n# locked = []\n\n"
-            + "# --- auto-grant when conditions are met (optional) ---\n"
-            + "# [[triggers]]\n"
-            + "# mode = \"all_of\"\n"
-            + "# [[triggers.conditions]]\n"
-            + "# type = \"mine\"\n"
-            + "# block = \"minecraft:diamond_ore\"\n"
-            + "# count = 10\n\n"
-            + "# KubeJS/command bridge: type = \"custom_counter\", counter = \"quest_points\"\n"
-            + "# /stage counter add <player> quest_points 1\n\n"
-            + "# --- optional: [cost] (purchasable), [rewards], [unlock] juice, [attribute], [revoke] ---\n";
+            + "frame = \"task\"\n"
+            + "reveal = \"always\"\n"
+            + "background = \"minecraft:textures/gui/advancements/backgrounds/stone.png\"\n";
+    }
+
+    private static String scaffoldRules() {
+        return "[items]\n"
+            + "locked = []\n"
+            + "allowed = []\n"
+            + "priority = 0\n\n"
+            + "[blocks]\n"
+            + "locked = []\n"
+            + "allowed = []\n\n"
+            + "[fluids]\n"
+            + "locked = []\n"
+            + "allowed = []\n";
+    }
+
+    private static String scaffoldProgression() {
+        return "[progression]\n"
+            + "enabled = true\n\n"
+            + "grants = []\n"
+            + "revokes = []\n"
+            + "challenges = []\n";
     }
 
     /** /stage export — write a markdown progression guide built from the stage graph. */
@@ -1412,6 +1846,27 @@ public class StageCommand {
         }
 
         return totalErrors == 0 ? 1 : 0;
+    }
+
+    private static int validateSelectedStage(CommandContext<CommandSourceStack> context) {
+        String requested = StringArgumentType.getString(context, "stage");
+        if (requested.equalsIgnoreCase("all")) return validateStages(context);
+        StageId id = StageId.tryParse(requested);
+        if (id == null) { context.getSource().sendFailure(Component.literal("Invalid stage id")); return 0; }
+        var compiled = StageFileLoader.getInstance().getCompiledSnapshot().stages().get(id);
+        if (compiled == null) { context.getSource().sendFailure(Component.literal("Stage was not found")); return 0; }
+        String source = compiled.sourceId();
+        var matches = StageFileLoader.getInstance().validateAllStages().stream()
+            .filter(result -> source.contains(result.fileName) || result.fileName.contains(id.getPath())).toList();
+        if (matches.isEmpty()) {
+            context.getSource().sendSuccess(() -> Component.literal(id + ". Loaded and compiled from " + source), false);
+            return 1;
+        }
+        for (var result : matches) {
+            if (result.success) context.getSource().sendSuccess(() -> Component.literal(result.fileName + ". Valid"), false);
+            else context.getSource().sendFailure(Component.literal(result.fileName + ". " + result.errorMessage));
+        }
+        return matches.stream().allMatch(result -> result.success) ? 1 : 0;
     }
 
     /**

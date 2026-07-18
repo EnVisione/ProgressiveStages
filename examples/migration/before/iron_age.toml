@@ -1,0 +1,11 @@
+[stage]
+id = "examples:migrated_iron_age"
+display_name = "Migrated Iron Age"
+description = "This is the one file version used before schema 4."
+icon = "minecraft:iron_ingot"
+
+[items]
+locked = ["minecraft:iron_pickaxe", "minecraft:iron_axe"]
+
+[cost]
+xp_levels = 3

@@ -1,0 +1,8 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:migrated_iron_age"
+display_name = "Migrated Iron Age"
+description = "This is the one file version used before schema 4."
+icon = "minecraft:iron_ingot"

@@ -40,6 +40,10 @@
   "gui.progressivestages.tree.purchase.need": "Need. %s",
   "gui.progressivestages.tree.inventory_button": "Open Progression Map",
   "gui.progressivestages.tree.inventory_button.tooltip": "Open Progression Map",
+  "gui.progressivestages.tree.challenges": "Active challenges",
+  "gui.progressivestages.tree.modifiers": "Equipment and affinity preview",
+  "gui.progressivestages.tree.why": "Why this rule won",
+  "gui.progressivestages.tree.history": "Progress history",
 
   "progressivestages.quest.required_stage": "Stage Required",
   "progressivestages.quest.required_stage.tooltip": "If set, this quest is hidden until the player has this stage. Leave empty for no requirement. Example: iron_age or progressivestages:diamond_age",

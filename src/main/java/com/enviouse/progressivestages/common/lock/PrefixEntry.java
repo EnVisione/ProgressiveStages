@@ -69,12 +69,21 @@ public final class PrefixEntry {
         if (raw == null) return null;
         String trimmed = raw.trim();
         if (trimmed.isEmpty()) return null;
+        String source = trimmed;
+        int priorityMarker = trimmed.lastIndexOf("|priority=");
+        if (priorityMarker > 0) {
+            String priority = trimmed.substring(priorityMarker + 10).trim();
+            try { Integer.parseInt(priority); }
+            catch (NumberFormatException error) { return null; }
+            trimmed = trimmed.substring(0, priorityMarker).trim();
+            if (trimmed.isEmpty()) return null;
+        }
 
         // Legacy #tag syntax: treat as tag:
         if (trimmed.startsWith("#")) {
             String tagStr = trimmed.substring(1).trim();
             ResourceLocation tagId = tryParse(tagStr);
-            return tagId == null ? null : new PrefixEntry(Kind.TAG, trimmed, tagStr, tagId);
+            return tagId == null ? null : new PrefixEntry(Kind.TAG, source, tagStr, tagId);
         }
 
         int colon = trimmed.indexOf(':');
@@ -85,19 +94,19 @@ public final class PrefixEntry {
             switch (prefix) {
                 case "id": {
                     ResourceLocation idLoc = tryParse(rest);
-                    return idLoc == null ? null : new PrefixEntry(Kind.ID, trimmed, rest, idLoc);
+                    return idLoc == null ? null : new PrefixEntry(Kind.ID, source, rest, idLoc);
                 }
                 case "mod": {
                     if (rest.isEmpty()) return null;
-                    return new PrefixEntry(Kind.MOD, trimmed, rest.toLowerCase(java.util.Locale.ROOT), null);
+                    return new PrefixEntry(Kind.MOD, source, rest.toLowerCase(java.util.Locale.ROOT), null);
                 }
                 case "tag": {
                     ResourceLocation tagId = tryParse(rest);
-                    return tagId == null ? null : new PrefixEntry(Kind.TAG, trimmed, rest, tagId);
+                    return tagId == null ? null : new PrefixEntry(Kind.TAG, source, rest, tagId);
                 }
                 case "name": {
                     if (rest.isEmpty()) return null;
-                    return new PrefixEntry(Kind.NAME, trimmed, rest.toLowerCase(java.util.Locale.ROOT), null);
+                    return new PrefixEntry(Kind.NAME, source, rest.toLowerCase(java.util.Locale.ROOT), null);
                 }
                 // No recognized prefix → fall through to default-id handling.
             }
@@ -105,7 +114,7 @@ public final class PrefixEntry {
 
         // No prefix: treat as exact ID (the "namespace:path" form without "id:").
         ResourceLocation idLoc = tryParse(trimmed);
-        return idLoc == null ? null : new PrefixEntry(Kind.ID, trimmed, trimmed, idLoc);
+        return idLoc == null ? null : new PrefixEntry(Kind.ID, source, trimmed, idLoc);
     }
 
     private static ResourceLocation tryParse(String s) {

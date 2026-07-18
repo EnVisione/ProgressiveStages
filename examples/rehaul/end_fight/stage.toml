@@ -1,0 +1,9 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:end_fight"
+display_name = "End Fight"
+description = "Granted by the Wither and used as a high priority Stronghold exception."
+icon = "minecraft:ender_eye"
+priority = 900

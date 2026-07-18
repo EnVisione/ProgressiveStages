@@ -89,6 +89,7 @@ public class ServerEventHandler {
             NeoForge.EVENT_BUS.register(StageRegressionHandler.class);
             NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.class);
             NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.class);
+            NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.rehaul.RehaulRuntime.class);
             coreHandlersRegistered = true;
         }
 
@@ -118,6 +119,7 @@ public class ServerEventHandler {
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
+        com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().persist();
         StructureSessionManager.getInstance().shutdown(event.getServer());
     }
 
@@ -135,12 +137,14 @@ public class ServerEventHandler {
         DimensionEnforcer.resetRuntimeState();
         StructureEnforcer.resetRuntimeState();
         ConditionalLockEngine.resetRuntimeState();
+        ContextualModifierApplier.reset();
         StructureSessionManager.getInstance().shutdown(event.getServer());
         com.enviouse.progressivestages.common.compat.ScriptHooks.reset();
         OreSpoofManager.get().resetRuntimeState();
         StageFileLoader.getInstance().shutdown();
         TeamStageSync.shutdown(event.getServer());
         StageManager.getInstance().shutdown(event.getServer());
+        com.enviouse.progressivestages.server.editor.EditorSessionService.get().shutdown();
     }
 
     @SubscribeEvent
@@ -162,6 +166,7 @@ public class ServerEventHandler {
 
             // Send stage definitions to client first (v1.3 - includes dependencies)
             NetworkHandler.sendStageDefinitionsSync(player);
+            NetworkHandler.sendCompiledSnapshot(player);
 
             // Sync lock registry to player BEFORE stage data so that when EMI reload
             // fires on stage sync arrival, ClientLockCache is already populated.
@@ -862,6 +867,8 @@ public class ServerEventHandler {
             DimensionEnforcer.cleanupPlayer(player.getUUID());
             StructureEnforcer.cleanupPlayer(player.getUUID());
             OreSpoofManager.get().onPlayerLogout(player);
+            ContextualModifierApplier.clear(player);
+            com.enviouse.progressivestages.server.editor.EditorSessionService.get().revokePlayer(player.getUUID());
         }
     }
 

@@ -1,0 +1,72 @@
+.prefix-control {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr;
+}
+
+.prefix-control .catalog-row {
+  grid-template-columns: 90px 1fr;
+}
+
+.prefix-control textarea,
+.structured-field {
+  min-height: 92px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.graph {
+  position: relative;
+  min-width: 820px;
+  min-height: 620px;
+  display: block;
+}
+
+.graph-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.graph-lines line {
+  stroke: var(--line);
+  stroke-width: 3;
+}
+
+.graph-node {
+  position: absolute;
+  width: 150px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.graph-node:active {
+  cursor: grabbing;
+}
+
+.extension-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: var(--panel2);
+}
+
+.extension-card > small,
+.extension-card label small {
+  display: block;
+  color: var(--muted);
+}
+
+.extension-card input {
+  width: 100%;
+  margin: 4px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px;
+  background: var(--panel);
+  color: var(--text);
+}

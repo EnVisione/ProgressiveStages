@@ -1,0 +1,18 @@
+[[temporary_rules]]
+id = "examples:monument_weapons"
+effect = "deny"
+lifetime = "session"
+priority = 500
+action = "use"
+targets.items = ["tag:c:weapons"]
+while = { type = "structure", id = "minecraft:ocean_monument" }
+
+[[temporary_rules.exceptions]]
+effect = "exclude"
+priority = 600
+targets.items = ["tag:c:swords"]
+
+[[temporary_rules.exceptions]]
+effect = "allow"
+priority = 700
+targets.items = ["minecraft:bow"]

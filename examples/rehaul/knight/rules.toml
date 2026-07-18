@@ -1,0 +1,19 @@
+[items]
+locked = ["minecraft:diamond_sword", "minecraft:diamond_axe"]
+priority = 220
+
+[[item_modifiers]]
+id = "examples:knight_magic_penalty"
+items = ["tag:c:magic_items", "name:*wand", "name:*staff", "name:*spellbook"]
+while_holding = true
+with_stages = ["examples:knight"]
+aggregation = "once"
+priority = 450
+
+[[item_modifiers.transforms]]
+type = "progressivestages:spell_power"
+multiply = 0.65
+
+[[item_modifiers.transforms]]
+type = "progressivestages:spell_cooldown"
+multiply = 1.5

@@ -1,0 +1,16 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:diamond"
+display_name = "Diamond Stage"
+description = "The complete schema four priority and progression reference."
+icon = "minecraft:diamond"
+dependencies = ["examples:starter"]
+priority = 25
+tags = ["technology", "tier_three"]
+
+[display]
+frame = "goal"
+reveal = "dependencies"
+background = "minecraft:textures/gui/advancements/backgrounds/stone.png"

@@ -1,0 +1,7 @@
+[items]
+locked = ["minecraft:iron_pickaxe"]
+allowed = []
+
+[blocks]
+locked = ["minecraft:iron_block"]
+allowed = []

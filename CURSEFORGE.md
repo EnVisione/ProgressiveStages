@@ -6,6 +6,18 @@ Build a short stone to iron to diamond path, several independent technology and 
 
 ProgressiveStages 3.0.1 is the current 3.0 release.
 
+The 3.0.1 authoring rehaul adds optional three-file schema 4 packages and `/pstages editor`. An
+authorized operator can create, search, validate, simulate, review, apply, synchronize, and roll
+back stages through a private localhost editor without opening a server web port. Old one-file
+stages continue to work. Schema 4 also adds universal condition-driven temporary rules,
+deterministic entry priority and exceptions, generic challenge budgets, contextual equipment
+modifiers, variables, formulas, templates, stage states, persistent lifecycle progress, expanded
+Java and KubeJS registration APIs, automatic compiled client snapshots, and player-facing why,
+challenge, equipment, and history panels.
+
+Complete schema 4 instructions and tested packages are available in the
+[3.0.1 Schema 4 and Editor Guide](https://github.com/EnVisione/ProgressiveStages/blob/master/REHAUL_GUIDE.md).
+
 ---
 
 ## The 3.0 progression map

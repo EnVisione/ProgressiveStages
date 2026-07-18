@@ -1,0 +1,20 @@
+[[challenges]]
+id = "examples:wither_hit_trial"
+title = "Wither hit trial"
+start_when = { type = "boss_session", id = "minecraft:wither" }
+success_when = { type = "kill", id = "minecraft:wither" }
+max_hits = 2
+boss = "minecraft:wither"
+timeout = "10m"
+retries = 3
+
+[challenges.hud]
+enabled = true
+placement = "top"
+scale = 1.0
+color = "gold"
+icon = "minecraft:nether_star"
+animation = "pulse"
+compact = false
+hide_when_inactive = true
+values_secret = false

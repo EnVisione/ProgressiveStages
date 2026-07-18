@@ -1,0 +1,14 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:knight"
+display_name = "Knight"
+description = "Martial equipment stays strong while unfamiliar magic becomes slower and weaker."
+icon = "minecraft:iron_sword"
+priority = 220
+
+[display]
+frame = "goal"
+reveal = "always"
+color = "#d8d8e8"

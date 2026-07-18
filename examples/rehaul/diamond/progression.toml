@@ -1,0 +1,30 @@
+[[grants]]
+id = "examples:grant_diamond"
+repeat = "once"
+cooldown = "5s"
+condition = { type = "mine", id = "minecraft:diamond_ore", count = 3 }
+
+[[revokes]]
+id = "examples:revoke_diamond"
+repeat = "edge"
+condition = { type = "health_lost", amount = 40 }
+
+[[variables]]
+id = "examples:diamond_mastery"
+type = "counter"
+scope = "player"
+default = 0
+minimum = 0
+maximum = 100
+persistent = true
+sync_visible = true
+
+[states]
+values = ["missing", "training", "owned", "completed"]
+ownership_states = ["owned", "completed"]
+initial = "missing"
+
+[states.transitions]
+missing = ["training"]
+training = ["owned"]
+owned = ["completed"]

@@ -159,7 +159,10 @@ public class ClientEventHandler {
         ClientStageCache.clear();
         ClientTriggerProgress.clear();
         ClientUnlockJuice.clear();
+        ClientChallengeHud.clear();
         OreSpoofClientState.clear();
+        ClientCompiledSnapshotCache.clear();
+        com.enviouse.progressivestages.client.editor.LoopbackEditorBridge.closeActive();
     }
 
     /** v2.3: poll the stage-tree keybind; request a progress snapshot, which opens the GUI. */

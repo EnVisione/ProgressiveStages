@@ -1,0 +1,8 @@
+[[temporary_rules]]
+id = "examples:kubejs_temporary_allow"
+effect = "allow"
+lifetime = "duration"
+duration = "20s"
+priority = 750
+targets.items = ["tag:c:tools"]
+while = { type = "kubejs", id = "pack:trial_active" }

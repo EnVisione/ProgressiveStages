@@ -1,0 +1,9 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:structure_weapons"
+display_name = "Structure Weapon Rules"
+description = "Weapons are restricted only while the structure condition is active."
+icon = "minecraft:iron_sword"
+priority = 100

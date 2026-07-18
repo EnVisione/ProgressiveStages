@@ -135,6 +135,22 @@ public class NetworkHandler {
             new DirectionalPayloadHandler<>(NetworkHandler::handleUnlockToastClient, (p, c) -> {}));
         registrar.playToClient(ActiveGoalPayload.TYPE, ActiveGoalPayload.STREAM_CODEC,
             new DirectionalPayloadHandler<>(NetworkHandler::handleActiveGoalClient, (p, c) -> {}));
+        registrar.playToClient(ChallengeHudPayload.TYPE, ChallengeHudPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(NetworkHandler::handleChallengeHudClient, (p, c) -> {}));
+        registrar.playToClient(ClientSnapshotManifestPayload.TYPE, ClientSnapshotManifestPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(NetworkHandler::handleClientSnapshotManifest, (p, c) -> {}));
+        registrar.playToClient(ClientSnapshotChunkPayload.TYPE, ClientSnapshotChunkPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(NetworkHandler::handleClientSnapshotChunk, (p, c) -> {}));
+        registrar.playToServer(ClientSnapshotAckPayload.TYPE, ClientSnapshotAckPayload.STREAM_CODEC,
+            NetworkHandler::handleClientSnapshotAck);
+        registrar.playToServer(ClientSnapshotRequestPayload.TYPE, ClientSnapshotRequestPayload.STREAM_CODEC,
+            NetworkHandler::handleClientSnapshotRequest);
+        registrar.playToClient(EditorOpenPayload.TYPE, EditorOpenPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(NetworkHandler::handleEditorOpen, (p, c) -> {}));
+        registrar.playToServer(EditorRequestPayload.TYPE, EditorRequestPayload.STREAM_CODEC,
+            NetworkHandler::handleEditorRequest);
+        registrar.playToClient(EditorResponsePayload.TYPE, EditorResponsePayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(NetworkHandler::handleEditorResponse, (p, c) -> {}));
     }
 
     public static void sendUnlockToast(ServerPlayer player, String title, String subtitle, String iconItem) {
@@ -153,6 +169,64 @@ public class NetworkHandler {
     private static void handleActiveGoalClient(ActiveGoalPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> com.enviouse.progressivestages.client.ClientUnlockJuice
             .setActiveGoal(payload.label(), payload.percent(), payload.show()));
+    }
+
+    private static void handleChallengeHudClient(ChallengeHudPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> com.enviouse.progressivestages.client.ClientChallengeHud.setEntries(
+            payload.entries().stream().map(entry -> new com.enviouse.progressivestages.client.ClientChallengeHud.Entry(
+                entry.id(), entry.title(), entry.status(), entry.currentStep(), entry.totalSteps(), entry.attempts(),
+                entry.startedAt(), entry.timeoutMillis(), entry.budgets(), entry.session(), entry.successCriteria(),
+                entry.explanation(), entry.placement(), entry.scale(), entry.color(), entry.icon(), entry.animation(),
+                entry.compact())).toList()));
+    }
+
+    public static void sendChallengeHud(ServerPlayer player) {
+        var runtime = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get();
+        List<ChallengeHudLine> lines = new ArrayList<>();
+        for (var session : runtime.challenges().sessions(player.getUUID().toString())) {
+            var definition = runtime.challenges().definition(session.challenge()).orElse(null);
+            if (definition == null || !definition.hud().enabled()) continue;
+            if (definition.hud().hideWhenInactive()
+                    && session.status() != com.enviouse.progressivestages.common.rehaul.challenge.ChallengeStatus.ACTIVE) continue;
+            List<String> budgets = definition.hud().valuesSecret() ? List.of("Progress is hidden")
+                : session.budgetValues().entrySet().stream().map(entry ->
+                    entry.getKey() + " " + Math.round(entry.getValue() * 100D) / 100D).toList();
+            lines.add(new ChallengeHudLine(session.challenge(), definition.title(),
+                session.status().name().toLowerCase(java.util.Locale.ROOT), session.currentStep(),
+                definition.steps().size(), session.attempts(), session.startedAt(), definition.timeoutMillis(),
+                budgets, definition.hud().valuesSecret() ? "" : conditionSummary(definition.startCondition()),
+                definition.hud().valuesSecret() ? "Success criteria hidden" : conditionSummary(definition.successCondition()),
+                session.explanation(), definition.hud().placement(), definition.hud().scale(),
+                definition.hud().color(), definition.hud().icon(), definition.hud().animation(),
+                definition.hud().compact()));
+        }
+        ChallengeHudPayload payload = new ChallengeHudPayload(List.copyOf(lines));
+        int fingerprint = payload.hashCode();
+        Integer previous = challengeHudFingerprints.put(player.getUUID(), fingerprint);
+        if (!Objects.equals(previous, fingerprint)) PacketDistributor.sendToPlayer(player, payload);
+    }
+
+    private static String conditionSummary(com.enviouse.progressivestages.common.rehaul.ConditionNode node) {
+        if (node instanceof com.enviouse.progressivestages.common.rehaul.ConditionNode.Constant constant) {
+            return constant.value() ? "Always" : "Never";
+        }
+        if (node instanceof com.enviouse.progressivestages.common.rehaul.ConditionNode.Leaf leaf) {
+            Object target = leaf.arguments().getOrDefault("id", leaf.arguments().get("target"));
+            return leaf.providerId().getPath() + (target == null ? "" : ". " + target);
+        }
+        if (node instanceof com.enviouse.progressivestages.common.rehaul.ConditionNode.All all) {
+            return "All of " + all.children().size() + " conditions";
+        }
+        if (node instanceof com.enviouse.progressivestages.common.rehaul.ConditionNode.Any any) {
+            return "Any of " + any.children().size() + " conditions";
+        }
+        if (node instanceof com.enviouse.progressivestages.common.rehaul.ConditionNode.Sequence sequence) {
+            return "Sequence of " + sequence.children().size() + " conditions";
+        }
+        if (node instanceof com.enviouse.progressivestages.common.rehaul.ConditionNode.Reference reference) {
+            return "Condition " + reference.id();
+        }
+        return node.getClass().getSimpleName();
     }
 
     /**
@@ -196,7 +270,11 @@ public class NetworkHandler {
                 ruleLines,
                 unlockSample.getOrDefault(stageId, List.of()),
                 unlockTotal.getOrDefault(stageId, 0),
-                computeCostInfo(player, stageId)));
+                computeCostInfo(player, stageId),
+                whyLines(stageId),
+                challengeLines(player, stageId),
+                modifierLines(player, stageId),
+                historyLines(player, stageId)));
         }
         PacketDistributor.sendToPlayer(player, new StageGuiDataPayload(out));
     }
@@ -216,6 +294,84 @@ public class NetworkHandler {
         if (sb.length() == 0) sb.append("free");
         if (cost.cooldownSeconds() > 0) sb.append(", ").append(cost.cooldownSeconds()).append("s cooldown");
         return new CostInfo(true, cost.xpLevels(), sb.toString(), canPurchase(player, defOpt.get()));
+    }
+
+    private static List<WhyLine> whyLines(StageId stage) {
+        List<WhyLine> output = new ArrayList<>();
+        var engine = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules();
+        for (var trace : engine.history().stream().skip(Math.max(0, engine.history().size() - 40)).toList()) {
+            boolean relevant = trace.candidates().stream().anyMatch(candidate -> engine.findRule(candidate.ruleId())
+                .map(rule -> rule.ownerStage().equals(stage)).orElse(false));
+            if (!relevant) continue;
+            output.add(new WhyLine(trace.category(), trace.action(), trace.target(),
+                trace.winner().map(Object::toString).orElse(""),
+                trace.winningEffect() == null ? "" : trace.winningEffect().name().toLowerCase(java.util.Locale.ROOT),
+                trace.blocked(), trace.explanation()));
+        }
+        return List.copyOf(output);
+    }
+
+    private static List<ChallengeLine> challengeLines(ServerPlayer player, StageId stage) {
+        return com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().challenges()
+            .sessions(player.getUUID().toString()).stream()
+            .filter(session -> session.challenge().getPath().contains(stage.getPath()))
+            .map(session -> new ChallengeLine(session.challenge(),
+                session.status().name().toLowerCase(java.util.Locale.ROOT), session.currentStep(),
+                session.attempts(), session.budgetValues().entrySet().stream().map(entry ->
+                    entry.getKey() + " " + Math.round(entry.getValue() * 100.0) / 100.0).toList(),
+                session.explanation())).toList();
+    }
+
+    private static List<String> modifierLines(ServerPlayer player, StageId stage) {
+        var compiled = com.enviouse.progressivestages.server.loader.StageFileLoader.getInstance()
+            .getCompiledSnapshot().stages().get(stage);
+        if (compiled == null) return List.of();
+        List<String> output = new ArrayList<>();
+        compiled.progression().modifiers().stream().map(modifier -> modifier.id() + ". "
+            + modifier.items().stream().map(item -> item.raw()).toList() + ". " + modifier.contexts()
+            + ". Priority " + modifier.priority()).forEach(output::add);
+        var held = player.getMainHandItem();
+        if (held.isEmpty()) return List.copyOf(output);
+        ResourceLocation item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem());
+        if (LockRegistry.getInstance().getRequiredStages(held.getItem()).contains(stage)
+                && !StageManager.getInstance().hasStage(player, stage)) {
+            output.add("Equipment preview. " + item + " is locked until this stage is owned.");
+        }
+        Set<ResourceLocation> modifierIds = compiled.progression().modifiers().stream()
+            .map(com.enviouse.progressivestages.common.rehaul.modifier.CompiledModifier::id).collect(java.util.stream.Collectors.toSet());
+        com.enviouse.progressivestages.server.enforcement.ContextualModifierApplier.preview(player).stream()
+            .filter(value -> modifierIds.contains(value.sourceRule())).forEach(value -> {
+                output.add("Equipment preview. " + item + ". Active modifier " + value.sourceRule()
+                    + ". Multiplier " + value.multiplier() + ". Priority " + value.priority() + ".");
+                value.attributes().forEach(change -> output.add("Attribute " + change.attribute() + ". Amount "
+                    + change.amount() + ". Operation " + change.operation().name().toLowerCase(java.util.Locale.ROOT) + "."));
+                value.transforms().forEach(transform -> output.add("Transform " + transform.type() + ". Add "
+                    + transform.add() + ". Multiply " + transform.multiply() + "."));
+            });
+        Set<ResourceLocation> profileIds = compiled.progression().profiles().stream()
+            .map(com.enviouse.progressivestages.common.rehaul.profile.AffinityProfile::id).collect(java.util.stream.Collectors.toSet());
+        var affinity = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().affinity(player,
+            com.enviouse.progressivestages.server.enforcement.ContextualModifierApplier.target(held)).orElse(null);
+        if (affinity != null && profileIds.contains(affinity.profile())) {
+            output.add("Affinity preview. " + item + ". Profile " + affinity.profile() + ". Level "
+                + affinity.level() + ". Effect " + affinity.effect().name().toLowerCase(java.util.Locale.ROOT)
+                + ". Priority " + affinity.priority() + ".");
+            affinity.transforms().forEach(transform -> output.add("Affinity transform " + transform.type()
+                + ". Add " + transform.add() + ". Multiply " + transform.multiply() + "."));
+        }
+        if (output.isEmpty()) output.add("Equipment preview. " + item + " behaves normally for this stage.");
+        return List.copyOf(output);
+    }
+
+    private static List<HistoryLine> historyLines(ServerPlayer player, StageId stage) {
+        return com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().transitionHistory().entries().stream()
+            .filter(entry -> entry.subject().equals(player.getUUID().toString()) && entry.stage().equals(stage))
+            .skip(Math.max(0, com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get()
+                .transitionHistory().entries().stream().filter(entry -> entry.subject().equals(player.getUUID().toString())
+                    && entry.stage().equals(stage)).count() - 20))
+            .map(entry -> new HistoryLine(entry.timestamp(),
+                entry.direction().name().toLowerCase(java.util.Locale.ROOT), entry.committed(), entry.explanation()))
+            .toList();
     }
 
     /** Authoritative purchase check: purchasable, not owned, prereq stages met, triggers met (unless bypass), affordable. */
@@ -251,7 +407,109 @@ public class NetworkHandler {
     /** v3.0: per-player skill-tree purchase cooldown tracking (transient, in-memory). */
     private static final java.util.Map<java.util.UUID, Long> lastPurchase = new java.util.concurrent.ConcurrentHashMap<>();
 
-    public static void clearServerRuntimeState() { lastPurchase.clear(); }
+    private static final java.util.Map<java.util.UUID, Long> acknowledgedClientSnapshots = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<java.util.UUID, Integer> challengeHudFingerprints = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Long, byte[]> clientSnapshotHistory = java.util.Collections.synchronizedMap(
+        new java.util.LinkedHashMap<>() {
+            @Override protected boolean removeEldestEntry(java.util.Map.Entry<Long, byte[]> eldest) {
+                return size() > 16;
+            }
+        });
+
+    public static void clearServerRuntimeState() {
+        lastPurchase.clear();
+        acknowledgedClientSnapshots.clear();
+        challengeHudFingerprints.clear();
+        clientSnapshotHistory.clear();
+    }
+
+    public static void clearPlayerRuntimeState(java.util.UUID player) {
+        acknowledgedClientSnapshots.remove(player);
+        challengeHudFingerprints.remove(player);
+    }
+
+    public static void sendCompiledSnapshot(ServerPlayer player) {
+        long base = acknowledgedClientSnapshots.getOrDefault(player.getUUID(), 0L);
+        sendCompiledSnapshot(player, base);
+    }
+
+    private static void sendCompiledSnapshot(ServerPlayer player, long base) {
+        var snapshot = com.enviouse.progressivestages.server.loader.StageFileLoader.getInstance().getCompiledSnapshot();
+        byte[] baseBytes = clientSnapshotHistory.get(base);
+        var prepared = com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotCodec.prepare(snapshot, base, baseBytes);
+        clientSnapshotHistory.put(snapshot.revision(),
+            com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotCodec.encode(snapshot));
+        PacketDistributor.sendToPlayer(player, new ClientSnapshotManifestPayload(prepared.manifest()));
+        for (var chunk : prepared.chunks()) {
+            PacketDistributor.sendToPlayer(player, new ClientSnapshotChunkPayload(chunk));
+        }
+    }
+
+    private static void handleClientSnapshotManifest(ClientSnapshotManifestPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            try {
+                com.enviouse.progressivestages.client.ClientCompiledSnapshotCache.begin(payload.manifest());
+            } catch (RuntimeException error) {
+                com.enviouse.progressivestages.client.ClientCompiledSnapshotCache.clear();
+                PacketDistributor.sendToServer(new ClientSnapshotRequestPayload(0));
+            }
+        });
+    }
+
+    private static void handleClientSnapshotChunk(ClientSnapshotChunkPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (com.enviouse.progressivestages.client.ClientCompiledSnapshotCache.accept(payload.chunk())) {
+                PacketDistributor.sendToServer(new ClientSnapshotAckPayload(payload.chunk().revision(),
+                    com.enviouse.progressivestages.client.ClientCompiledSnapshotCache.checksum()));
+            }
+        });
+    }
+
+    private static void handleClientSnapshotAck(ClientSnapshotAckPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer player) {
+                var snapshot = com.enviouse.progressivestages.server.loader.StageFileLoader.getInstance().getCompiledSnapshot();
+                var expected = com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotCodec.prepare(snapshot, 0).manifest();
+                if (payload.revision() == snapshot.revision() && payload.checksum().equals(expected.checksum())) {
+                    acknowledgedClientSnapshots.put(player.getUUID(), payload.revision());
+                }
+            }
+        });
+    }
+
+    private static void handleClientSnapshotRequest(ClientSnapshotRequestPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer player) {
+                if (payload.knownRevision() == 0) acknowledgedClientSnapshots.remove(player.getUUID());
+                sendCompiledSnapshot(player, payload.knownRevision());
+            }
+        });
+    }
+
+    public static void sendEditorOpen(ServerPlayer player,
+                                      com.enviouse.progressivestages.server.editor.EditorSessionOpen session) {
+        PacketDistributor.sendToPlayer(player, new EditorOpenPayload(session.sessionId(), session.secret(),
+            session.draftId(), session.expiresAt(), session.configurationRevision(), session.catalogRevision(),
+            session.protocolVersion()));
+    }
+
+    private static void handleEditorOpen(EditorOpenPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> com.enviouse.progressivestages.client.editor.LoopbackEditorBridge.open(payload));
+    }
+
+    private static void handleEditorRequest(EditorRequestPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer player)) return;
+            String response = com.enviouse.progressivestages.server.editor.EditorSessionService.get()
+                .handle(player, payload.sessionId(), payload.secret(), payload.body());
+            PacketDistributor.sendToPlayer(player, new EditorResponsePayload(payload.requestId(), response));
+        });
+    }
+
+    private static void handleEditorResponse(EditorResponsePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> com.enviouse.progressivestages.client.editor.EditorBridgeTransport
+            .complete(payload.requestId(), payload.body()));
+    }
 
     private static long purchaseCooldownRemainingMillis(ServerPlayer player,
                                                          com.enviouse.progressivestages.common.config.StageCost cost) {
@@ -991,20 +1249,76 @@ public class NetworkHandler {
         );
     }
 
+    public record WhyLine(String category, String action, ResourceLocation target, String winner,
+                          String effect, boolean blocked, String explanation) {
+        public static final StreamCodec<FriendlyByteBuf, WhyLine> STREAM_CODEC = new StreamCodec<>() {
+            @Override public WhyLine decode(FriendlyByteBuf buffer) {
+                return new WhyLine(buffer.readUtf(), buffer.readUtf(), ResourceLocation.STREAM_CODEC.decode(buffer),
+                    buffer.readUtf(), buffer.readUtf(), buffer.readBoolean(), buffer.readUtf());
+            }
+            @Override public void encode(FriendlyByteBuf buffer, WhyLine value) {
+                buffer.writeUtf(value.category()); buffer.writeUtf(value.action());
+                ResourceLocation.STREAM_CODEC.encode(buffer, value.target());
+                buffer.writeUtf(value.winner()); buffer.writeUtf(value.effect()); buffer.writeBoolean(value.blocked());
+                buffer.writeUtf(value.explanation());
+            }
+        };
+    }
+
+    public record ChallengeLine(ResourceLocation id, String status, int step, int attempts,
+                                List<String> budgets, String explanation) {
+        public static final StreamCodec<FriendlyByteBuf, ChallengeLine> STREAM_CODEC = new StreamCodec<>() {
+            @Override public ChallengeLine decode(FriendlyByteBuf buffer) {
+                return new ChallengeLine(ResourceLocation.STREAM_CODEC.decode(buffer), buffer.readUtf(),
+                    buffer.readVarInt(), buffer.readVarInt(), ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).decode(buffer),
+                    buffer.readUtf());
+            }
+            @Override public void encode(FriendlyByteBuf buffer, ChallengeLine value) {
+                ResourceLocation.STREAM_CODEC.encode(buffer, value.id()); buffer.writeUtf(value.status());
+                buffer.writeVarInt(value.step()); buffer.writeVarInt(value.attempts());
+                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).encode(buffer, value.budgets());
+                buffer.writeUtf(value.explanation());
+            }
+        };
+    }
+
+    public record HistoryLine(long timestamp, String direction, boolean committed, String explanation) {
+        public static final StreamCodec<FriendlyByteBuf, HistoryLine> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_LONG, HistoryLine::timestamp, ByteBufCodecs.STRING_UTF8, HistoryLine::direction,
+            ByteBufCodecs.BOOL, HistoryLine::committed, ByteBufCodecs.STRING_UTF8, HistoryLine::explanation,
+            HistoryLine::new);
+    }
+
     /**
      * Per-stage GUI data: trigger-rule progress, a preview of the items this stage unlocks
      * (a capped sample for icon rendering + the true total count), and purchase info.
      */
     public record StageProgress(ResourceLocation stageId, List<RuleLine> rules,
-                                List<ResourceLocation> unlockSample, int unlockTotal, CostInfo cost) {
-        public static final StreamCodec<FriendlyByteBuf, StageProgress> STREAM_CODEC = StreamCodec.composite(
-            ResourceLocation.STREAM_CODEC, StageProgress::stageId,
-            RuleLine.STREAM_CODEC.apply(ByteBufCodecs.list()), StageProgress::rules,
-            ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()), StageProgress::unlockSample,
-            ByteBufCodecs.VAR_INT, StageProgress::unlockTotal,
-            CostInfo.STREAM_CODEC, StageProgress::cost,
-            StageProgress::new
-        );
+                                List<ResourceLocation> unlockSample, int unlockTotal, CostInfo cost,
+                                List<WhyLine> why, List<ChallengeLine> challenges,
+                                List<String> modifiers, List<HistoryLine> history) {
+        public static final StreamCodec<FriendlyByteBuf, StageProgress> STREAM_CODEC = new StreamCodec<>() {
+            @Override public StageProgress decode(FriendlyByteBuf buffer) {
+                return new StageProgress(ResourceLocation.STREAM_CODEC.decode(buffer),
+                    RuleLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
+                    ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
+                    buffer.readVarInt(), CostInfo.STREAM_CODEC.decode(buffer),
+                    WhyLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
+                    ChallengeLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).decode(buffer),
+                    HistoryLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer));
+            }
+            @Override public void encode(FriendlyByteBuf buffer, StageProgress value) {
+                ResourceLocation.STREAM_CODEC.encode(buffer, value.stageId());
+                RuleLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.rules());
+                ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.unlockSample());
+                buffer.writeVarInt(value.unlockTotal()); CostInfo.STREAM_CODEC.encode(buffer, value.cost());
+                WhyLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.why());
+                ChallengeLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.challenges());
+                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).encode(buffer, value.modifiers());
+                HistoryLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.history());
+            }
+        };
     }
 
     /** Server -> client: per-stage trigger progress; the client opens the GUI when it arrives. */
@@ -1059,6 +1373,42 @@ public class NetworkHandler {
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
 
+    public record ChallengeHudLine(ResourceLocation id, String title, String status, int currentStep,
+                                   int totalSteps, int attempts, long startedAt, long timeoutMillis,
+                                   List<String> budgets, String session, String successCriteria,
+                                   String explanation, String placement, double scale, String color,
+                                   String icon, String animation, boolean compact) {
+        public static final StreamCodec<FriendlyByteBuf, ChallengeHudLine> STREAM_CODEC = new StreamCodec<>() {
+            @Override public ChallengeHudLine decode(FriendlyByteBuf buffer) {
+                return new ChallengeHudLine(ResourceLocation.STREAM_CODEC.decode(buffer), buffer.readUtf(), buffer.readUtf(),
+                    buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarLong(), buffer.readVarLong(),
+                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).decode(buffer), buffer.readUtf(), buffer.readUtf(),
+                    buffer.readUtf(), buffer.readUtf(), buffer.readDouble(), buffer.readUtf(), buffer.readUtf(),
+                    buffer.readUtf(), buffer.readBoolean());
+            }
+            @Override public void encode(FriendlyByteBuf buffer, ChallengeHudLine value) {
+                ResourceLocation.STREAM_CODEC.encode(buffer, value.id());
+                buffer.writeUtf(value.title()); buffer.writeUtf(value.status());
+                buffer.writeVarInt(value.currentStep()); buffer.writeVarInt(value.totalSteps());
+                buffer.writeVarInt(value.attempts()); buffer.writeVarLong(value.startedAt());
+                buffer.writeVarLong(value.timeoutMillis());
+                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).encode(buffer, value.budgets());
+                buffer.writeUtf(value.session()); buffer.writeUtf(value.successCriteria());
+                buffer.writeUtf(value.explanation()); buffer.writeUtf(value.placement());
+                buffer.writeDouble(value.scale()); buffer.writeUtf(value.color()); buffer.writeUtf(value.icon());
+                buffer.writeUtf(value.animation()); buffer.writeBoolean(value.compact());
+            }
+        };
+    }
+
+    public record ChallengeHudPayload(List<ChallengeHudLine> entries) implements CustomPacketPayload {
+        public static final Type<ChallengeHudPayload> TYPE = new Type<>(Constants.CHALLENGE_HUD_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, ChallengeHudPayload> STREAM_CODEC = StreamCodec.composite(
+            ChallengeHudLine.STREAM_CODEC.apply(ByteBufCodecs.list()), ChallengeHudPayload::entries,
+            ChallengeHudPayload::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
     /** Client -> server: buy a purchasable stage from the GUI (v2.4 skill-tree mode). */
     public record RequestPurchasePayload(ResourceLocation stageId) implements CustomPacketPayload {
         public static final Type<RequestPurchasePayload> TYPE = new Type<>(Constants.REQUEST_PURCHASE_PACKET);
@@ -1072,5 +1422,136 @@ public class NetworkHandler {
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
+    }
+
+    public record ClientSnapshotManifestPayload(
+            com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotManifest manifest)
+            implements CustomPacketPayload {
+        public static final Type<ClientSnapshotManifestPayload> TYPE = new Type<>(Constants.CLIENT_SNAPSHOT_MANIFEST_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, ClientSnapshotManifestPayload> STREAM_CODEC =
+            new StreamCodec<>() {
+                @Override public ClientSnapshotManifestPayload decode(FriendlyByteBuf buffer) {
+                    int protocol = buffer.readVarInt();
+                    int schema = buffer.readVarInt();
+                    long revision = buffer.readVarLong();
+                    long base = buffer.readVarLong();
+                    String checksum = buffer.readUtf(128);
+                    int chunks = buffer.readVarInt();
+                    int compressed = buffer.readVarInt();
+                    int uncompressed = buffer.readVarInt();
+                    int count = buffer.readVarInt();
+                    Set<String> capabilities = new LinkedHashSet<>();
+                    for (int index = 0; index < count; index++) capabilities.add(buffer.readUtf(128));
+                    boolean delta = buffer.readBoolean();
+                    return new ClientSnapshotManifestPayload(new com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotManifest(
+                        protocol, schema, revision, base, checksum, chunks, compressed, uncompressed, capabilities, delta));
+                }
+                @Override public void encode(FriendlyByteBuf buffer, ClientSnapshotManifestPayload payload) {
+                    var value = payload.manifest();
+                    buffer.writeVarInt(value.protocolVersion());
+                    buffer.writeVarInt(value.schemaVersion());
+                    buffer.writeVarLong(value.configurationRevision());
+                    buffer.writeVarLong(value.baseRevision());
+                    buffer.writeUtf(value.checksum(), 128);
+                    buffer.writeVarInt(value.chunks());
+                    buffer.writeVarInt(value.compressedBytes());
+                    buffer.writeVarInt(value.uncompressedBytes());
+                    buffer.writeVarInt(value.capabilities().size());
+                    for (String capability : value.capabilities()) buffer.writeUtf(capability, 128);
+                    buffer.writeBoolean(value.delta());
+                }
+            };
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record ClientSnapshotChunkPayload(
+            com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotChunk chunk)
+            implements CustomPacketPayload {
+        public static final Type<ClientSnapshotChunkPayload> TYPE = new Type<>(Constants.CLIENT_SNAPSHOT_CHUNK_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, ClientSnapshotChunkPayload> STREAM_CODEC =
+            new StreamCodec<>() {
+                @Override public ClientSnapshotChunkPayload decode(FriendlyByteBuf buffer) {
+                    return new ClientSnapshotChunkPayload(new com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotChunk(
+                        buffer.readVarLong(), buffer.readVarInt(), buffer.readByteArray(
+                            com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotCodec.MAX_CHUNK_BYTES)));
+                }
+                @Override public void encode(FriendlyByteBuf buffer, ClientSnapshotChunkPayload payload) {
+                    buffer.writeVarLong(payload.chunk().revision());
+                    buffer.writeVarInt(payload.chunk().sequence());
+                    buffer.writeByteArray(payload.chunk().data());
+                }
+            };
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record ClientSnapshotAckPayload(long revision, String checksum) implements CustomPacketPayload {
+        public static final Type<ClientSnapshotAckPayload> TYPE = new Type<>(Constants.CLIENT_SNAPSHOT_ACK_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, ClientSnapshotAckPayload> STREAM_CODEC =
+            StreamCodec.composite(ByteBufCodecs.VAR_LONG, ClientSnapshotAckPayload::revision,
+                ByteBufCodecs.STRING_UTF8, ClientSnapshotAckPayload::checksum, ClientSnapshotAckPayload::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record ClientSnapshotRequestPayload(long knownRevision) implements CustomPacketPayload {
+        public static final Type<ClientSnapshotRequestPayload> TYPE = new Type<>(Constants.CLIENT_SNAPSHOT_REQUEST_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, ClientSnapshotRequestPayload> STREAM_CODEC =
+            StreamCodec.composite(ByteBufCodecs.VAR_LONG, ClientSnapshotRequestPayload::knownRevision,
+                ClientSnapshotRequestPayload::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record EditorOpenPayload(UUID sessionId, String secret, UUID draftId, long expiresAt,
+                                    long configurationRevision, long catalogRevision, int protocolVersion)
+            implements CustomPacketPayload {
+        public static final Type<EditorOpenPayload> TYPE = new Type<>(Constants.EDITOR_OPEN_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, EditorOpenPayload> STREAM_CODEC = new StreamCodec<>() {
+            @Override public EditorOpenPayload decode(FriendlyByteBuf buffer) {
+                return new EditorOpenPayload(buffer.readUUID(), buffer.readUtf(128), buffer.readUUID(),
+                    buffer.readVarLong(), buffer.readVarLong(), buffer.readVarLong(), buffer.readVarInt());
+            }
+            @Override public void encode(FriendlyByteBuf buffer, EditorOpenPayload payload) {
+                buffer.writeUUID(payload.sessionId());
+                buffer.writeUtf(payload.secret(), 128);
+                buffer.writeUUID(payload.draftId());
+                buffer.writeVarLong(payload.expiresAt());
+                buffer.writeVarLong(payload.configurationRevision());
+                buffer.writeVarLong(payload.catalogRevision());
+                buffer.writeVarInt(payload.protocolVersion());
+            }
+        };
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record EditorRequestPayload(UUID sessionId, UUID requestId, String secret, String body)
+            implements CustomPacketPayload {
+        public static final Type<EditorRequestPayload> TYPE = new Type<>(Constants.EDITOR_REQUEST_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, EditorRequestPayload> STREAM_CODEC = new StreamCodec<>() {
+            @Override public EditorRequestPayload decode(FriendlyByteBuf buffer) {
+                return new EditorRequestPayload(buffer.readUUID(), buffer.readUUID(), buffer.readUtf(128),
+                    buffer.readUtf(com.enviouse.progressivestages.server.editor.EditorSessionService.MAX_REQUEST_BYTES));
+            }
+            @Override public void encode(FriendlyByteBuf buffer, EditorRequestPayload payload) {
+                buffer.writeUUID(payload.sessionId());
+                buffer.writeUUID(payload.requestId());
+                buffer.writeUtf(payload.secret(), 128);
+                buffer.writeUtf(payload.body(), com.enviouse.progressivestages.server.editor.EditorSessionService.MAX_REQUEST_BYTES);
+            }
+        };
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record EditorResponsePayload(UUID requestId, String body) implements CustomPacketPayload {
+        public static final Type<EditorResponsePayload> TYPE = new Type<>(Constants.EDITOR_RESPONSE_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, EditorResponsePayload> STREAM_CODEC = new StreamCodec<>() {
+            @Override public EditorResponsePayload decode(FriendlyByteBuf buffer) {
+                return new EditorResponsePayload(buffer.readUUID(),
+                    buffer.readUtf(com.enviouse.progressivestages.server.editor.EditorSessionService.MAX_RESPONSE_BYTES));
+            }
+            @Override public void encode(FriendlyByteBuf buffer, EditorResponsePayload payload) {
+                buffer.writeUUID(payload.requestId());
+                buffer.writeUtf(payload.body(), com.enviouse.progressivestages.server.editor.EditorSessionService.MAX_RESPONSE_BYTES);
+            }
+        };
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
 }

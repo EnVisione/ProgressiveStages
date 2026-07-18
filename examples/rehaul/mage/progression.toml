@@ -1,0 +1,30 @@
+[[variables]]
+id = "examples:magic_mastery"
+type = "counter"
+scope = "player"
+default = 0
+minimum = 0
+maximum = 100
+persistent = true
+sync_visible = true
+
+[[profiles]]
+id = "examples:magic_affinity"
+content = ["tag:c:magic_items", "name:*wand", "name:*staff"]
+proficiency = "examples:magic_mastery"
+
+[[profiles.levels]]
+id = "novice"
+minimum = 0
+effect = "weaken"
+priority = 100
+
+[[profiles.levels.transforms]]
+type = "progressivestages:outgoing_damage"
+multiply = 0.75
+
+[[profiles.levels]]
+id = "master"
+minimum = 100
+effect = "strengthen"
+priority = 500

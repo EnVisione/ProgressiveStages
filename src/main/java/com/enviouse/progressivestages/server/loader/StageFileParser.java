@@ -17,6 +17,7 @@ import com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
+import com.enviouse.progressivestages.common.rehaul.ConfigProvenance;
 import com.enviouse.progressivestages.common.trigger.TriggerCondition;
 import com.enviouse.progressivestages.common.trigger.TriggerConditionType;
 import com.enviouse.progressivestages.common.trigger.TriggerMode;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 
 /**
  * Parses 2.0 stage definition files.
@@ -98,7 +100,7 @@ public final class StageFileParser {
             return ParseResult.syntaxError("Parse error: " + e.getMessage());
         }
         try {
-            return parseConfig(config, filePath.getFileName().toString());
+            return parseConfig(config, filePath.getFileName().toString(), filePath.toString(), false);
         } catch (RuntimeException e) {
             String message = e.getMessage();
             if (message == null || message.isBlank()) message = e.getClass().getSimpleName();
@@ -114,7 +116,7 @@ public final class StageFileParser {
         try (java.io.BufferedReader reader = new java.io.BufferedReader(
                 new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))) {
             Config config = PARSER.parse(reader);
-            ParseResult result = parseConfig(config, fileName);
+            ParseResult result = parseConfig(config, fileName, fileName, false);
             if (!result.isSuccess()) {
                 LOGGER.warn("Failed to parse datapack stage {}: {}", fileName, result.getErrorMessage());
                 return Optional.empty();
@@ -126,9 +128,47 @@ public final class StageFileParser {
         }
     }
 
-    private static ParseResult parseConfig(Config config, String fileName) {
+    public static ParseResult parseText(String content, String fileName, String sourceId, boolean packageSource) {
+        Objects.requireNonNull(content, "content");
+        try {
+            Config config = PARSER.parse(content);
+            return parseConfig(config, fileName, sourceId, packageSource);
+        } catch (com.electronwill.nightconfig.core.io.ParsingException e) {
+            String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            return ParseResult.syntaxError("TOML syntax error: " + message);
+        } catch (RuntimeException e) {
+            String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            return ParseResult.validationError("Invalid stage definition. " + message);
+        }
+    }
+
+    public static ParseResult parseSources(List<SourcePart> sources, String sourceId) {
+        if (sources == null || sources.isEmpty()) return ParseResult.validationError("A stage package has no sources");
+        StringBuilder merged = new StringBuilder();
+        for (SourcePart source : sources) {
+            if (source == null) continue;
+            merged.append('\n').append(source.content()).append('\n');
+        }
+        return parseText(merged.toString(), sources.getFirst().name(), sourceId, true);
+    }
+
+    public record SourcePart(String name, String content) {
+        public SourcePart {
+            name = Objects.requireNonNull(name, "name");
+            content = Objects.requireNonNull(content, "content");
+        }
+    }
+
+    static ParseResult parseConfig(Config config, String fileName, String sourceId, boolean packageSource) {
         Config stageSection = config.get("stage");
         if (stageSection == null) return ParseResult.validationError("Missing [stage] section");
+
+        Config schemaSection = config.get("schema");
+        int schemaVersion = schemaSection != null ? (int) readLong(schemaSection, "version", packageSource ? 4L : 3L)
+            : (packageSource ? 4 : 3);
+        if (schemaVersion < 1 || schemaVersion > 4) {
+            throw new IllegalArgumentException("Unsupported schema version. " + schemaVersion);
+        }
 
         String id = stageSection.get("id");
         if (id == null || id.isEmpty()) {
@@ -136,7 +176,8 @@ public final class StageFileParser {
         }
         StageId stageId = StageId.parse(id);
 
-        String displayName = stageSection.getOrElse("display_name", id);
+        String displayName = stageSection.get("display_name");
+        if (displayName == null) displayName = stageSection.getOrElse("name", id);
         String description = stageSection.getOrElse("description", "");
         String icon = stageSection.get("icon");
         String unlockMessage = stageSection.get("unlock_message");
@@ -165,7 +206,12 @@ public final class StageFileParser {
             .description(description)
             .dependencies(dependencies)
             .dependencyPolicy(dependencyMode, dependencyCount)
-            .locks(locks);
+            .locks(locks)
+            .schemaVersion(schemaVersion)
+            .priority((int) readLong(stageSection, "priority", 0L))
+            .provenance(packageSource
+                ? ConfigProvenance.packageField(sourceId, fileName, "stage", "")
+                : ConfigProvenance.legacy(sourceId, fileName, "stage", ""));
         if (icon != null && !icon.isEmpty()) builder.icon(icon);
         if (unlockMessage != null && !unlockMessage.isEmpty()) builder.unlockMessage(unlockMessage);
 
@@ -202,7 +248,7 @@ public final class StageFileParser {
         builder.conditionalRules(parseConditionalRules(config, stageId));
         builder.activeLocks(parseActiveLocks(config));
 
-        return ParseResult.success(builder.build());
+        return ParseResult.success(builder.build(), schemaVersion == 4 ? Config.copy(config) : null);
     }
 
     // -------------------- v2.4 sections --------------------
@@ -915,6 +961,7 @@ public final class StageFileParser {
     private static List<StageId> parseDependencies(Config stageSection) {
         List<StageId> out = new ArrayList<>();
         Object value = stageSection.get("dependency");
+        if (value == null) value = stageSection.get("dependencies");
         if (value == null) return out;
 
         if (value instanceof String s) {
@@ -1334,20 +1381,24 @@ public final class StageFileParser {
         private final StageDefinition stageDefinition;
         private final String errorMessage;
         private final boolean syntaxError;
+        private final Config sourceConfig;
 
-        private ParseResult(StageDefinition def, String error, boolean syntax) {
+        private ParseResult(StageDefinition def, String error, boolean syntax, Config sourceConfig) {
             this.stageDefinition = def;
             this.errorMessage = error;
             this.syntaxError = syntax;
+            this.sourceConfig = sourceConfig;
         }
 
-        public static ParseResult success(StageDefinition def)     { return new ParseResult(def, null, false); }
-        public static ParseResult syntaxError(String msg)          { return new ParseResult(null, msg, true); }
-        public static ParseResult validationError(String msg)      { return new ParseResult(null, msg, false); }
+        public static ParseResult success(StageDefinition def)     { return new ParseResult(def, null, false, null); }
+        public static ParseResult success(StageDefinition def, Config sourceConfig) { return new ParseResult(def, null, false, sourceConfig); }
+        public static ParseResult syntaxError(String msg)          { return new ParseResult(null, msg, true, null); }
+        public static ParseResult validationError(String msg)      { return new ParseResult(null, msg, false, null); }
 
         public boolean isSuccess()              { return stageDefinition != null; }
         public boolean isSyntaxError()          { return syntaxError; }
         public StageDefinition getStageDefinition() { return stageDefinition; }
         public String getErrorMessage()         { return errorMessage; }
+        public Config getSourceConfig()         { return sourceConfig == null ? null : Config.copy(sourceConfig); }
     }
 }

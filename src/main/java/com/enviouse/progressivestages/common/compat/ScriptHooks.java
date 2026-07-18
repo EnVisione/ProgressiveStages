@@ -1,6 +1,8 @@
 package com.enviouse.progressivestages.common.compat;
 
 import com.mojang.logging.LogUtils;
+import com.enviouse.progressivestages.common.rehaul.action.ActionResult;
+import com.enviouse.progressivestages.common.rehaul.selector.SelectorTarget;
 import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 
@@ -36,11 +38,32 @@ public final class ScriptHooks {
     /** A script-supplied numeric progress source for {@code type = "script_value"}. */
     @FunctionalInterface public interface StageProgressProvider { long get(ServerPlayer player); }
 
+    @FunctionalInterface public interface ScriptActionCallback {
+        Object execute(ServerPlayer player, Map<String, Object> arguments);
+    }
+
+    @FunctionalInterface public interface ScriptSelectorCallback {
+        boolean test(String value, SelectorTarget target);
+    }
+
+    @FunctionalInterface public interface ScriptMeasureCallback {
+        double amount(String subject, String event, double amount, Map<String, Object> properties,
+                      Map<String, Object> filters);
+    }
+
+    @FunctionalInterface public interface StructuredEventCallback {
+        void accept(String event, Map<String, Object> data);
+    }
+
     private static final CopyOnWriteArrayList<StageCallback> GRANTED = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<StageCallback> REVOKED = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<StageChangeCallback> CHANGED = new CopyOnWriteArrayList<>();
     private static final Map<String, StagePredicate> CONDITIONS = new ConcurrentHashMap<>();
     private static final Map<String, StageProgressProvider> PROGRESS = new ConcurrentHashMap<>();
+    private static final Map<String, ScriptActionCallback> ACTIONS = new ConcurrentHashMap<>();
+    private static final Map<String, ScriptSelectorCallback> SELECTORS = new ConcurrentHashMap<>();
+    private static final Map<String, ScriptMeasureCallback> MEASURES = new ConcurrentHashMap<>();
+    private static final CopyOnWriteArrayList<StructuredEventCallback> EVENTS = new CopyOnWriteArrayList<>();
     private static volatile boolean active = false;
 
     private ScriptHooks() {}
@@ -52,6 +75,10 @@ public final class ScriptHooks {
         CHANGED.clear();
         CONDITIONS.clear();
         PROGRESS.clear();
+        ACTIONS.clear();
+        SELECTORS.clear();
+        MEASURES.clear();
+        EVENTS.clear();
         active = false;
     }
 
@@ -67,6 +94,33 @@ public final class ScriptHooks {
         if (!key.isEmpty() && provider != null) {
             PROGRESS.put(key, provider);
             active = true;
+        }
+    }
+
+    public static void registerAction(String id, ScriptActionCallback callback) {
+        String key = normalizeId(id);
+        if (!key.isEmpty() && callback != null) { ACTIONS.put(key, callback); active = true; }
+    }
+
+    public static void registerSelector(String id, ScriptSelectorCallback callback) {
+        String key = normalizeId(id);
+        if (!key.isEmpty() && callback != null) { SELECTORS.put(key, callback); active = true; }
+    }
+
+    public static void registerMeasure(String id, ScriptMeasureCallback callback) {
+        String key = normalizeId(id);
+        if (!key.isEmpty() && callback != null) { MEASURES.put(key, callback); active = true; }
+    }
+
+    public static void onEvent(StructuredEventCallback callback) {
+        if (callback != null) { EVENTS.add(callback); active = true; }
+    }
+
+    public static void fireEvent(String event, Map<String, Object> data) {
+        Map<String, Object> immutable = data == null ? Map.of() : Map.copyOf(data);
+        for (StructuredEventCallback callback : EVENTS) {
+            try { callback.accept(event, immutable); }
+            catch (Throwable error) { LOGGER.error("[ProgressiveStages] KubeJS structured event callback threw", error); }
         }
     }
 
@@ -113,6 +167,49 @@ public final class ScriptHooks {
         } catch (Throwable t) {
             LOGGER.error("[ProgressiveStages] KubeJS progress provider '{}' threw", id, t);
             return 0L;
+        }
+    }
+
+    public static ActionResult runAction(String id, ServerPlayer player, Map<String, Object> arguments) {
+        ScriptActionCallback callback = ACTIONS.get(normalizeId(id));
+        if (callback == null) return ActionResult.failure("missing_script_action", "The script action is unavailable");
+        try {
+            Object result = callback.execute(player, arguments == null ? Map.of() : Map.copyOf(arguments));
+            if (result instanceof Boolean bool && !bool) return ActionResult.failure("script_rejected", "The script action rejected the request");
+            if (result instanceof Map<?, ?> map && Boolean.FALSE.equals(map.get("success"))) {
+                Object code = map.containsKey("code") ? map.get("code") : "script_rejected";
+                Object explanation = map.containsKey("explanation") ? map.get("explanation")
+                    : "The script action rejected the request";
+                return ActionResult.failure(String.valueOf(code), String.valueOf(explanation));
+            }
+            return ActionResult.success("Script action completed", result);
+        } catch (Throwable error) {
+            LOGGER.error("[ProgressiveStages] KubeJS action '{}' threw", id, error);
+            return ActionResult.failure("script_error", error.getMessage());
+        }
+    }
+
+    public static boolean evalSelector(String id, String value, SelectorTarget target) {
+        ScriptSelectorCallback callback = SELECTORS.get(normalizeId(id));
+        if (callback == null) return false;
+        try {
+            return callback.test(value, target);
+        } catch (Throwable error) {
+            LOGGER.error("[ProgressiveStages] KubeJS selector '{}' threw", id, error);
+            return false;
+        }
+    }
+
+    public static double evalMeasure(String id, String subject, String event, double amount,
+                                     Map<String, Object> properties, Map<String, Object> filters) {
+        ScriptMeasureCallback callback = MEASURES.get(normalizeId(id));
+        if (callback == null) return 0;
+        try {
+            double value = callback.amount(subject, event, amount, properties, filters);
+            return Double.isFinite(value) ? value : 0;
+        } catch (Throwable error) {
+            LOGGER.error("[ProgressiveStages] KubeJS challenge measure '{}' threw", id, error);
+            return 0;
         }
     }
 

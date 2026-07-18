@@ -40,9 +40,29 @@ public final class ClientTriggerProgress {
         }
     }
 
+    public record Why(String category, String action, ResourceLocation target, String winner,
+                      String effect, boolean blocked, String explanation) {}
+
+    public record Challenge(ResourceLocation id, String status, int step, int attempts,
+                            List<String> budgets, String explanation) {}
+
+    public record History(long timestamp, String direction, boolean committed, String explanation) {}
+
     public record StageData(List<Rule> rules, List<ResourceLocation> unlockSample, int unlockTotal,
-                            boolean purchasable, int costXp, String costSummary, boolean canPurchase) {
-        public static final StageData EMPTY = new StageData(List.of(), List.of(), 0, false, 0, "", false);
+                            boolean purchasable, int costXp, String costSummary, boolean canPurchase,
+                            List<Why> why, List<Challenge> challenges, List<String> modifiers,
+                            List<History> history) {
+        public static final StageData EMPTY = new StageData(List.of(), List.of(), 0, false, 0, "", false,
+            List.of(), List.of(), List.of(), List.of());
+
+        public StageData {
+            rules = List.copyOf(rules);
+            unlockSample = List.copyOf(unlockSample);
+            why = List.copyOf(why);
+            challenges = List.copyOf(challenges);
+            modifiers = List.copyOf(modifiers);
+            history = List.copyOf(history);
+        }
 
         public boolean hasTriggers() { return !rules.isEmpty(); }
 
@@ -80,7 +100,13 @@ public final class ClientTriggerProgress {
             }
             NetworkHandler.CostInfo cost = sp.cost();
             DATA.put(id, new StageData(rules, List.copyOf(sp.unlockSample()), sp.unlockTotal(),
-                cost.purchasable(), cost.costXp(), cost.summary(), cost.canPurchase()));
+                cost.purchasable(), cost.costXp(), cost.summary(), cost.canPurchase(),
+                sp.why().stream().map(line -> new Why(line.category(), line.action(), line.target(),
+                    line.winner(), line.effect(), line.blocked(), line.explanation())).toList(),
+                sp.challenges().stream().map(line -> new Challenge(line.id(), line.status(), line.step(),
+                    line.attempts(), line.budgets(), line.explanation())).toList(),
+                sp.modifiers(), sp.history().stream().map(line -> new History(line.timestamp(), line.direction(),
+                    line.committed(), line.explanation())).toList()));
         }
     }
 

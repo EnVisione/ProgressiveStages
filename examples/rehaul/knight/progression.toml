@@ -1,0 +1,34 @@
+[[variables]]
+id = "examples:magic_familiarity"
+type = "counter"
+scope = "player"
+default = 0
+minimum = 0
+maximum = 100
+persistent = true
+sync_visible = true
+
+[[profiles]]
+id = "examples:knight_magic_affinity"
+content = ["tag:c:magic_items", "name:*wand", "name:*staff", "name:*spellbook"]
+proficiency = "examples:magic_familiarity"
+
+[[profiles.levels]]
+id = "untrained"
+minimum = 0
+effect = "weaken"
+priority = 450
+
+[[profiles.levels.transforms]]
+type = "progressivestages:spell_power"
+multiply = 0.65
+
+[[profiles.levels.transforms]]
+type = "progressivestages:spell_cooldown"
+multiply = 1.5
+
+[[profiles.levels]]
+id = "trained"
+minimum = 100
+effect = "normal"
+priority = 700

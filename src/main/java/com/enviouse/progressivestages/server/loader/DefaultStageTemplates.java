@@ -151,6 +151,8 @@ public final class DefaultStageTemplates {
             #
             # COMPLETE DOCUMENTATION
             # https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md
+            # SCHEMA 4 AND LOCALHOST EDITOR GUIDE
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/REHAUL_GUIDE.md
             #
             # TEMPORARY AND TRIGGERED LOCKS GUIDE
             # https://github.com/EnVisione/ProgressiveStages/blob/master/TEMPORARY_AND_TRIGGERED_LOCKS.md

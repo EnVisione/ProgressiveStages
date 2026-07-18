@@ -1,0 +1,4 @@
+[[grants]]
+id = "examples:wither_unlocks_end_fight"
+repeat = "once"
+condition = { type = "kill", id = "minecraft:wither", count = 1 }

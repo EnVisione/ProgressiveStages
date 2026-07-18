@@ -4,6 +4,7 @@ import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.ActiveLockDefinition;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
+import com.enviouse.progressivestages.common.rehaul.ConfigProvenance;
 import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.trigger.TriggerRule;
 import net.minecraft.resources.ResourceLocation;
@@ -77,6 +78,9 @@ public class StageDefinition {
     private final java.util.Set<String> lockedAbilities; // e.g. "elytra" — blocked until this stage is owned
     private final List<ConditionalRule> conditionalRules;
     private final ActiveLockDefinition activeLocks;
+    private final int schemaVersion;
+    private final int priority;
+    private final ConfigProvenance provenance;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -138,6 +142,9 @@ public class StageDefinition {
         this.conditionalRules = builder.conditionalRules != null
             ? Collections.unmodifiableList(new ArrayList<>(builder.conditionalRules)) : Collections.emptyList();
         this.activeLocks = builder.activeLocks != null ? builder.activeLocks : ActiveLockDefinition.EMPTY;
+        this.schemaVersion = Math.max(1, builder.schemaVersion);
+        this.priority = builder.priority;
+        this.provenance = builder.provenance;
     }
 
     public StageId getId() {
@@ -357,6 +364,12 @@ public class StageDefinition {
 
     public ActiveLockDefinition getActiveLocks() { return activeLocks; }
 
+    public int getSchemaVersion() { return schemaVersion; }
+
+    public int getPriority() { return priority; }
+
+    public ConfigProvenance getProvenance() { return provenance; }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -411,6 +424,9 @@ public class StageDefinition {
         private java.util.Set<String> lockedAbilities = java.util.Set.of();
         private List<ConditionalRule> conditionalRules = new ArrayList<>();
         private ActiveLockDefinition activeLocks = ActiveLockDefinition.EMPTY;
+        private int schemaVersion = 3;
+        private int priority = 0;
+        private ConfigProvenance provenance;
 
         private Builder(StageId id) {
             this.id = id;
@@ -571,6 +587,9 @@ public class StageDefinition {
         public Builder lockedAbilities(java.util.Set<String> v) { this.lockedAbilities = v != null ? v : java.util.Set.of(); return this; }
         public Builder conditionalRules(List<ConditionalRule> v) { this.conditionalRules = v != null ? v : new ArrayList<>(); return this; }
         public Builder activeLocks(ActiveLockDefinition v) { this.activeLocks = v != null ? v : ActiveLockDefinition.EMPTY; return this; }
+        public Builder schemaVersion(int v) { this.schemaVersion = v; return this; }
+        public Builder priority(int v) { this.priority = v; return this; }
+        public Builder provenance(ConfigProvenance v) { this.provenance = v; return this; }
 
         public StageDefinition build() {
             return new StageDefinition(this);

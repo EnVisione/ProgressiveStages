@@ -36,6 +36,14 @@ public final class Constants {
     // v2.4: unlock juice — toast popup (S2C) + active-goal HUD bar progress (S2C)
     public static final ResourceLocation UNLOCK_TOAST_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "unlock_toast");
     public static final ResourceLocation ACTIVE_GOAL_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "active_goal");
+    public static final ResourceLocation CHALLENGE_HUD_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "challenge_hud");
+    public static final ResourceLocation CLIENT_SNAPSHOT_MANIFEST_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "client_snapshot_manifest");
+    public static final ResourceLocation CLIENT_SNAPSHOT_CHUNK_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "client_snapshot_chunk");
+    public static final ResourceLocation CLIENT_SNAPSHOT_ACK_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "client_snapshot_ack");
+    public static final ResourceLocation CLIENT_SNAPSHOT_REQUEST_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "client_snapshot_request");
+    public static final ResourceLocation EDITOR_OPEN_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "editor_open");
+    public static final ResourceLocation EDITOR_REQUEST_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "editor_request");
+    public static final ResourceLocation EDITOR_RESPONSE_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "editor_response");
 
     // v3.0 unified config layout:
     // config/progressivestages/progressivestages.toml

@@ -1,0 +1,9 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:wither_trial"
+display_name = "Wither Trial"
+description = "Win while staying inside the generic configured hit budget."
+icon = "minecraft:nether_star"
+priority = 300

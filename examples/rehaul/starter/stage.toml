@@ -1,0 +1,15 @@
+[schema]
+version = 4
+
+[stage]
+id = "examples:starter"
+display_name = "Starter Stage"
+description = "A tiny first stage that is safe to copy."
+icon = "minecraft:stone"
+dependencies = []
+priority = 0
+
+[display]
+frame = "task"
+reveal = "always"
+background = "minecraft:textures/gui/advancements/backgrounds/stone.png"

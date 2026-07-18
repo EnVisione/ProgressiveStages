@@ -1,0 +1,25 @@
+[[rules]]
+id = "examples:allow_stronghold"
+category = "structures"
+action = "enter"
+selector = "minecraft:stronghold"
+effect = "allow"
+priority = 900
+
+[[temporary_rules]]
+id = "examples:end_no_jump"
+effect = "deny"
+lifetime = "live"
+priority = 1000
+action = "perform"
+targets.abilities = ["progressivestages:jump"]
+while = { type = "dimension", id = "minecraft:the_end" }
+
+[[temporary_rules]]
+id = "examples:end_no_elytra"
+effect = "deny"
+lifetime = "live"
+priority = 1000
+action = "use"
+targets.items = ["minecraft:elytra", "minecraft:diamond_pickaxe"]
+while = { type = "dimension", id = "minecraft:the_end" }

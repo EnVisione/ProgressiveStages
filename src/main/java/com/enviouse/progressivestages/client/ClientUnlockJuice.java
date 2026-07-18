@@ -46,6 +46,7 @@ public final class ClientUnlockJuice {
      * when the server has pushed an active goal (a not-yet-owned stage with {@code [unlock].hud_bar}).
      */
     public static void renderHud(net.minecraft.client.gui.GuiGraphics g, net.minecraft.client.DeltaTracker delta) {
+        ClientChallengeHud.renderHud(g, delta);
         if (!showGoal()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.options.hideGui || mc.screen != null) return;

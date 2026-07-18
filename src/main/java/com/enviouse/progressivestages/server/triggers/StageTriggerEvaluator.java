@@ -586,6 +586,23 @@ public final class StageTriggerEvaluator {
         };
     }
 
+    public static long currentProgress(ServerPlayer player, String type, Map<String, Object> arguments) {
+        String normalized = switch (type) {
+            case "item_possession" -> "has_item";
+            case "kill_with_item" -> "kill_with";
+            case "stage_held_duration" -> "stage_held_for";
+            default -> type;
+        };
+        TriggerConditionType resolved = TriggerConditionType.fromString(normalized);
+        if (resolved == null) return 0L;
+        Object targetValue = arguments.getOrDefault("id",
+            arguments.getOrDefault("target", arguments.getOrDefault("key", "")));
+        String target = String.valueOf(targetValue == null ? "" : targetValue);
+        String with = String.valueOf(arguments.getOrDefault("with", ""));
+        TriggerCondition condition = new TriggerCondition(resolved, target, 1L, with);
+        return currentProgress(player, StageId.parse("progressivestages:runtime"), condition);
+    }
+
     private static long scoreboardValue(ServerPlayer player, String objectiveName) {
         net.minecraft.world.scores.Scoreboard scoreboard = player.getScoreboard();
         net.minecraft.world.scores.Objective objective = scoreboard.getObjective(objectiveName);

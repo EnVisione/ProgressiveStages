@@ -7,6 +7,10 @@ import com.enviouse.progressivestages.common.lock.CategoryLocks;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
+import com.enviouse.progressivestages.common.rehaul.CompiledSnapshot;
+import com.enviouse.progressivestages.common.rehaul.CompiledStage;
+import com.enviouse.progressivestages.common.rehaul.LegacyStageCompiler;
+import com.enviouse.progressivestages.common.rehaul.catalog.EditorCatalogService;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.tags.StageTagRegistry;
 import com.mojang.logging.LogUtils;
@@ -17,7 +21,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Stream;
 
 /**
  * Loads stage definition files from the ProgressiveStages directory in config folder
@@ -33,6 +36,8 @@ public class StageFileLoader {
     private MinecraftServer server;
     private boolean initialized = false;
     private List<String> lastReloadErrors = List.of();
+    private volatile CompiledSnapshot compiledSnapshot = CompiledSnapshot.EMPTY;
+    private long compiledRevision = 0L;
 
     private static StageFileLoader INSTANCE;
 
@@ -66,10 +71,9 @@ public class StageFileLoader {
             }
         }
 
-        FileDiscovery discovery = discoverStageFiles();
-        if (discovery.error() != null) {
-            LOGGER.error("[ProgressiveStages] {}", discovery.error());
-        } else if (discovery.files().isEmpty()) {
+        StagePackageDiscovery.DiscoveryResult discovery = discoverStageFiles();
+        for (String error : discovery.errors()) LOGGER.error("[ProgressiveStages] {}", error);
+        if (discovery.packages().isEmpty() && discovery.legacyFiles().isEmpty() && discovery.errors().isEmpty()) {
             LOGGER.info("No stage files found, generating defaults...");
             generateDefaultStageFiles();
         }
@@ -79,7 +83,7 @@ public class StageFileLoader {
         for (String error : candidate.errors()) LOGGER.error("[ProgressiveStages] Stage load error: {}", error);
         if (candidate.errors().isEmpty()) {
             try {
-                applyCandidate(candidate.stages());
+                applyCandidate(candidate.stages(), candidate.compiled());
             } catch (RuntimeException applicationFailure) {
                 clearRuntimeRegistries();
                 lastReloadErrors = List.of("Could not apply the initial stage snapshot. "
@@ -100,6 +104,7 @@ public class StageFileLoader {
         com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.resetRuntimeState();
         com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(java.util.List.of());
         com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.rebuild(java.util.List.of());
+        compiledSnapshot = CompiledSnapshot.EMPTY;
     }
 
     /** Release all world-specific state when a server stops. Event handlers remain registered once. */
@@ -110,6 +115,9 @@ public class StageFileLoader {
         server = null;
         initialized = false;
         lastReloadErrors = List.of();
+        compiledRevision = 0L;
+        EditorCatalogService.get().reset();
+        com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().reset();
     }
 
     /**
@@ -146,13 +154,14 @@ public class StageFileLoader {
 
         com.enviouse.progressivestages.server.enforcement.OreSpoofManager.get().prepareForReload(server);
         Map<StageId, StageDefinition> previous = new LinkedHashMap<>(loadedStages);
+        Map<StageId, CompiledStage> previousCompiled = new LinkedHashMap<>(compiledSnapshot.stages());
         try {
-            applyCandidate(candidate.stages());
+            applyCandidate(candidate.stages(), candidate.compiled());
         } catch (RuntimeException applicationFailure) {
             String error = "Could not apply the candidate stage snapshot. " + applicationFailure.getMessage();
             LOGGER.error("[ProgressiveStages] Reload rejected while applying the candidate snapshot", applicationFailure);
             try {
-                applyCandidate(previous);
+                applyCandidate(previous, previousCompiled);
             } catch (RuntimeException rollbackFailure) {
                 LOGGER.error("[ProgressiveStages] Failed to restore the previous stage snapshot", rollbackFailure);
                 error += ". The previous snapshot could not be restored. " + rollbackFailure.getMessage();
@@ -167,34 +176,57 @@ public class StageFileLoader {
 
     private LoadCandidate readCandidateStages() {
         Map<StageId, StageDefinition> candidate = new LinkedHashMap<>();
+        Map<StageId, CompiledStage> compiled = new LinkedHashMap<>();
         List<String> errors = new ArrayList<>();
 
-        FileDiscovery discovery = discoverStageFiles();
-        if (discovery.error() != null) errors.add(discovery.error());
-        for (Path file : discovery.files()) {
+        StagePackageDiscovery.DiscoveryResult discovery = discoverStageFiles();
+        errors.addAll(discovery.errors());
+        for (StagePackageSource source : discovery.packages()) {
+            StageFileParser.ParseResult result = StagePackageParser.parse(source);
+            if (!result.isSuccess()) {
+                errors.add(relativeStagePath(source.root()) + ". " + result.getErrorMessage());
+                continue;
+            }
+            StageDefinition definition = result.getStageDefinition();
+            try {
+                CompiledStage stage = Schema4StageCompiler.compile(definition, result.getSourceConfig(),
+                    source.sourceId(), 0);
+                addCandidate(candidate, compiled, errors, definition, stage, relativeStagePath(source.root()));
+            } catch (RuntimeException error) {
+                errors.add(relativeStagePath(source.root()) + ". Schema 4 compilation failed. " + error.getMessage());
+            }
+        }
+        for (Path file : discovery.legacyFiles()) {
             StageFileParser.ParseResult result = StageFileParser.parseWithErrors(file);
             if (!result.isSuccess()) {
                 errors.add(relativeStagePath(file) + ". " + result.getErrorMessage());
                 continue;
             }
-            StageDefinition stage = result.getStageDefinition();
-            StageDefinition existing = candidate.putIfAbsent(stage.getId(), stage);
-            if (existing != null) {
-                errors.add(relativeStagePath(file) + ". Duplicate stage ID. " + stage.getId());
-            }
+            StageDefinition definition = result.getStageDefinition();
+            addCandidate(candidate, compiled, errors, definition,
+                LegacyStageCompiler.compile(definition, relativeStagePath(file)), relativeStagePath(file));
         }
 
         for (Map.Entry<StageId, StageDefinition> entry : datapackStages.entrySet()) {
             if (candidate.putIfAbsent(entry.getKey(), entry.getValue()) != null) {
                 LOGGER.info("[ProgressiveStages] Datapack stage {} overridden by a config file", entry.getKey());
+            } else {
+                String sourceId = entry.getValue().getProvenance() != null
+                    ? entry.getValue().getProvenance().sourceId() : entry.getKey().toString();
+                compiled.put(entry.getKey(), LegacyStageCompiler.compile(entry.getValue(), sourceId));
             }
         }
 
         errors.addAll(StageOrder.validateDefinitions(candidate.values()));
-        return new LoadCandidate(Collections.unmodifiableMap(new LinkedHashMap<>(candidate)), List.copyOf(errors));
+        return new LoadCandidate(Collections.unmodifiableMap(new LinkedHashMap<>(candidate)),
+            Collections.unmodifiableMap(new LinkedHashMap<>(compiled)), List.copyOf(errors));
     }
 
-    private void applyCandidate(Map<StageId, StageDefinition> candidate) {
+    private void applyCandidate(Map<StageId, StageDefinition> candidate,
+                                Map<StageId, CompiledStage> compiled) {
+        if (!candidate.keySet().equals(compiled.keySet())) {
+            throw new IllegalArgumentException("Compiled stage set does not match the parsed stage set");
+        }
         clearRuntimeRegistries();
         loadedStages.putAll(candidate);
         for (StageDefinition stage : loadedStages.values()) StageOrder.getInstance().registerStage(stage);
@@ -202,24 +234,21 @@ public class StageFileLoader {
         com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
         com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(loadedStages.values());
         com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.rebuild(loadedStages.values());
+        compiledSnapshot = CompiledSnapshot.create(++compiledRevision, compiled);
+        com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rebuild(compiledSnapshot, server);
+        if (!com.enviouse.progressivestages.common.rehaul.extension.ExtensionMetadataRegistry.get().frozen()) {
+            com.enviouse.progressivestages.common.rehaul.extension.ExtensionMetadataRegistry.get().freeze();
+        }
+        EditorCatalogService.get().rebuild(server, compiledSnapshot.revision());
+        com.enviouse.progressivestages.common.compat.ScriptHooks.fireEvent("reload", Map.of(
+            "configurationRevision", compiledSnapshot.revision(),
+            "catalogRevision", EditorCatalogService.get().snapshot().revision(),
+            "stageCount", compiledSnapshot.stages().size()));
         LOGGER.info("Loaded {} stage definitions", loadedStages.size());
     }
 
-    private FileDiscovery discoverStageFiles() {
-        if (stagesDirectory == null || !Files.isDirectory(stagesDirectory)) {
-            return new FileDiscovery(List.of(), null);
-        }
-        try (Stream<Path> paths = Files.walk(stagesDirectory)) {
-            return new FileDiscovery(paths
-                .filter(Files::isRegularFile)
-                .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".toml"))
-                .filter(path -> !path.getFileName().toString().equalsIgnoreCase("triggers.toml"))
-                .sorted(Comparator.comparing(this::relativeStagePath))
-                .toList(), null);
-        } catch (IOException e) {
-            LOGGER.error("Failed to list stage files", e);
-            return new FileDiscovery(List.of(), "Could not scan the stages directory. " + e.getMessage());
-        }
+    private StagePackageDiscovery.DiscoveryResult discoverStageFiles() {
+        return StagePackageDiscovery.discover(stagesDirectory);
     }
 
     private String relativeStagePath(Path file) {
@@ -231,8 +260,22 @@ public class StageFileLoader {
         }
     }
 
-    private record LoadCandidate(Map<StageId, StageDefinition> stages, List<String> errors) {}
-    private record FileDiscovery(List<Path> files, String error) {}
+    private record LoadCandidate(Map<StageId, StageDefinition> stages,
+                                 Map<StageId, CompiledStage> compiled,
+                                 List<String> errors) {}
+
+    private static void addCandidate(Map<StageId, StageDefinition> candidate,
+                                     Map<StageId, CompiledStage> compiled,
+                                     List<String> errors, StageDefinition stage,
+                                     CompiledStage compiledStage, String source) {
+        StageDefinition existing = candidate.putIfAbsent(stage.getId(), stage);
+        if (existing != null) errors.add(source + ". Duplicate stage ID. " + stage.getId());
+        else compiled.put(stage.getId(), compiledStage);
+    }
+
+    public CompiledSnapshot getCompiledSnapshot() {
+        return compiledSnapshot;
+    }
 
     private void registerLocksFromStages() {
         LockRegistry registry = LockRegistry.getInstance();
@@ -273,15 +316,22 @@ public class StageFileLoader {
             return results;
         }
 
-        FileDiscovery discovery = discoverStageFiles();
-        if (discovery.error() != null) {
-            results.add(new FileValidationResult(stagesDirectory.toString(), false, false,
-                discovery.error(), null));
-            return results;
-        }
-        for (Path file : discovery.files()) results.add(validateStageFile(file));
+        StagePackageDiscovery.DiscoveryResult discovery = discoverStageFiles();
+        for (String error : discovery.errors()) results.add(new FileValidationResult(
+            stagesDirectory.toString(), false, false, error, null));
+        for (StagePackageSource source : discovery.packages()) results.add(validateStagePackage(source));
+        for (Path file : discovery.legacyFiles()) results.add(validateStageFile(file));
 
         return results;
+    }
+
+    private FileValidationResult validateStagePackage(StagePackageSource source) {
+        StageFileParser.ParseResult parsed = StagePackageParser.parse(source);
+        if (!parsed.isSuccess()) {
+            return new FileValidationResult(relativeStagePath(source.root()), false,
+                parsed.isSyntaxError(), parsed.getErrorMessage(), null);
+        }
+        return validateParsedStage(relativeStagePath(source.root()), parsed.getStageDefinition());
     }
 
     private FileValidationResult validateStageFile(Path file) {
@@ -299,10 +349,10 @@ public class StageFileLoader {
             );
         }
 
-        // Parse succeeded, now validate exact-ID entries across the 2.0 categories.
-        // We only validate id: entries — mod/tag/name resolve at runtime and aren't
-        // always present when loading (e.g. tags are datapack-driven).
-        StageDefinition stage = parseResult.getStageDefinition();
+        return validateParsedStage(fileName, parseResult.getStageDefinition());
+    }
+
+    private FileValidationResult validateParsedStage(String fileName, StageDefinition stage) {
         List<String> invalidItems = new ArrayList<>();
 
         var itemRegistry = net.minecraft.core.registries.BuiltInRegistries.ITEM;
@@ -456,8 +506,8 @@ public class StageFileLoader {
     }
 
     public int countStageFiles() {
-        FileDiscovery discovery = discoverStageFiles();
-        return discovery.error() == null ? discovery.files().size() : 0;
+        StagePackageDiscovery.DiscoveryResult discovery = discoverStageFiles();
+        return discovery.errors().isEmpty() ? discovery.packages().size() + discovery.legacyFiles().size() : 0;
     }
 
     public Optional<StageDefinition> getStage(StageId id) {

@@ -20,6 +20,9 @@
 > Maintainers and integration authors should also read the
 > [Architecture and Project Structure Guide](ARCHITECTURE.md), which follows each file from disk,
 > through parsing and validation, into runtime enforcement, networking, UI, and tests.
+> For the schema 4 three-file packages, secure localhost editor, all thirty rehaul feature groups,
+> migration, automatic client snapshots, and copy-ready tested rehaul examples, use the
+> [ProgressiveStages 3.0.1 Schema 4 and Editor Guide](REHAUL_GUIDE.md).
 >
 > **Want one complete file you can read and copy?** Open
 > [`diamond_stage.toml`](examples/reference/diamond_stage.toml). It is the directly browsable,
@@ -27,6 +30,8 @@
 > safe five minute edit, then use its table of contents to find every lock category and feature.
 > Conditional access authors can also use the focused
 > [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+> The equivalent machine-tested three-file schema 4 reference is the
+> [`examples:diamond` package](examples/rehaul/diamond).
 
 ---
 

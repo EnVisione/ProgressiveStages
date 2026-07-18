@@ -20,6 +20,7 @@ public class ProgressiveStagesKubeJSPlugin implements KubeJSPlugin {
         // Server scripts own the lifecycle/condition registrations; clear them once per server reload.
         if (bindings.type() == ScriptType.SERVER) {
             ScriptHooks.reset();
+            com.enviouse.progressivestages.common.rehaul.extension.ExtensionMetadataRegistry.get().beginReload();
         }
         bindings.add("ProgressiveStages", new PSKubeBindings());
     }
