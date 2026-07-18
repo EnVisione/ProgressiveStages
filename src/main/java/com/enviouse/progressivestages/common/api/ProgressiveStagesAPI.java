@@ -8,6 +8,7 @@ import com.enviouse.progressivestages.common.api.structure.StructureSessionId;
 import com.enviouse.progressivestages.common.api.structure.StructureSessionView;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
+import com.enviouse.progressivestages.common.stage.StageSlotResolver;
 import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
 import com.enviouse.progressivestages.server.triggers.StageCounterData;
@@ -169,7 +170,20 @@ public final class ProgressiveStagesAPI {
     /** True when the stage exists, is not owned, and all dependencies are currently owned. */
     public static boolean isAvailable(ServerPlayer player, StageId stageId) {
         return stageExists(stageId) && !hasStage(player, stageId)
-            && getMissingDependencies(player, stageId).isEmpty();
+            && getMissingDependencies(player, stageId).isEmpty()
+            && getSlotDecision(player, stageId).allowed();
+    }
+
+    public static StageSlotResolver.Decision getSlotDecision(ServerPlayer player, StageId stageId) {
+        StageDefinition definition = getDefinition(stageId).orElse(null);
+        if (definition == null) return StageSlotResolver.Decision.denied("Stage does not exist. " + stageId);
+        return StageManager.getInstance().getSlotDecision(player, definition);
+    }
+
+    public static int getOwnedSlotCount(ServerPlayer player, String group) {
+        if (group == null || group.isBlank()) return 0;
+        return (int) getStages(player).stream().filter(stage -> getDefinition(stage)
+            .map(definition -> definition.getSlotGroup().equalsIgnoreCase(group)).orElse(false)).count();
     }
 
     /** Existing, unowned stages whose dependency policy is currently satisfied. */

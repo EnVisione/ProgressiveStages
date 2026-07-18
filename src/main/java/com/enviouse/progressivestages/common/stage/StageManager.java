@@ -41,6 +41,14 @@ public class StageManager {
     /** One concrete stage removal from its real persistence owner. */
     private record RevokedStage(UUID owner, StageId stageId) {}
 
+    private record GrantResult(List<StageId> granted, List<StageId> replaced, String denial) {
+        private GrantResult {
+            granted = List.copyOf(granted);
+            replaced = List.copyOf(replaced);
+            denial = denial == null ? "" : denial;
+        }
+    }
+
     private static boolean isServerScoped(StageId stageId) {
         return StageOrder.getInstance().getStageDefinition(stageId)
             .map(StageDefinition::isServerScope).orElse(false);
@@ -140,15 +148,27 @@ public class StageManager {
             }
         }
 
-        List<StageId> newlyGranted = grantStageToTeamInternal(teamId, stageId, false);
+        GrantResult result = grantStageToTeamInternal(teamId, stageId, false);
+        if (!result.denial().isBlank()) {
+            player.sendSystemMessage(TextUtil.parseColorCodes("&c" + result.denial()));
+            return;
+        }
+
+        for (StageId replaced : result.replaced()) {
+            UUID owner = storageTeam(teamId, replaced);
+            fireStageChangeEvent(player, owner, replaced,
+                StageChangeType.REVOKED, StageCause.GROUP_POLICY);
+            refundPurchasedStage(player, new RevokedStage(owner, replaced));
+        }
 
         // Fire events for each newly granted stage
-        for (StageId granted : newlyGranted) {
+        for (StageId granted : result.granted()) {
             fireStageChangeEvent(player, storageTeam(teamId, granted), granted, StageChangeType.GRANTED, cause);
             applyRewardsOnce(player, granted);
         }
 
-        if (newlyGranted.stream().anyMatch(StageManager::isServerScoped)) syncAllPlayers();
+        if (java.util.stream.Stream.concat(result.granted().stream(), result.replaced().stream())
+                .anyMatch(StageManager::isServerScoped)) syncAllPlayers();
         else syncToTeamMembers(teamId);
     }
 
@@ -185,10 +205,10 @@ public class StageManager {
      * @param stageId The stage to grant
      * @param bypassDependencies If true, skip dependency checks (admin bypass)
      */
-    private List<StageId> grantStageToTeamInternal(UUID teamId, StageId stageId, boolean bypassDependencies) {
+    private GrantResult grantStageToTeamInternal(UUID teamId, StageId stageId, boolean bypassDependencies) {
         if (!StageOrder.getInstance().stageExists(stageId)) {
             LOGGER.warn("Attempted to grant non-existent stage: {}", stageId);
-            return Collections.emptyList();
+            return new GrantResult(List.of(), List.of(), "Stage does not exist. " + stageId);
         }
 
         TeamStageData data = getTeamStageData();
@@ -203,14 +223,32 @@ public class StageManager {
             toGrant.add(stageId);
         }
 
-        // Grant all stages
-        List<StageId> newlyGranted = new ArrayList<>();
+        Set<StageId> initial = new LinkedHashSet<>(getStages(teamId));
+        Set<StageId> simulated = new LinkedHashSet<>(initial);
+        LinkedHashSet<StageId> replaced = new LinkedHashSet<>();
         for (StageId id : toGrant) {
-            UUID owner = storageTeam(teamId, id);
-            if (data.grantStage(owner, id)) {
-                newlyGranted.add(id);
-                LOGGER.debug("Granted stage {} to storage owner {} (subject team {})", id, owner, teamId);
+            StageDefinition definition = StageOrder.getInstance().getStageDefinition(id).orElse(null);
+            StageSlotResolver.Decision decision = slotDecision(teamId, definition, simulated);
+            if (!decision.allowed()) {
+                return new GrantResult(List.of(), List.of(), decision.explanation());
             }
+            decision.replacements().forEach(replaced::add);
+            simulated.removeAll(decision.replacements());
+            simulated.add(id);
+        }
+
+        List<StageId> removedStages = replaced.stream().filter(initial::contains)
+            .filter(id -> !simulated.contains(id)).toList();
+        for (StageId id : removedStages) {
+            data.revokeStage(storageTeam(teamId, id), id);
+            LOGGER.debug("Replaced stage {} for subject team {}", id, teamId);
+        }
+        List<StageId> newlyGranted = toGrant.stream().filter(simulated::contains)
+            .filter(id -> !initial.contains(id)).toList();
+        for (StageId id : newlyGranted) {
+            UUID owner = storageTeam(teamId, id);
+            data.grantStage(owner, id);
+            LOGGER.debug("Granted stage {} to storage owner {} subject team {}", id, owner, teamId);
         }
 
         if (!newlyGranted.isEmpty()) {
@@ -220,7 +258,25 @@ public class StageManager {
             if (!teamStages.isEmpty()) sendUnlockMessages(teamId, teamStages);
         }
 
-        return newlyGranted;
+        return new GrantResult(newlyGranted, removedStages, "");
+    }
+
+    public StageSlotResolver.Decision getSlotDecision(ServerPlayer player, StageDefinition definition) {
+        UUID teamId = TeamProvider.getInstance().getTeamId(player);
+        return slotDecision(teamId, definition, getStages(teamId));
+    }
+
+    private StageSlotResolver.Decision slotDecision(UUID teamId, StageDefinition definition,
+                                                     Set<StageId> owned) {
+        return StageSlotResolver.resolve(definition, owned,
+            id -> StageOrder.getInstance().getStageDefinition(id),
+            id -> grantTime(teamId, id));
+    }
+
+    private long grantTime(UUID teamId, StageId stageId) {
+        if (server == null) return -1L;
+        return com.enviouse.progressivestages.server.triggers.StageRegressionData.get(server)
+            .getGrantTime(storageTeam(teamId, stageId), stageId);
     }
 
     private void collectRequiredGrantPlan(StageId stageId, Set<StageId> effectiveOwned,
@@ -270,15 +326,27 @@ public class StageManager {
      */
     public void grantStageBypassDependencies(ServerPlayer player, StageId stageId, StageCause cause) {
         UUID teamId = TeamProvider.getInstance().getTeamId(player);
-        List<StageId> newlyGranted = grantStageToTeamInternal(teamId, stageId, true);
+        GrantResult result = grantStageToTeamInternal(teamId, stageId, true);
+        if (!result.denial().isBlank()) {
+            player.sendSystemMessage(TextUtil.parseColorCodes("&c" + result.denial()));
+            return;
+        }
+
+        for (StageId replaced : result.replaced()) {
+            UUID owner = storageTeam(teamId, replaced);
+            fireStageChangeEvent(player, owner, replaced,
+                StageChangeType.REVOKED, StageCause.GROUP_POLICY);
+            refundPurchasedStage(player, new RevokedStage(owner, replaced));
+        }
 
         // Fire events for each newly granted stage
-        for (StageId granted : newlyGranted) {
+        for (StageId granted : result.granted()) {
             fireStageChangeEvent(player, storageTeam(teamId, granted), granted, StageChangeType.GRANTED, cause);
             applyRewardsOnce(player, granted);
         }
 
-        if (newlyGranted.stream().anyMatch(StageManager::isServerScoped)) syncAllPlayers();
+        if (java.util.stream.Stream.concat(result.granted().stream(), result.replaced().stream())
+                .anyMatch(StageManager::isServerScoped)) syncAllPlayers();
         else syncToTeamMembers(teamId);
     }
 
@@ -287,12 +355,25 @@ public class StageManager {
     }
 
     public boolean grantTemporaryStage(ServerPlayer player, StageId stageId, StageCause cause) {
-        if (!StageOrder.getInstance().stageExists(stageId)) return false;
+        StageDefinition definition = StageOrder.getInstance().getStageDefinition(stageId).orElse(null);
+        if (definition == null) return false;
         UUID teamId = TeamProvider.getInstance().getTeamId(player);
+        StageSlotResolver.Decision decision = slotDecision(teamId, definition, getStages(teamId));
+        if (!decision.allowed()) return false;
+        for (StageId replaced : decision.replacements()) {
+            UUID replacedOwner = storageTeam(teamId, replaced);
+            if (getTeamStageData().revokeStage(replacedOwner, replaced)) {
+                fireStageChangeEvent(player, replacedOwner, replaced,
+                    StageChangeType.REVOKED, StageCause.GROUP_POLICY);
+                refundPurchasedStage(player, new RevokedStage(replacedOwner, replaced));
+            }
+        }
         UUID owner = storageTeam(teamId, stageId);
         if (!getTeamStageData().grantStage(owner, stageId)) return false;
         fireStageChangeEvent(player, owner, stageId, StageChangeType.GRANTED, cause);
-        if (isServerScoped(stageId)) syncAllPlayers();
+        if (isServerScoped(stageId) || decision.replacements().stream().anyMatch(StageManager::isServerScoped)) {
+            syncAllPlayers();
+        }
         else syncToTeamMembers(teamId);
         return true;
     }
@@ -341,28 +422,26 @@ public class StageManager {
             StageId revokedStage = change.stageId();
             ServerPlayer affectedPlayer = onlineRepresentative(change.owner(), player).orElse(player);
             fireStageChangeEvent(affectedPlayer, change.owner(), revokedStage, StageChangeType.REVOKED, cause);
-            // v3.0: refund part of the cost ONLY for stages this team actually PURCHASED (consume the
-            // paid flag so it refunds at most once) — never for earned/granted stages.
-            StageOrder.getInstance().getStageDefinition(revokedStage).ifPresent(d -> {
-                if (d.isPurchasable() && d.getCost().refundPercent() > 0 && player.server != null
-                        && com.enviouse.progressivestages.server.triggers.StagePurchaseData
-                            .get(player.server).isPaid(change.owner(), revokedStage)) {
-                    var purchaseData = com.enviouse.progressivestages.server.triggers.StagePurchaseData.get(player.server);
-                    Optional<ServerPlayer> recipient = onlineRepresentative(change.owner(), player);
-                    if (recipient.isPresent() && purchaseData.consumePaid(change.owner(), revokedStage)) {
-                        refundCost(recipient.get(), d.getCost());
-                    } else {
-                        // Never pay another team's refund to the command issuer. Persist it for the
-                        // next member of that team who logs in instead.
-                        purchaseData.deferRefund(change.owner(), revokedStage);
-                    }
-                }
-            });
+            refundPurchasedStage(player, change);
         }
 
         boolean affectedMultipleTeams = serverScoped || revoked.stream()
             .anyMatch(change -> SERVER_TEAM.equals(change.owner()) || !teamId.equals(change.owner()));
         if (affectedMultipleTeams) syncAllPlayers(); else syncToTeamMembers(teamId);
+    }
+
+    private void refundPurchasedStage(ServerPlayer player, RevokedStage change) {
+        StageDefinition definition = StageOrder.getInstance().getStageDefinition(change.stageId()).orElse(null);
+        if (definition == null || !definition.isPurchasable() || definition.getCost().refundPercent() <= 0
+                || player.server == null) return;
+        var purchaseData = com.enviouse.progressivestages.server.triggers.StagePurchaseData.get(player.server);
+        if (!purchaseData.isPaid(change.owner(), change.stageId())) return;
+        Optional<ServerPlayer> recipient = onlineRepresentative(change.owner(), player);
+        if (recipient.isPresent() && purchaseData.consumePaid(change.owner(), change.stageId())) {
+            refundCost(recipient.get(), definition.getCost());
+        } else {
+            purchaseData.deferRefund(change.owner(), change.stageId());
+        }
     }
 
     /** v3.0: return refund_percent of a purchased stage's item/xp cost to the player. */

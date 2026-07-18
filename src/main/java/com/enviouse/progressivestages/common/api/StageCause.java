@@ -91,6 +91,8 @@ public enum StageCause {
     /** Stage changed by KubeJS or another server-side script. */
     SCRIPT,
 
+    GROUP_POLICY,
+
     STRUCTURE_ENTER,
 
     STRUCTURE_LEAVE,

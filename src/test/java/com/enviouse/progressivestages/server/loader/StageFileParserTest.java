@@ -308,6 +308,23 @@ class StageFileParserTest {
         assertTrue(result.getErrorMessage().contains("Unknown active lock category"));
     }
 
+    @Test
+    void parsesConfigurableStageSlotsAndReplacementPolicy() throws IOException {
+        StageFileParser.ParseResult result = StageFileParser.parseWithErrors(write("slots.toml", """
+            [stage]
+            id = "slot_test"
+            slot_group = "beginner_classes"
+            slot_limit = 2
+            slot_policy = "replace_oldest"
+            """));
+
+        assertTrue(result.isSuccess(), result.getErrorMessage());
+        assertEquals("beginner_classes", result.getStageDefinition().getSlotGroup());
+        assertEquals(2, result.getStageDefinition().getSlotLimit());
+        assertEquals(com.enviouse.progressivestages.common.config.StageSlotPolicy.REPLACE_OLDEST,
+            result.getStageDefinition().getSlotPolicy());
+    }
+
     private Path write(String name, String contents) throws IOException {
         Path file = temporaryDirectory.resolve(name);
         Files.writeString(file, contents);

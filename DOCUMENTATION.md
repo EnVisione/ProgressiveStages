@@ -82,6 +82,7 @@
    - [4.34 Temporary, triggered, and priority-based lock rules](#434-temporary-triggered-and-priority-based-lock-rules) — **New in 3.0.1**
    - [4.35 Structure session providers, leased stages, and active locks](#435-structure-session-providers-leased-stages-and-active-locks) — **New in 3.0.1**
    - [4.36 `[[drop_modifiers]]` — selector based block output bonuses](#436-drop_modifiers--selector-based-block-output-bonuses) — **New in 3.0.1**
+   - [4.37 Stage slots, class limits, replacements, and stacking](#437-stage-slots-class-limits-replacements-and-stacking) — **New in 3.0.1**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -245,10 +246,11 @@ server/instance. Per-world stage state lives inside each world's saved data.
 > stage file's `[[triggers]]` block (see §5). A leftover legacy `triggers.toml`
 > is simply ignored.
 
-Thirty schema 4 stage packages are generated on first launch if the stages directory is empty.
-They form a complete branching class tree with independent roots, single-path evolutions, hybrid
-classes, item purchases, automatic grants, rewards, temporary conditions, modifiers, challenges,
-and an at-least-three finale. See the [Showcase Pack Guide](SHOWCASE_PACK.md) for every stage and a
+Fifty schema 4 stage packages are generated on first launch if the stages directory is empty.
+They form a complete branching class tree with three limited beginner paths, evolutions, merged
+classes, stackable specialists, replaceable modes, temporary powers, item purchases, automatic
+grants, rewards, conditions, modifiers, challenges, and an at-least-three finale. See the
+[Showcase Pack Guide](SHOWCASE_PACK.md) for every stage and a
 manual verification checklist. Existing stage files are never deleted, replaced, or supplemented
 with the showcase during an update.
 
@@ -260,7 +262,7 @@ new installations.
 
 ## 3. Quick Start — Your First Stage in 90 Seconds
 
-1. Launch the game once with ProgressiveStages installed. Thirty showcase stage package folders
+1. Launch the game once with ProgressiveStages installed. Fifty showcase stage package folders
    appear in `config/progressivestages/stages/` when that directory was empty.
 
 2. Run `/pstages editor`, select a showcase stage, or click the gold plus button to create one. If
@@ -366,7 +368,7 @@ To create a stage without knowing TOML:
 2. Type `Iron Age` in `Stage name`. Do not type `pack:` and do not add `.toml`.
 3. Leave the collapsed pack name at `pack`, or change it to the modpack namespace.
 4. Confirm the preview, such as `pack:iron_age`, and click `Create stage`.
-5. Fill out the stage name, description, icon, required stages, team or server ownership, map
+5. Fill out the stage name, description, icon, required stages, stage slots, team or server ownership, map
    category, color, frame, reveal policy, and advancement background.
    `Required stages` is a visual branch builder. It lists existing stages as selectable cards,
    explains each card's parents, prevents dependency cycles, and previews selected paths flowing
@@ -391,10 +393,11 @@ To create a stage without knowing TOML:
     optional enchantment and level, multiplier, addition, priority, and exclusive stacking. This
     creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates 32-diamond purchase
     plus a Fortune-only double-diamond rule.
-11. Drag advanced rule cards to organize them. Open `Stage graph` and drag stage nodes to save
-    their map coordinates. The graph stays inside its own scrollable canvas even when a node is
-    moved far from the origin. Automatic layout puts beginner stages at the bottom and evolutions
-    above them. `Arrange paths upward` clears manual coordinates and restores that branching view.
+11. Drag advanced rule cards to organize them. Open `Stage graph`, filter by category, search with
+    prerequisite ancestry, zoom, fit the complete graph, or drag nodes to save their coordinates.
+    Curved connectors follow at every zoom. Automatic layout puts beginner stages at the bottom,
+    reduces crossings, and places evolutions above them. `Arrange paths upward` clears manual
+    coordinates and restores that branching view.
 12. Click `Check my work`. Then click `Review and apply`, inspect the file diff, and confirm.
 
 The easy builder writes the same schema that a TOML expert would write. There is no reduced
@@ -402,7 +405,7 @@ runtime, separate simple-rule engine, or client-only shortcut. Priority, exclusi
 conditions, registry prefixes, viewer policy, server validation, transaction backup, reload, and
 client synchronization all use the normal authoritative implementation.
 
-For example, make Mage, Warrior, Paladin, and Healer with no required stages. Edit Wizard and
+For example, make Mage, Warrior, and Ranger with no required stages. Edit Wizard and
 Warlock and select only Mage. Edit Knight and select only Warrior. Edit Wizard Knight, select both
 Wizard and Knight, and leave the path rule on `Require every selected path`. The resulting TOML is
 equivalent to:
@@ -1705,6 +1708,9 @@ category = "Endgame"       # group label in the GUI
 scope    = "server"        # SERVER-WIDE stage (default "team")
 duration = "2h"            # temporary stage (see §4.25)
 tags     = ["combat", "tier2"]   # New in 3.0 — labels for /stage tag ... (§7.1)
+slot_group = "beginner_paths"    # New in 3.0.1 — shared ownership pool
+slot_limit = 2                    # two members of this group may be active
+slot_policy = "deny"             # behavior when the group is full
 ```
 
 | Field | Type | Meaning |
@@ -1717,6 +1723,9 @@ tags     = ["combat", "tier2"]   # New in 3.0 — labels for /stage tag ... (§7
 | `tags` | list | **New in 3.0.** Free-form **labels** for this stage (lower-cased on load). They group stages for the bulk `/stage tag grant\|revoke\|list <tag>` commands (§7.1) — e.g. tag every combat-tier stage `"combat"` and grant them all at once. Tags have **no** gating effect on their own; they're purely an authoring/admin convenience. |
 | `dependency_mode` | string | **New in 3.0.** `"all"` (default), `"any"`, or `"at_least"`. This enables alternate branches and quorum progression without scripts. |
 | `dependency_count` | integer | Required direct-dependency count for `dependency_mode = "at_least"`; clamped to the declared dependency list. |
+| `slot_group` | string | **New in 3.0.1.** Lowercase group identity shared by stages whose simultaneous ownership is controlled together. Letters, numbers, `_`, `.`, and `-` are accepted. Blank means no group. |
+| `slot_limit` | integer | **New in 3.0.1.** Maximum active members from this group. `0` means unlimited and lets every member stack. Maximum accepted value is 1024. A positive value requires `slot_group`. |
+| `slot_policy` | string | **New in 3.0.1.** `deny`, `replace_oldest`, `replace_lowest_priority`, or `replace_all`. See §4.37. |
 
 > **Activated in 2.5.** Prior to 2.5, `hidden` / `color` / `category` were
 > **parsed but inert**. As of 2.5 they take effect in the Stage Tree GUI exactly
@@ -2298,10 +2307,81 @@ modifiers. This prevents a hidden real ore from leaking its multiplied real outp
 stage ownership are read at break time, so grants, revokes, temporary stage changes, and reloads
 take effect without a relog.
 
-The first-launch [Showcase Pack](SHOWCASE_PACK.md) contains Diamond Engineer. It requires Miner and
-Mechanist, costs 32 diamonds, and doubles only diamond item output from diamond or deepslate
+The first-launch [Showcase Pack](SHOWCASE_PACK.md) contains Diamond Engineer. It requires Iron
+Engineer, costs 32 diamonds, and doubles only diamond item output from diamond or deepslate
 diamond ore when the used pickaxe has at least Fortune I. The easy editor exposes the same system
 under **Targeted mining bonus**.
+
+### 4.37 Stage slots, class limits, replacements, and stacking
+
+Stage slots control how many related stages may be owned at the same time. They are general-purpose:
+the server does not hardcode concepts such as class, job, mode, or specialization. The group name
+defines the meaning for your pack.
+
+This example allows two of three beginner paths:
+
+```toml
+[stage]
+id = "mage"
+slot_group = "beginner_paths"
+slot_limit = 2
+slot_policy = "deny"
+```
+
+Put the same three values in Warrior and Ranger. A team may own Mage plus Warrior or Mage plus
+Ranger, but a third member is denied. The group remains server authoritative for purchases,
+commands, triggers, temporary session grants, Java, and KubeJS.
+
+Use unlimited stacking for upgrade tiers whose bonuses should accumulate:
+
+```toml
+[stage]
+id = "diamond_engineer"
+dependency = "iron_engineer"
+slot_group = "engineering_tiers"
+slot_limit = 0
+slot_policy = "deny"
+```
+
+`slot_limit = 0` disables the limit without removing the useful group label. Coal, Iron, Diamond,
+and Netherite Engineer can all remain owned, so each stage's rules and modifiers remain active.
+
+Use automatic replacement for mutually exclusive modes:
+
+```toml
+[stage]
+id = "silk_mode"
+slot_group = "mining_modes"
+slot_limit = 1
+slot_policy = "replace_oldest"
+```
+
+| Policy | Exact behavior when a grant would exceed the limit |
+|---|---|
+| `deny` | Reject the complete grant before changing ownership or charging a purchase. |
+| `replace_oldest` | Revoke only as many oldest-owned group members as necessary. Grant time breaks ties before stage ID. |
+| `replace_lowest_priority` | Revoke the members with the lowest `[stage].priority` first. Oldest grant and stage ID break ties. |
+| `replace_all` | Revoke every currently owned member of the group, then grant the new stage. |
+
+All members of one group must declare the same limit, policy, and ownership scope. `/pstages
+validate`, editor review, and reload reject inconsistent groups. This prevents one member from
+claiming the group holds one stage while another claims it holds three.
+
+When a policy replaces a stage, the normal revoke event fires with cause `GROUP_POLICY`. Attribute,
+ability, rule, recipe-viewer, and client caches reconcile immediately. The in-game stage details
+show the group name, active count, limit, and policy. A rejected purchase does not consume its
+items or XP. A replaced stage that was purchased receives its normal configured `refund_percent`;
+earned or command-granted stages cannot mint a refund.
+
+In `/pstages editor`, select the stage and open **Stage slots and stacking**. The guided form asks
+for a group, maximum active count, and full-group policy. It can apply the configuration to every
+existing member in one operation. Advanced authors can edit the three keys in `stage.toml`.
+
+The generated [fifty stage showcase](SHOWCASE_PACK.md) contains all three common patterns:
+
+- `beginner_paths` permits any two of Mage, Warrior, and Ranger, then denies a third.
+- `engineering_tiers` has no limit, so the six engineering bonuses stack.
+- `mining_modes` permits one mode and replaces it when another mode is acquired.
 
 ## 5. Triggers — The Per-Stage `[[triggers]]` System
 
@@ -3246,7 +3326,7 @@ ProgressiveStages.progressCondition('reputation', player => getReputation(player
 | `ProgressiveStages.grantMany/revokeMany(player, stages)` | int | Bulk requested-target change count |
 | `ProgressiveStages.grantAll/revokeAll(player)` | int | Bulk change every defined/owned stage |
 | `ProgressiveStages.exists('stage')` | boolean | Does the definition exist |
-| `ProgressiveStages.available(player, 'stage')` | boolean | Exists, unowned, dependencies satisfied |
+| `ProgressiveStages.available(player, 'stage')` | boolean | Exists, unowned, dependencies satisfied, and its slot policy permits the grant |
 | `ProgressiveStages.hasAll/hasAny(player, stages)` | boolean | Collection ownership tests |
 | `ProgressiveStages.dependencies('stage')` | string[] | Declared dependencies |
 | `ProgressiveStages.missingDependencies(player, 'stage')` | string[] | Dependencies still needed |
@@ -3256,7 +3336,8 @@ ProgressiveStages.progressCondition('reputation', player => getReputation(player
 | `ProgressiveStages.withCategory/categories()` | string[] | Category lookup/discovery |
 | `ProgressiveStages.list/owned(player)` | string[] | All owned stage ids |
 | `ProgressiveStages.all/locked/availableStages(...)` | string[] | Definition and player-state lists |
-| `ProgressiveStages.info('stage')` | object | Script-friendly definition snapshot |
+| `ProgressiveStages.info('stage')` | object | Script-friendly definition snapshot including slot group, limit, and policy |
+| `ProgressiveStages.slot(player, 'stage')` | object | Slot group, limit, policy, active count, allowed state, replacements, and denial explanation |
 | `ProgressiveStages.progress(player, 'stage')` | object | Full rule and condition progress snapshot |
 | `ProgressiveStages.percent(player, 'stage')` | int `0..100` | The stage's `[[triggers]]` completion % |
 | `ProgressiveStages.counter(player, 'name')` | long | Read a named `custom_counter` |
@@ -3441,6 +3522,9 @@ Set<StageId> all = ProgressiveStagesAPI.getAllStageIds();
 boolean has = ProgressiveStagesAPI.hasStage(player, "diamond_age");
 Set<StageId> stages = ProgressiveStagesAPI.getStages(player);
 List<StageId> available = ProgressiveStagesAPI.getAvailableStages(player);
+StageSlotResolver.Decision slot = ProgressiveStagesAPI.getSlotDecision(player,
+    StageId.parse("diamond_engineer"));
+int activeEngineers = ProgressiveStagesAPI.getOwnedSlotCount(player, "engineering_tiers");
 
 // Mutations (fire StageChangeEvent / StagesBulkChangedEvent)
 ProgressiveStagesAPI.grantStage(player, StageId.parse("iron_age"), StageCause.QUEST_REWARD);
@@ -3841,7 +3925,7 @@ server/
   integration/
     FTBTeamsIntegration.java         ← FTB Teams membership wiring
   loader/
-    DefaultShowcaseStages.java       ← thirty schema 4 first-launch showcase packages
+    DefaultShowcaseStages.java       ← fifty schema 4 first-launch showcase packages
     DefaultStageTemplates.java       ← legacy one-file documentation and compatibility references
     StageFileLoader.java             ← directory scan + reload; datapack/config merge + deep validate (2.5)
     StageFileParser.java             ← TOML → StageDefinition (parses [[triggers]] + [display])
@@ -3912,7 +3996,7 @@ compat/                              ← every soft-dep integration
 
 The first-launch showcase is generated by
 [`DefaultShowcaseStages`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultShowcaseStages.java).
-It emits thirty schema 4 packages and ninety files only when no stages already exist. The complete
+It emits fifty schema 4 packages and one hundred fifty files only when no stages already exist. The complete
 tree is documented in [SHOWCASE_PACK.md](SHOWCASE_PACK.md).
 
 [`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java)

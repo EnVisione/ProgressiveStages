@@ -55,7 +55,8 @@
     sourceDirty: false,
     activeInput: null,
     modalCleanup: null,
-    dragRule: null
+    dragRule: null,
+    graphZoom: 1
   };
 
   const $ = id => document.getElementById(id);
@@ -201,6 +202,9 @@
     const background = stringValue(readTomlValue(stageText, "display.background")) || "minecraft:textures/gui/advancements/backgrounds/stone.png";
     const category = stringValue(readTomlValue(stageText, "stage.category"));
     const color = stringValue(readTomlValue(stageText, "stage.color")) || "#e3aa32";
+    const slotGroup = stringValue(readTomlValue(stageText, "stage.slot_group"));
+    const slotLimit = Math.max(0, Number(readTomlValue(stageText, "stage.slot_limit") || 0));
+    const slotPolicy = stringValue(readTomlValue(stageText, "stage.slot_policy")) || "deny";
     $("formView").innerHTML = `
       <section class="stage-hero"><span class="hero-icon">◆</span><div><h1>${escapeHtml(stage.name)}</h1><p>${escapeHtml(stage.description || "Add a short explanation for players.")}</p></div><span class="stage-id">${escapeHtml(stage.id)}</span></section>
       ${stage.legacy ? `<div class="validation-ok"><strong>Classic stage detected.</strong><p>You can edit its details and normal lock lists here. Create or duplicate it as a three file stage to use temporary rules and the full progression builder.</p></div>` : ""}
@@ -209,6 +213,7 @@
         <label>Icon item<div class="input-with-button"><input data-stage-field="stage.icon" value="${escapeHtml(stage.icon)}"><button type="button" data-browse-field="stage.icon" data-catalog="items">Browse</button></div></label>
         <label class="wide-field">Description<textarea rows="2" data-stage-field="stage.description">${escapeHtml(stage.description)}</textarea></label>
         <div class="dependency-field"><span>Required stages</span><div class="dependency-summary"><div class="dependency-copy"><strong>${escapeHtml(dependencySummary(dependencies, dependencyMode, dependencyCount))}</strong><small>${dependencies.length ? "These branches flow upward into this stage." : "This is a beginner or root stage."}</small><div class="dependency-chips">${dependencies.map(id => `<span class="dependency-chip">${escapeHtml(stageName(id))}</span>`).join("")}</div></div><button type="button" id="editDependencies">Choose stages and paths</button></div></div>
+        <div class="dependency-field"><span>Stage slots and stacking</span><div class="dependency-summary"><div class="dependency-copy"><strong>${escapeHtml(slotGroup ? slotLimit > 0 ? `${slotLimit} active in ${title(slotGroup)}` : `All ${title(slotGroup)} stages stack` : "No slot group. Always stacks.")}</strong><small>${slotGroup && slotLimit > 0 ? `When full the policy is ${slotPolicy.replaceAll("_", " ")}.` : "Use groups to limit beginner classes modes or specialist buffs."}</small></div><button type="button" id="editSlots">Configure slots</button></div></div>
         <label>Ownership<select data-stage-field="stage.scope"><option value="team" ${scope === "team" ? "selected" : ""}>Team shares it</option><option value="server" ${scope === "server" ? "selected" : ""}>Whole server shares it</option></select></label>
         <label>Map category<input data-stage-field="stage.category" value="${escapeHtml(category)}" placeholder="Main progression"></label>
         <label>Map color<input data-stage-field="stage.color" value="${escapeHtml(color)}" placeholder="#e3aa32"></label>
@@ -264,6 +269,7 @@
       onPick: value => { const input = q(`[data-stage-field="${button.dataset.browseField}"]`); input.value = stripSelectorPrefix(value); input.dispatchEvent(new Event("change")); }
     }));
     $("editDependencies").onclick = openDependencyEditor;
+    $("editSlots").onclick = () => openSlotEditor(stage);
     $("addRule").onclick = () => openRuleEditor(stage, null);
     qa("[data-edit-rule]", $("formView")).forEach(button => button.onclick = () => openRuleEditor(stage, rules[Number(button.dataset.editRule)]));
     qa("[data-delete-rule]", $("formView")).forEach(button => button.onclick = () => deleteRule(stage, rules[Number(button.dataset.deleteRule)]).catch(error => toast(error.message)));
@@ -347,6 +353,61 @@
       };
       renderOptions();
       renderPolicy();
+    });
+  }
+
+  function openSlotEditor(stage) {
+    const content = state.boot.draft.files[stage.stagePath] || "";
+    const currentGroup = stringValue(readTomlValue(content, "stage.slot_group"));
+    const currentLimit = Math.max(0, Number(readTomlValue(content, "stage.slot_limit") || 0));
+    const currentPolicy = stringValue(readTomlValue(content, "stage.slot_policy")) || "deny";
+    const knownGroups = [...new Set(stagePackages().map(candidate => stringValue(readTomlValue(
+      state.boot.draft.files[candidate.stagePath] || "", "stage.slot_group"))).filter(Boolean))].sort();
+    openModal(`<h2 id="modalTitle">Configure stage slots and stacking</h2><p>Put related stages in one group. Zero means every stage in the group stays active and all of their buffs stack.</p><form id="slotForm"><div class="modal-grid">
+      <label class="wide-field">Group name<input id="slotGroup" list="slotGroups" value="${escapeHtml(currentGroup)}" placeholder="beginner_classes"><datalist id="slotGroups">${knownGroups.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(title(group))}</option>`).join("")}</datalist><small>Leave blank when this stage should never consume a slot.</small></label>
+      <label>Maximum active stages<input id="slotLimit" type="number" min="0" max="1024" value="${currentLimit}"><small>Zero allows every stage in this group to stack.</small></label>
+      <label>When the group is full<select id="slotPolicy"><option value="deny">Block the new stage</option><option value="replace_oldest">Replace the oldest stage</option><option value="replace_lowest_priority">Replace the lowest priority stage</option><option value="replace_all">Replace every active stage</option></select></label>
+      <div id="slotExplanation" class="dependency-mode-help"></div>
+      <label class="toggle-line"><input id="slotApplyGroup" type="checkbox" ${currentGroup ? "checked" : ""}>Apply these settings to every stage already using this group</label>
+    </div><div class="modal-actions"><button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">Save slot behavior</button></div></form>`, () => {
+      $("slotPolicy").value = currentPolicy;
+      const explain = () => {
+        const group = slug($("slotGroup").value);
+        const limit = Math.max(0, Number($("slotLimit").value || 0));
+        $("slotPolicy").disabled = !group || limit === 0;
+        $("slotExplanation").textContent = !group ? `${stage.name} has no slot group and always stacks.`
+          : limit === 0 ? `Every ${title(group)} stage can remain active. Their compatible buffs stack.`
+          : `A player can own ${limit} ${title(group)} stage${limit === 1 ? "" : "s"} at once.`;
+      };
+      $("slotGroup").oninput = explain;
+      $("slotLimit").oninput = explain;
+      $("slotPolicy").onchange = explain;
+      $("slotForm").onsubmit = async event => {
+        event.preventDefault();
+        const group = slug($("slotGroup").value);
+        const limit = group ? Math.max(0, Math.min(1024, Number($("slotLimit").value || 0))) : 0;
+        const policy = limit > 0 ? $("slotPolicy").value : "deny";
+        const applyGroup = $("slotApplyGroup").checked;
+        const targets = stagePackages().filter(candidate => {
+          if (candidate.key === stage.key) return true;
+          if (!applyGroup) return false;
+          const candidateGroup = stringValue(readTomlValue(
+            state.boot.draft.files[candidate.stagePath] || "", "stage.slot_group"));
+          return candidateGroup && (candidateGroup === currentGroup || candidateGroup === group);
+        });
+        try {
+          for (const target of targets) {
+            let updated = state.boot.draft.files[target.stagePath] || "";
+            updated = upsertToml(updated, "stage.slot_group", group);
+            updated = upsertToml(updated, "stage.slot_limit", limit);
+            updated = upsertToml(updated, "stage.slot_policy", policy);
+            await mutate(target.stagePath, updated);
+          }
+          closeModal();
+          toast(`Slot behavior saved for ${targets.length} stage${targets.length === 1 ? "" : "s"}`);
+        } catch (error) { toast(error.message); }
+      };
+      explain();
     });
   }
 
@@ -1020,13 +1081,46 @@
 
   function renderGraph() {
     if (!state.boot) return;
-    const stages = stagePackages().filter(stage => !stage.archived);
+    const allStages = stagePackages().filter(stage => !stage.archived);
+    const categorySelect = $("graphCategory");
+    const graphCategories = [...new Set(allStages.map(stage => stringValue(readTomlValue(
+      state.boot.draft.files[stage.stagePath] || "", "stage.category")).trim()).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+    const selectedCategory = categorySelect?.value || "";
+    if (categorySelect) {
+      categorySelect.innerHTML = `<option value="">All categories</option>` + graphCategories.map(category =>
+        `<option value="${escapeHtml(category)}" ${category === selectedCategory ? "selected" : ""}>${escapeHtml(category)}</option>`).join("");
+    }
+    const search = ($("graphSearch")?.value || "").trim().toLowerCase();
+    const allById = Object.fromEntries(allStages.map(stage => [stage.id, stage]));
+    const directIds = new Set(allStages.filter(stage => {
+      const content = state.boot.draft.files[stage.stagePath] || "";
+      const category = stringValue(readTomlValue(content, "stage.category")).trim();
+      return (!selectedCategory || category === selectedCategory)
+        && (!search || `${stage.name} ${stage.id} ${stage.description}`.toLowerCase().includes(search));
+    }).map(stage => stage.id));
+    const visibleIds = new Set(directIds);
+    const includeAncestors = id => {
+      const stage = allById[id];
+      if (!stage) return;
+      const content = state.boot.draft.files[stage.stagePath] || "";
+      for (const dependency of dependenciesFor(content, stage.legacy)) {
+        if (visibleIds.has(dependency)) continue;
+        visibleIds.add(dependency);
+        includeAncestors(dependency);
+      }
+    };
+    [...visibleIds].forEach(includeAncestors);
+    const stages = allStages.filter(stage => visibleIds.has(stage.id));
     const base = stages.map(stage => {
       const content = state.boot.draft.files[stage.stagePath] || "";
-      const rawX = Number(readTomlValue(content, "display.x"));
-      const rawY = Number(readTomlValue(content, "display.y"));
+      const rawXText = readTomlValue(content, "display.x").trim();
+      const rawYText = readTomlValue(content, "display.y").trim();
+      const rawX = Number(rawXText);
+      const rawY = Number(rawYText);
       return {
-        stage, rawX, rawY, dependencies: dependenciesFor(content, stage.legacy),
+        stage, rawX, rawY, hasManual: Boolean(rawXText && rawYText),
+        dependencies: dependenciesFor(content, stage.legacy),
         mode: stringValue(readTomlValue(content, "stage.dependency_mode")) || "all",
         count: Math.max(1, Number(readTomlValue(content, "stage.dependency_count") || 1))
       };
@@ -1046,9 +1140,38 @@
     const maxDepth = Math.max(0, ...Object.values(depths));
     const lanes = {};
     base.forEach(node => (lanes[depths[node.stage.id]] ??= []).push(node));
-    Object.values(lanes).forEach(lane => lane.sort((left, right) => left.stage.name.localeCompare(right.stage.name)));
+    Object.values(lanes).forEach(lane => lane.sort((left, right) => {
+      const leftCategory = stringValue(readTomlValue(state.boot.draft.files[left.stage.stagePath] || "", "stage.category"));
+      const rightCategory = stringValue(readTomlValue(state.boot.draft.files[right.stage.stagePath] || "", "stage.category"));
+      return leftCategory.localeCompare(rightCategory) || left.stage.name.localeCompare(right.stage.name);
+    }));
+    const children = {};
+    base.forEach(node => node.dependencies.forEach(parent => (children[parent] ??= []).push(node.stage.id)));
+    const orderByNeighbors = (depth, neighborDepth, idsFor) => {
+      const lane = lanes[depth] || [];
+      const neighbor = lanes[neighborDepth] || [];
+      const positions = Object.fromEntries(neighbor.map((node, index) => [node.stage.id, index]));
+      const original = Object.fromEntries(lane.map((node, index) => [node.stage.id, index]));
+      const score = node => {
+        const values = idsFor(node).map(id => positions[id]).filter(value => value != null);
+        return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length
+          : original[node.stage.id];
+      };
+      lane.sort((left, right) => score(left) - score(right)
+        || left.stage.name.localeCompare(right.stage.name));
+    };
+    for (let pass = 0; pass < 4; pass++) {
+      for (let depth = 1; depth <= maxDepth; depth++) {
+        orderByNeighbors(depth, depth - 1, node => node.dependencies);
+      }
+      for (let depth = maxDepth - 1; depth >= 0; depth--) {
+        orderByNeighbors(depth, depth + 1, node => children[node.stage.id] || []);
+      }
+    }
     const widestLane = Math.max(1, ...Object.values(lanes).map(lane => lane.length));
-    const autoWidth = Math.max(820, widestLane * 215 + 80);
+    const viewportWidth = $("graphViewport")?.clientWidth || 0;
+    const autoWidth = Math.max(820, viewportWidth - 8, widestLane * 215 + 80);
+    const autoHeight = Math.max(520, 110 + (maxDepth + 1) * 135);
     const nodes = base.map(node => {
       const depth = depths[node.stage.id];
       const lane = lanes[depth];
@@ -1056,20 +1179,67 @@
       const laneWidth = lane.length * 215;
       const autoX = Math.max(35, (autoWidth - laneWidth) / 2 + index * 215 + 20);
       const autoY = 45 + (maxDepth - depth) * 135;
-      const manual = Number.isFinite(node.rawX) && Number.isFinite(node.rawY) && (node.rawX !== 0 || node.rawY !== 0);
+      const manual = node.hasManual && Number.isFinite(node.rawX) && Number.isFinite(node.rawY)
+        && (node.rawX !== 0 || node.rawY !== 0) && node.rawX >= 0 && node.rawY >= 0
+        && node.rawX <= autoWidth * 2 && node.rawY <= autoHeight * 2;
       return { ...node, x: manual ? node.rawX : autoX, y: manual ? node.rawY : autoY };
     });
     const byId = Object.fromEntries(nodes.map(node => [node.stage.id, node]));
     const maxX = Math.max(autoWidth, ...nodes.map(node => node.x + 220));
-    const maxY = Math.max(520, 110 + (maxDepth + 1) * 135, ...nodes.map(node => node.y + 130));
-    const lines = nodes.flatMap(node => node.dependencies.map(id => byId[id] ? { from: byId[id], to: node } : null).filter(Boolean)).map(({ from, to }) => `<line x1="${from.x + 82}" y1="${from.y + 22}" x2="${to.x + 82}" y2="${to.y + 22}"/>`).join("");
+    const maxY = Math.max(autoHeight, ...nodes.map(node => node.y + 130));
+    const lines = nodes.flatMap(node => node.dependencies.map(id => byId[id]
+      ? { from: byId[id], to: node } : null).filter(Boolean)).map(({ from, to }) =>
+        graphPath(from.stage.key, to.stage.key, from.x + 89, from.y, to.x + 89, to.y + 52)).join("");
     $("graph").style.width = `${maxX}px`;
     $("graph").style.height = `${maxY}px`;
+    $("graph").style.zoom = state.graphZoom;
     $("graph").innerHTML = `<svg class="graph-lines" viewBox="0 0 ${maxX} ${maxY}" preserveAspectRatio="none">${lines}</svg>` + nodes.map(node => `<button class="graph-node" data-graph-stage="${escapeHtml(node.stage.key)}" style="left:${node.x}px;top:${node.y}px" title="Drag to position. Click to edit."><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button>`).join("");
+    if ($("graphStatus")) $("graphStatus").textContent = `${nodes.length} stages shown. ${directIds.size < nodes.length ? `${nodes.length - directIds.size} prerequisite paths included. ` : ""}Invalid saved positions use automatic layout.`;
     qa("[data-graph-stage]", $("graph")).forEach(node => {
       node.onclick = () => selectStage(node.dataset.graphStage);
       node.onpointerdown = event => dragGraphNode(event, node);
     });
+  }
+
+  function graphPath(fromKey, toKey, x1, y1, x2, y2) {
+    const middle = Math.round((y1 + y2) / 2);
+    return `<path data-graph-from="${escapeHtml(fromKey)}" data-graph-to="${escapeHtml(toKey)}" d="M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}"/>`;
+  }
+
+  function updateGraphConnections() {
+    qa("[data-graph-from]", $("graph")).forEach(path => {
+      const from = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === path.dataset.graphFrom);
+      const to = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === path.dataset.graphTo);
+      if (!from || !to) return;
+      const x1 = parseInt(from.style.left) + 89;
+      const y1 = parseInt(from.style.top);
+      const x2 = parseInt(to.style.left) + 89;
+      const y2 = parseInt(to.style.top) + 52;
+      const middle = Math.round((y1 + y2) / 2);
+      path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}`);
+    });
+  }
+
+  function fitGraphViewport() {
+    const viewport = $("graphViewport");
+    const graph = $("graph");
+    if (!viewport || !graph) return;
+    const width = Math.max(1, parseFloat(graph.style.width) || graph.scrollWidth);
+    const height = Math.max(1, parseFloat(graph.style.height) || graph.scrollHeight);
+    const scale = Math.min(1, (viewport.clientWidth - 24) / width, (viewport.clientHeight - 24) / height);
+    setGraphZoom(scale);
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
+  }
+
+  function setGraphZoom(value) {
+    state.graphZoom = Math.max(0.2, Math.min(1.5, Math.round(value * 20) / 20));
+    if ($("graph")) $("graph").style.zoom = state.graphZoom;
+    if ($("graphZoomValue")) $("graphZoomValue").textContent = `${Math.round(state.graphZoom * 100)}%`;
+  }
+
+  function changeGraphZoom(amount) {
+    setGraphZoom(state.graphZoom + amount);
   }
 
   function graphDependencyLabel(node) {
@@ -1088,6 +1258,7 @@
       if (updated !== content) await mutate(stage.stagePath, updated);
     }
     renderGraph();
+    fitGraphViewport();
     toast("All paths arranged upward in the draft");
   }
 
@@ -1097,10 +1268,12 @@
     const startY = event.clientY;
     const left = parseInt(node.style.left);
     const top = parseInt(node.style.top);
+    const scale = state.graphZoom || 1;
     node.setPointerCapture(event.pointerId);
     node.onpointermove = move => {
-      node.style.left = Math.max(0, Math.round(left + move.clientX - startX)) + "px";
-      node.style.top = Math.max(0, Math.round(top + move.clientY - startY)) + "px";
+      node.style.left = Math.max(0, Math.round(left + (move.clientX - startX) / scale)) + "px";
+      node.style.top = Math.max(0, Math.round(top + (move.clientY - startY) / scale)) + "px";
+      updateGraphConnections();
     };
     node.onpointerup = async move => {
       node.onpointermove = null;
@@ -1137,7 +1310,10 @@
     state.view = view;
     qa(".tabs button").forEach(button => button.classList.toggle("active", button.dataset.view === view));
     for (const name of ["form", "source", "graph"]) $(name + "View").classList.toggle("hidden", name !== view);
-    if (view === "graph") renderGraph();
+    if (view === "graph") {
+      renderGraph();
+      requestAnimationFrame(fitGraphViewport);
+    }
     if (view === "source") renderSourceTabs();
   }
 
@@ -1775,6 +1951,11 @@
   $("deleteStage").onclick = () => deleteStage().catch(error => toast(error.message));
   $("settings").onclick = selectSettings;
   $("autoArrangeGraph").onclick = () => autoArrangeGraph().catch(error => toast(error.message));
+  $("fitGraph").onclick = fitGraphViewport;
+  $("graphZoomOut").onclick = () => changeGraphZoom(-0.1);
+  $("graphZoomIn").onclick = () => changeGraphZoom(0.1);
+  $("graphCategory").onchange = () => { renderGraph(); requestAnimationFrame(fitGraphViewport); };
+  $("graphSearch").oninput = debounce(() => { renderGraph(); requestAnimationFrame(fitGraphViewport); }, 180);
   $("theme").onclick = () => document.documentElement.classList.toggle("light");
   $("validate").onclick = () => validate().catch(error => toast(error.message));
   $("review").onclick = () => review().catch(error => toast(error.message));

@@ -43,6 +43,7 @@ public class ClientStageCache {
                                       boolean showTooltip, boolean showDescriptionOnTooltip,
                                       boolean hasTriggers,
                                       boolean hidden, String color, String category,
+                                      String slotGroup, int slotLimit, String slotPolicy,
                                       Integer uiX, Integer uiY, String uiFrame,
                                       String uiBackground, String uiReveal, int uiSortOrder) {
     }
@@ -63,6 +64,26 @@ public class ClientStageCache {
     public static String getCategory(StageId stageId) {
         StageDefinitionData def = stageDefinitions.get(stageId);
         return def != null ? def.category() : "";
+    }
+
+    public static String getSlotGroup(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.slotGroup() : "";
+    }
+
+    public static int getSlotLimit(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.slotLimit() : 0;
+    }
+
+    public static String getSlotPolicy(StageId stageId) {
+        StageDefinitionData def = stageDefinitions.get(stageId);
+        return def != null ? def.slotPolicy() : "deny";
+    }
+
+    public static int getOwnedSlotCount(String group) {
+        if (group == null || group.isBlank()) return 0;
+        return (int) stages.stream().filter(stage -> getSlotGroup(stage).equalsIgnoreCase(group)).count();
     }
 
     public static Optional<Integer> getUiX(StageId stageId) {

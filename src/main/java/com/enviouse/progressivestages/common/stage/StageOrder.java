@@ -312,7 +312,17 @@ public class StageOrder {
         List<String> errors = new ArrayList<>(candidate.validateDependencies());
         Set<StageId> stageIds = definitions.stream().map(StageDefinition::getId).collect(java.util.stream.Collectors.toSet());
         Map<net.minecraft.resources.ResourceLocation, StageId> ruleOwners = new LinkedHashMap<>();
+        Map<String, StageDefinition> slotGroups = new LinkedHashMap<>();
         for (StageDefinition definition : definitions) {
+            if (!definition.getSlotGroup().isBlank()) {
+                StageDefinition previous = slotGroups.putIfAbsent(definition.getSlotGroup(), definition);
+                if (previous != null && (previous.getSlotLimit() != definition.getSlotLimit()
+                        || previous.getSlotPolicy() != definition.getSlotPolicy()
+                        || previous.isServerScope() != definition.isServerScope())) {
+                    errors.add("Stage slot group '" + definition.getSlotGroup()
+                        + "' has inconsistent limit policy or ownership scope");
+                }
+            }
             for (var rule : definition.getTriggers()) {
                 for (var condition : rule.conditions()) {
                     if (condition.type() == com.enviouse.progressivestages.common.trigger.TriggerConditionType.LEAVE_STRUCTURE

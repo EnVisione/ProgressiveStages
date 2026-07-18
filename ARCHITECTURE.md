@@ -85,7 +85,7 @@ The value at `[stage].id` is authoritative. The folder and filename are for huma
 
 ### Generated showcase packages
 
-If no stage files exist, `DefaultShowcaseStages` writes thirty schema 4 stage packages and ninety
+If no stage files exist, `DefaultShowcaseStages` writes fifty schema 4 stage packages and one hundred fifty
 files. The dependency graph contains independent class roots, evolutions, mastery stages, hybrid
 stages, and an at-least-three finale. It also provides real runtime examples of purchases,
 automatic grants, rewards, temporary rules, contextual modifiers, drop modifiers, challenges,
@@ -286,7 +286,7 @@ The server package contains:
 - `StageFileLoader` scans config files, merges datapack stages, validates a complete candidate, applies a snapshot, and rolls back a failed reload.
 - `StageFileParser` converts TOML into immutable stage models and detailed parse errors.
 - `DatapackStageLoader` reads server resource stages.
-- `DefaultShowcaseStages` owns the thirty-package first-launch showcase.
+- `DefaultShowcaseStages` owns the fifty-package first-launch showcase.
 - `DefaultStageTemplates` retains the legacy one-file documentation and compatibility references.
 
 ### `server/enforcement`

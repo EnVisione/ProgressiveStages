@@ -9,6 +9,7 @@ import com.enviouse.progressivestages.common.config.StageCost;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.config.StageRewards;
+import com.enviouse.progressivestages.common.config.StageSlotPolicy;
 import com.enviouse.progressivestages.common.config.UnlockEffects;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
@@ -230,6 +231,21 @@ public final class StageFileParser {
             if (t != null && !t.isBlank()) tags.add(t.trim().toLowerCase(java.util.Locale.ROOT));
         }
         builder.tags(tags);
+        String slotGroup = stageSection.getOrElse("slot_group", "");
+        slotGroup = slotGroup == null ? "" : slotGroup.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!slotGroup.isEmpty() && !slotGroup.matches("[a-z0-9_.-]+")) {
+            throw new IllegalArgumentException("Stage slot group contains invalid characters. " + slotGroup);
+        }
+        int slotLimit = (int) readLong(stageSection, "slot_limit", 0L);
+        if (slotLimit < 0 || slotLimit > 1024) {
+            throw new IllegalArgumentException("Stage slot limit must be between zero and 1024");
+        }
+        if (slotGroup.isEmpty() && slotLimit > 0) {
+            throw new IllegalArgumentException("Stage slot limit requires a slot group");
+        }
+        builder.slotGroup(slotGroup)
+            .slotLimit(slotLimit)
+            .slotPolicy(StageSlotPolicy.parse(stageSection.getOrElse("slot_policy", "deny")));
         String scope = stageSection.get("scope");
         if (scope != null) {
             String normalizedScope = scope.trim().toLowerCase(java.util.Locale.ROOT);

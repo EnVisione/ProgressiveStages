@@ -275,6 +275,9 @@ public final class PSKubeBindings {
             out.put("dependencyCount", def.getDependencyCount());
             out.put("category", def.getCategory());
             out.put("tags", List.copyOf(def.getTags()));
+            out.put("slotGroup", def.getSlotGroup());
+            out.put("slotLimit", def.getSlotLimit());
+            out.put("slotPolicy", def.getSlotPolicy().configName());
             out.put("scope", def.getScope());
             out.put("hidden", def.isHidden());
             out.put("temporary", def.isTemporary());
@@ -296,6 +299,23 @@ public final class PSKubeBindings {
                 conditionalRules.add(data);
             }
             out.put("conditionalRules", conditionalRules);
+            return out;
+        }).orElseGet(Map::of);
+    }
+
+    public Map<String, Object> slot(Player player, String stage) {
+        StageId id = parse(stage);
+        if (!(player instanceof ServerPlayer sp) || id == null) return Map.of();
+        return ProgressiveStagesAPI.getDefinition(id).map(definition -> {
+            var decision = ProgressiveStagesAPI.getSlotDecision(sp, id);
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("group", definition.getSlotGroup());
+            out.put("limit", definition.getSlotLimit());
+            out.put("policy", definition.getSlotPolicy().configName());
+            out.put("owned", ProgressiveStagesAPI.getOwnedSlotCount(sp, definition.getSlotGroup()));
+            out.put("allowed", decision.allowed());
+            out.put("replacements", strings(decision.replacements()));
+            out.put("explanation", decision.explanation());
             return out;
         }).orElseGet(Map::of);
     }

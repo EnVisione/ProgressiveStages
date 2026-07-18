@@ -71,7 +71,12 @@ public final class StageTreeScreen extends Screen {
     private boolean hideOwned;
     private String categoryFilter = "";
     private final List<String> categories = new ArrayList<>();
-    private int categoryX, categoryY, categoryW = 92, categoryH = 13;
+    private boolean categoryOpen;
+    private int categoryScroll;
+    private int categoryX, categoryY, categoryW = 112, categoryH = 13;
+    private int categoryMenuX, categoryMenuY, categoryMenuW, categoryMenuH;
+    private static final int CATEGORY_ROW_H = 14;
+    private static final int CATEGORY_VISIBLE_ROWS = 8;
     private final Set<StageId> itemFilterMatches = new HashSet<>();
     private int ownedX, ownedY, ownedW = 45, ownedH = 12;
     private int homeX, homeY, homeW = 14, homeH = 12;
@@ -235,13 +240,23 @@ public final class StageTreeScreen extends Screen {
                 && categories.stream().noneMatch(categoryFilter::equalsIgnoreCase)) categoryFilter = "";
     }
 
-    private void cycleCategory(int direction) {
-        int current = categoryFilter.isEmpty() ? -1 : categories.indexOf(categoryFilter);
-        int slots = categories.size() + 1;
-        int next = Math.floorMod(current + 1 + direction, slots) - 1;
-        categoryFilter = next < 0 ? "" : categories.get(next);
+    private void selectCategory(int index) {
+        categoryFilter = index <= 0 ? "" : categories.get(index - 1);
+        categoryOpen = false;
         selected = null;
         rebuild(true);
+    }
+
+    private int categoryOptionCount() {
+        return categories.size() + 1;
+    }
+
+    private int categoryMenuIndexAt(double mouseX, double mouseY) {
+        if (!categoryOpen || !inside(mouseX, mouseY, categoryMenuX, categoryMenuY,
+                categoryMenuW, categoryMenuH)) return -1;
+        int row = ((int) mouseY - categoryMenuY - 1) / CATEGORY_ROW_H;
+        int index = categoryScroll + row;
+        return index >= 0 && index < categoryOptionCount() ? index : -1;
     }
 
     private boolean dependenciesSatisfied(StageId id) {
@@ -319,7 +334,7 @@ public final class StageTreeScreen extends Screen {
             g.renderTooltip(font, Component.translatable("gui.progressivestages.tree.home.tooltip"), mouseX, mouseY);
         } else if (inside(mouseX, mouseY, ownedX, ownedY, ownedW, ownedH)) {
             g.renderTooltip(font, Component.translatable("gui.progressivestages.tree.owned.tooltip"), mouseX, mouseY);
-        } else if (!categories.isEmpty()
+        } else if (!categories.isEmpty() && !categoryOpen
                 && inside(mouseX, mouseY, categoryX, categoryY, categoryW, categoryH)) {
             g.renderTooltip(font, Component.translatable("gui.progressivestages.tree.category.tooltip"), mouseX, mouseY);
         }
@@ -447,8 +462,6 @@ public final class StageTreeScreen extends Screen {
         g.renderOutline(homeX, homeY, homeW, homeH, 0xFF202020);
         g.drawCenteredString(font, "•", homeX + homeW / 2, homeY + 2, 0xFFFFFFFF);
 
-        // Category selector is placed inside the map like vanilla advancement tabs. Left click
-        // advances, right click goes back, and C provides a keyboard equivalent.
         if (!categories.isEmpty()) {
             boolean categoryHover = inside(mouseX, mouseY, categoryX, categoryY, categoryW, categoryH);
             if (categoryHover) hovered = null;
@@ -458,8 +471,41 @@ public final class StageTreeScreen extends Screen {
             String raw = categoryFilter.isEmpty()
                 ? Component.translatable("gui.progressivestages.tree.category.all").getString()
                 : categoryFilter;
-            String label = font.plainSubstrByWidth(raw, categoryW - 10);
-            g.drawCenteredString(font, label, categoryX + categoryW / 2, categoryY + 3, 0xFFFFFFFF);
+            String label = font.plainSubstrByWidth(raw, categoryW - 18);
+            g.drawString(font, label, categoryX + 5, categoryY + 3, 0xFFFFFFFF, false);
+            g.drawString(font, categoryOpen ? "▲" : "▼", categoryX + categoryW - 11,
+                categoryY + 3, 0xFFFFFFFF, false);
+            renderCategoryMenu(g, mouseX, mouseY);
+        }
+    }
+
+    private void renderCategoryMenu(GuiGraphics g, int mouseX, int mouseY) {
+        if (!categoryOpen) return;
+        int rows = Math.min(CATEGORY_VISIBLE_ROWS, categoryOptionCount());
+        categoryMenuX = categoryX;
+        categoryMenuY = categoryY + categoryH + 2;
+        categoryMenuW = Math.max(categoryW, 132);
+        categoryMenuH = rows * CATEGORY_ROW_H + 2;
+        int maximumScroll = Math.max(0, categoryOptionCount() - rows);
+        categoryScroll = Math.max(0, Math.min(categoryScroll, maximumScroll));
+        g.fill(categoryMenuX, categoryMenuY, categoryMenuX + categoryMenuW,
+            categoryMenuY + categoryMenuH, 0xF0101010);
+        g.renderOutline(categoryMenuX, categoryMenuY, categoryMenuW, categoryMenuH, 0xFFB0B0B0);
+        for (int row = 0; row < rows; row++) {
+            int index = categoryScroll + row;
+            if (index >= categoryOptionCount()) break;
+            int y = categoryMenuY + 1 + row * CATEGORY_ROW_H;
+            boolean hover = inside(mouseX, mouseY, categoryMenuX + 1, y,
+                categoryMenuW - 2, CATEGORY_ROW_H);
+            boolean active = index == 0 ? categoryFilter.isEmpty()
+                : categories.get(index - 1).equalsIgnoreCase(categoryFilter);
+            if (hover || active) g.fill(categoryMenuX + 1, y, categoryMenuX + categoryMenuW - 1,
+                y + CATEGORY_ROW_H, active ? 0xEE6A8F55 : 0xEE666666);
+            String value = index == 0
+                ? Component.translatable("gui.progressivestages.tree.category.all").getString()
+                : categories.get(index - 1);
+            g.drawString(font, font.plainSubstrByWidth(value, categoryMenuW - 12),
+                categoryMenuX + 5, y + 3, 0xFFFFFFFF, false);
         }
     }
 
@@ -569,6 +615,27 @@ public final class StageTreeScreen extends Screen {
                 y += 10;
             }
             y += 3;
+        }
+
+        String slotGroup = ClientStageCache.getSlotGroup(selected);
+        if (!slotGroup.isBlank()) {
+            int limit = ClientStageCache.getSlotLimit(selected);
+            int active = ClientStageCache.getOwnedSlotCount(slotGroup);
+            Component slots = limit <= 0
+                ? Component.translatable("gui.progressivestages.tree.slots.unlimited", slotGroup)
+                : Component.translatable("gui.progressivestages.tree.slots.limited", slotGroup, active, limit);
+            for (FormattedCharSequence wrapped : font.split(slots, innerW)) {
+                g.drawString(font, wrapped, x, y, 0xFFFFD45A, false);
+                y += 10;
+            }
+            if (limit > 0) {
+                Component policy = Component.translatable("gui.progressivestages.tree.slots.policy",
+                    ClientStageCache.getSlotPolicy(selected).replace('_', ' '));
+                g.drawString(font, policy, x + 3, y, 0xFFAAAAAA, false);
+                y += 13;
+            } else {
+                y += 3;
+            }
         }
 
         if (data.hasTriggers()) {
@@ -748,9 +815,23 @@ public final class StageTreeScreen extends Screen {
             centerOnBestNode();
             return true;
         }
-        if ((button == 0 || button == 1) && !categories.isEmpty()
+        if (button == 0 && categoryOpen) {
+            int category = categoryMenuIndexAt(mouseX, mouseY);
+            if (category >= 0) {
+                selectCategory(category);
+                return true;
+            }
+            if (!inside(mouseX, mouseY, categoryX, categoryY, categoryW, categoryH)) {
+                categoryOpen = false;
+            }
+        }
+        if (button == 0 && !categories.isEmpty()
                 && inside(mouseX, mouseY, categoryX, categoryY, categoryW, categoryH)) {
-            cycleCategory(button == 0 ? 1 : -1);
+            categoryOpen = !categoryOpen;
+            if (categoryOpen) {
+                int selectedIndex = categoryFilter.isEmpty() ? 0 : categories.indexOf(categoryFilter) + 1;
+                categoryScroll = Math.max(0, selectedIndex - CATEGORY_VISIBLE_ROWS / 2);
+            }
             return true;
         }
         if (selected != null) {
@@ -806,6 +887,14 @@ public final class StageTreeScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (categoryOpen && inside(mouseX, mouseY, categoryMenuX, categoryMenuY,
+                categoryMenuW, categoryMenuH)) {
+            int rows = Math.min(CATEGORY_VISIBLE_ROWS, categoryOptionCount());
+            int maximumScroll = Math.max(0, categoryOptionCount() - rows);
+            categoryScroll = Math.max(0, Math.min(maximumScroll,
+                categoryScroll - (int) Math.signum(scrollY)));
+            return true;
+        }
         if (selected != null && insideInspector(mouseX, mouseY) && panelMax > 0) {
             panelScroll = (int) Math.max(0, Math.min(panelMax, panelScroll - scrollY * 12));
             return true;
@@ -832,7 +921,11 @@ public final class StageTreeScreen extends Screen {
         else if (keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_W) dy = 16;
         else if (keyCode == GLFW.GLFW_KEY_DOWN || keyCode == GLFW.GLFW_KEY_S) dy = -16;
         else if (keyCode == GLFW.GLFW_KEY_C) {
-            if (!categories.isEmpty()) cycleCategory(hasShiftDown() ? -1 : 1);
+            if (!categories.isEmpty()) categoryOpen = !categoryOpen;
+            return true;
+        }
+        else if (keyCode == GLFW.GLFW_KEY_ESCAPE && categoryOpen) {
+            categoryOpen = false;
             return true;
         }
         else if (keyCode == GLFW.GLFW_KEY_ESCAPE && selected != null) {

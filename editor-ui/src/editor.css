@@ -170,12 +170,19 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 9px; bac
 .feature-button strong, .feature-button small { display: block; }
 .feature-button small { color: var(--muted); margin-top: 4px; }
 
-.graph-help { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 12px; color: var(--muted); }
+.graph-help { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-bottom: 8px; color: var(--muted); }
 .graph-help strong { color: var(--text); }
+.graph-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
+.graph-controls select { max-width: 180px; }
+.graph-controls input { width: 150px; }
+.graph-zoom { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.graph-zoom button { min-width: 30px; border: 0; border-radius: 0; }
+.graph-zoom output { min-width: 46px; color: var(--muted); font-size: 11px; text-align: center; }
+.graph-status { min-height: 22px; padding: 0 2px 8px; color: var(--muted); font-size: 12px; }
 .graph-viewport { width: 100%; height: calc(100vh - 245px); min-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: radial-gradient(circle, var(--line) 1px, transparent 1px); background-size: 24px 24px; }
 .graph { position: relative; display: block; min-width: 100%; min-height: 100%; }
 .graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
-.graph-lines line { stroke: color-mix(in srgb, var(--accent) 55%, var(--line)); stroke-width: 3; }
+.graph-lines path { fill: none; stroke: color-mix(in srgb, var(--accent) 62%, var(--line)); stroke-width: 3; stroke-linecap: round; }
 .graph-node { position: absolute; display: flex; align-items: center; width: 178px; min-height: 52px; touch-action: none; cursor: grab; text-align: left; }
 .graph-node::before { content: "◆"; color: var(--accent); margin-right: 7px; }
 .graph-node:active { cursor: grabbing; }

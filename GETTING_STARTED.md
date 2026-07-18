@@ -82,7 +82,7 @@ config/
 ```
 
 The main file controls server-wide defaults. The first empty launch creates the complete
-[thirty stage showcase tree](SHOWCASE_PACK.md). Each folder is one schema 4 stage package. Existing
+[fifty stage showcase tree](SHOWCASE_PACK.md). Each folder is one schema 4 stage package. Existing
 stage folders are never replaced. Nested folders and legacy one-file stages are also supported, so
 a large pack can use paths such as:
 

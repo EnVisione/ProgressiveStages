@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.common.stage;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.config.StageSlotPolicy;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
 import net.minecraft.resources.ResourceLocation;
@@ -79,6 +80,18 @@ class StageOrderTest {
             StageDefinition.builder(second).conditionalRules(List.of(secondRule)).build()));
 
         assertTrue(errors.stream().anyMatch(error -> error.contains("defined by both")));
+    }
+
+    @Test
+    void slotGroupsRequireConsistentLimitsPoliciesAndScopes() {
+        StageDefinition first = StageDefinition.builder(StageId.parse("first"))
+            .slotGroup("classes").slotLimit(1).slotPolicy(StageSlotPolicy.DENY).build();
+        StageDefinition second = StageDefinition.builder(StageId.parse("second"))
+            .slotGroup("classes").slotLimit(2).slotPolicy(StageSlotPolicy.REPLACE_OLDEST).build();
+
+        List<String> errors = StageOrder.validateDefinitions(List.of(first, second));
+
+        assertTrue(errors.stream().anyMatch(error -> error.contains("inconsistent")));
     }
 
     private static StageDefinition stage(StageId id, StageId... dependencies) {

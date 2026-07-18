@@ -388,6 +388,7 @@ public class NetworkHandler {
         StageManager sm = StageManager.getInstance();
         if (sm.hasStage(player, def.getId())) return false;
         if (!sm.getMissingDependencies(player, def.getId()).isEmpty()) return false;
+        if (!sm.getSlotDecision(player, def).allowed()) return false;
         com.enviouse.progressivestages.common.config.StageCost cost = def.getCost();
         if (!cost.bypassRequirements()
                 && !com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.triggersSatisfied(player, def.getId())) {
@@ -765,6 +766,9 @@ public class NetworkHandler {
                     def.isHidden(),
                     def.getColor(),
                     def.getCategory(),
+                    def.getSlotGroup(),
+                    def.getSlotLimit(),
+                    def.getSlotPolicy().configName(),
                     def.getUiX().isPresent() && def.getUiY().isPresent(),
                     def.getUiX().orElse(0),
                     def.getUiY().orElse(0),
@@ -922,6 +926,9 @@ public class NetworkHandler {
                     entry.hidden(),
                     entry.color(),
                     entry.category(),
+                    entry.slotGroup(),
+                    entry.slotLimit(),
+                    entry.slotPolicy(),
                     entry.hasUiPosition() ? entry.uiX() : null,
                     entry.hasUiPosition() ? entry.uiY() : null,
                     entry.uiFrame(),
@@ -1059,6 +1066,7 @@ public class NetworkHandler {
                                        boolean showTooltip, boolean showDescriptionOnTooltip,
                                        boolean hasTriggers,
                                        boolean hidden, String color, String category,
+                                       String slotGroup, int slotLimit, String slotPolicy,
                                        boolean hasUiPosition, int uiX, int uiY, String uiFrame,
                                        String uiBackground, String uiReveal, int uiSortOrder) {
 
@@ -1083,6 +1091,9 @@ public class NetworkHandler {
                 buf.writeBoolean(e.hidden());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.color());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.category());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.slotGroup());
+                buf.writeVarInt(e.slotLimit());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.slotPolicy());
                 buf.writeBoolean(e.hasUiPosition());
                 if (e.hasUiPosition()) {
                     buf.writeVarInt(e.uiX());
@@ -1109,6 +1120,9 @@ public class NetworkHandler {
                 boolean hidden = buf.readBoolean();
                 String color = ByteBufCodecs.STRING_UTF8.decode(buf);
                 String category = ByteBufCodecs.STRING_UTF8.decode(buf);
+                String slotGroup = ByteBufCodecs.STRING_UTF8.decode(buf);
+                int slotLimit = buf.readVarInt();
+                String slotPolicy = ByteBufCodecs.STRING_UTF8.decode(buf);
                 boolean hasUiPosition = buf.readBoolean();
                 int uiX = hasUiPosition ? buf.readVarInt() : 0;
                 int uiY = hasUiPosition ? buf.readVarInt() : 0;
@@ -1119,7 +1133,8 @@ public class NetworkHandler {
                 return new StageDefinitionEntry(stageId, displayName, dependencies, dependencyMode,
                     dependencyCount, description,
                     icon, displayAsUnknownItem, obscureIcon, showTooltip, showDescriptionOnTooltip,
-                    hasTriggers, hidden, color, category, hasUiPosition, uiX, uiY, uiFrame,
+                    hasTriggers, hidden, color, category, slotGroup, slotLimit, slotPolicy,
+                    hasUiPosition, uiX, uiY, uiFrame,
                     uiBackground, uiReveal, uiSortOrder);
             }
         );

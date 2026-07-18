@@ -19,6 +19,9 @@ class PackagedEditorAssetsTest {
         assertTrue(script.contains("Create stage"));
         assertTrue(script.contains("Stage graph"));
         assertTrue(script.contains("Arrange paths upward"));
+        assertTrue(script.contains("graphCategory"));
+        assertTrue(script.contains("graphZoomOut"));
+        assertTrue(script.contains("Fit graph"));
         assertTrue(script.contains("Registry"));
         assertTrue(script.contains("Review and apply"));
         assertTrue(html.contains("app.js"));
@@ -50,10 +53,15 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("Buy with items"));
         assertTrue(controller.contains("Find an item on this server"));
         assertTrue(controller.contains("Add a targeted mining bonus"));
+        assertTrue(controller.contains("Configure stage slots and stacking"));
+        assertTrue(controller.contains("replace_lowest_priority"));
+        assertTrue(controller.contains("updateGraphConnections"));
+        assertTrue(controller.contains("fitGraphViewport"));
         assertTrue(css.contains("#e3aa32"));
         assertTrue(css.contains("#101114"));
         assertTrue(css.contains("dependency-visualizer"));
         assertTrue(css.contains("graph-viewport"));
+        assertTrue(css.contains("graph-zoom"));
         assertTrue(css.contains("modal-backdrop"));
         assertFalse(controller.contains("prompt("));
         assertFalse(controller.contains("Stages and files"));

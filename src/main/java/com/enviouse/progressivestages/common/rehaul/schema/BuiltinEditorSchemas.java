@@ -37,6 +37,13 @@ final class BuiltinEditorSchemas {
             SchemaValueType.ENUM, "team", false, null, Set.of(), List.of("team", "server"));
         add(sink, "stage.tags", "stage.toml", "stage.tags", "Tags", "Labels used for grouping and automation.",
             SchemaValueType.LIST, List.of(), false, null, Set.of(), List.of());
+        add(sink, "stage.slot_group", "stage.toml", "stage.slot_group", "Slot group", "Related stages that share an ownership limit.",
+            SchemaValueType.STRING, "", false, null, Set.of(), List.of());
+        add(sink, "stage.slot_limit", "stage.toml", "stage.slot_limit", "Slot limit", "Maximum active stages in this group. Zero allows every stage to stack.",
+            SchemaValueType.INTEGER, 0, false, null, Set.of(), List.of());
+        add(sink, "stage.slot_policy", "stage.toml", "stage.slot_policy", "Full group behavior", "Block or replace stages when the group is full.",
+            SchemaValueType.ENUM, "deny", false, null, Set.of(),
+            List.of("deny", "replace_oldest", "replace_lowest_priority", "replace_all"));
         add(sink, "stage.category", "stage.toml", "stage.category", "Category", "The stage map and search category.",
             SchemaValueType.STRING, "", false, null, Set.of(), List.of());
         add(sink, "stage.color", "stage.toml", "stage.color", "Color", "The stage tint as a hex color or color code.",

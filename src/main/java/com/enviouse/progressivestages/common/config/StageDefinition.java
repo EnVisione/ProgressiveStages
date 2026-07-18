@@ -68,6 +68,9 @@ public class StageDefinition {
     private final String color;        // "" or a hex/&-code for GUI tinting
     private final String category;     // "" or a group label
     private final java.util.List<String> tags; // v3.0: labels for bulk ops (/stage tag grant ...)
+    private final String slotGroup;
+    private final int slotLimit;
+    private final StageSlotPolicy slotPolicy;
     private final String scope;        // "team" (default) or "server"
     private final long durationMillis; // -1 = permanent; otherwise real-time lifespan after grant
     private final List<StageAttribute> attributes;
@@ -128,6 +131,9 @@ public class StageDefinition {
         this.category = builder.category != null ? builder.category : "";
         this.tags = builder.tags != null
             ? Collections.unmodifiableList(new ArrayList<>(builder.tags)) : Collections.emptyList();
+        this.slotGroup = builder.slotGroup != null ? builder.slotGroup : "";
+        this.slotLimit = Math.max(0, builder.slotLimit);
+        this.slotPolicy = builder.slotPolicy != null ? builder.slotPolicy : StageSlotPolicy.DENY;
         this.scope = builder.scope != null ? builder.scope : "team";
         this.durationMillis = builder.durationMillis;
         this.attributes = builder.attributes != null
@@ -326,6 +332,12 @@ public class StageDefinition {
     /** v3.0: lower-case tags for bulk commands ({@code /stage tag grant ...}); empty if none. */
     public java.util.List<String> getTags() { return tags; }
 
+    public String getSlotGroup() { return slotGroup; }
+
+    public int getSlotLimit() { return slotLimit; }
+
+    public StageSlotPolicy getSlotPolicy() { return slotPolicy; }
+
     /** Progression scope: {@code "team"} (default) or {@code "server"} (server-wide). */
     public String getScope() { return scope; }
 
@@ -414,6 +426,9 @@ public class StageDefinition {
         private String color = "";
         private String category = "";
         private java.util.List<String> tags = new ArrayList<>();
+        private String slotGroup = "";
+        private int slotLimit = 0;
+        private StageSlotPolicy slotPolicy = StageSlotPolicy.DENY;
         private String scope = "team";
         private long durationMillis = -1L;
         private List<StageAttribute> attributes = new ArrayList<>();
@@ -577,6 +592,9 @@ public class StageDefinition {
         public Builder color(String v) { this.color = v != null ? v : ""; return this; }
         public Builder category(String v) { this.category = v != null ? v : ""; return this; }
         public Builder tags(java.util.List<String> v) { this.tags = v != null ? v : new ArrayList<>(); return this; }
+        public Builder slotGroup(String v) { this.slotGroup = v != null ? v : ""; return this; }
+        public Builder slotLimit(int v) { this.slotLimit = Math.max(0, v); return this; }
+        public Builder slotPolicy(StageSlotPolicy v) { this.slotPolicy = v != null ? v : StageSlotPolicy.DENY; return this; }
         public Builder scope(String v) { this.scope = v != null ? v : "team"; return this; }
         public Builder durationMillis(long v) { this.durationMillis = v; return this; }
         public Builder attributes(List<StageAttribute> v) { this.attributes = v != null ? v : new ArrayList<>(); return this; }

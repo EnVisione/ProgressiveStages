@@ -26,12 +26,18 @@ registry entries. Progression, rewards, costs, stage appearance, and dependency 
 controls too. Rule cards and graph nodes are draggable. Direct TOML and the inspector remain
 available for advanced work without becoming required for normal stage creation.
 
-Required stages are also visual. Create independent Mage, Warrior, Paladin, and Healer roots, make
-Wizard and Warlock evolve from Mage, make Knight evolve from Warrior, then make Wizard Knight join
-both Wizard and Knight. Stage cards support every selected path, any selected path, or an exact
-minimum. The preview draws the evolution upward, includes each parent's ancestry, prevents cycles,
-and can automatically arrange the complete graph with beginner paths at the bottom and hybrids at
-the top.
+Required stages are also visual. Create independent Mage, Warrior, and Ranger roots, evolve each
+into several play styles, then merge two branches into a hybrid. Stage cards support every selected
+path, any selected path, or an exact minimum. The preview draws the evolution upward, includes each
+parent's ancestry, and prevents cycles. The complete graph has category and text filters, curved
+connectors, crossing reduction, zoom, fit-to-panel, automatic layout, and zoom-correct node dragging.
+
+Stage slots make class and buff ownership configurable. Limit players to one or two beginner
+paths, let every engineering tier stack, or make mining modes replace one another. Full groups can
+deny the new stage, replace the oldest stage, replace the lowest-priority stage, or replace every
+active member. Purchases, commands, triggers, KubeJS, Java, and temporary session grants all use the
+same server-authoritative decision. The first launch showcase includes fifty stages and all three
+patterns.
 
 Complete schema 4 instructions and tested packages are available in the
 [3.0.1 Schema 4 and Editor Guide](https://github.com/EnVisione/ProgressiveStages/blob/master/REHAUL_GUIDE.md).
@@ -47,11 +53,13 @@ Open the map with `/stage`, `/stages`, `/pstages`, `/stage gui`, the configurabl
 - Hover a node for its description, dependencies, trigger progress, and unlock preview.
 - Click without dragging to pin full details, including clearly grouped trigger routes.
 - Search by stage name, ID, description, category, or locked item.
+- Open the category list and select a category directly instead of cycling one click at a time.
 - Hide stages the player already owns.
 - Show or conceal future branches with `reveal = "always"`, `"dependencies"`, or `"unlocked"`.
 - Let the dependency graph place nodes automatically or set exact `x` and `y` coordinates.
 - Give each stage its own item icon, frame type, background, color, category, and sort order.
 - Purchase configured stages from the map. Every purchase is checked again by the server before any cost is removed.
+- See a stage's slot group, current usage, limit, and replacement policy in its details.
 
 The server remains authoritative. A modified client cannot grant stages, skip dependencies, or fake a purchase.
 

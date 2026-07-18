@@ -45,8 +45,8 @@ This workflow works in an integrated single-player world and on a dedicated serv
    you want a namespace other than `pack`.
 7. Select the new stage card. The easy builder shows `Stage details`, `Rules`, `Progression`, and
    `More stage features`. It never makes the three backing files part of the normal workflow.
-8. Fill in the name, description, icon, required stages, ownership scope, map category, color,
-   frame, reveal policy, and advancement background. Use `Browse` to choose an icon from the live
+8. Fill in the name, description, icon, required stages, ownership scope, stage slots, map category,
+   color, frame, reveal policy, and advancement background. Use `Browse` to choose an icon from the live
    item registry. `Required stages` opens a visual path builder rather than a text field. Select
    parent stage cards, then choose `Require every selected path`, `Require any one selected path`,
    or `Require a minimum number`. The preview places the new evolution above its parents and shows
@@ -63,11 +63,12 @@ This workflow works in an integrated single-player world and on a dedicated serv
     advancement, dimension, structure, KubeJS event, or another listed condition. Select count,
     repeat policy, player/team/server scope, priority, and cooldown. Rewards and costs have their
     own guided forms.
-12. Use `Stage graph` to drag nodes around the same dependency map players see. The graph is
-    contained in a scrollable canvas and grows with distant nodes instead of overflowing the page.
-    Automatic layout puts independent beginner paths at the bottom, their evolutions above them,
-    and hybrid stages above every branch they join. `Arrange paths upward` restores that automatic
-    layout after manual dragging.
+12. Use `Stage graph` to inspect or drag the dependency map. The graph opens fitted inside its
+    scrollable canvas. Filter by category, search while retaining prerequisite context, zoom with
+    the minus and plus buttons, or press `Fit graph` to restore a complete overview. Automatic
+    layout puts independent beginner paths at the bottom, their evolutions above them, and hybrid
+    stages above every branch they join. Curved connectors follow dragged nodes at every zoom.
+    `Arrange paths upward` clears manual positions and recalculates crossing-reduced lanes.
 13. Use `TOML source` only when you want direct control. `stage.toml`, `rules.toml`, and
     `progression.toml` remain available as separate advanced tabs, and unknown extension fields are
     preserved.
@@ -157,6 +158,30 @@ id = "my_pack:mine_iron"
 repeat = "once"
 condition = { type = "mine", id = "minecraft:iron_ore", count = 1 }
 ```
+
+### Limit classes or stack specialist buffs
+
+Select a stage, open **Stage slots and stacking**, and choose:
+
+1. A group name such as `beginner_paths`, `engineering_tiers`, or `mining_modes`.
+2. The maximum members that may be active. Zero means every member stacks.
+3. What happens when the group is full: deny, replace oldest, replace lowest priority, or replace
+   every current member.
+4. Whether the editor should copy the same policy to all stages already in the group. Keep this
+   checked for normal edits because a group must have one consistent policy.
+
+The editor produces these `stage.toml` fields:
+
+```toml
+[stage]
+slot_group = "beginner_paths"
+slot_limit = 2
+slot_policy = "deny"
+```
+
+The server evaluates the group before it spends a purchase or changes ownership. The in-game
+progression details show current usage. See the complete beginner, engineer, and mining-mode
+examples in [SHOWCASE_PACK.md](SHOWCASE_PACK.md).
 
 ## 4. Selectors and autocomplete
 
@@ -416,7 +441,7 @@ exclusive = true
 
 The rule defaults to requiring its owning stage. `with_stages`, `without_stages`, and any compiled
 `condition` can narrow it further. Nonexclusive matching rules stack in descending priority order;
-an exclusive match stops lower-priority rules. The [thirty stage showcase](SHOWCASE_PACK.md)
+an exclusive match stops lower-priority rules. The [fifty stage showcase](SHOWCASE_PACK.md)
 generates Diamond Engineer with this rule and a server-authoritative 32-diamond purchase.
 
 Aggregation and stacking are explicit and bounded. Stable modifier IDs prevent duplicate stacking.
@@ -540,6 +565,11 @@ helpers and adds condition, value, action, selector, and challenge measure regis
 metadata. `evaluateFormula(id, values)` and `expandTemplate(id, arguments)` expose the same compiled
 formula and template engines used by Java. The complete tested registration example is
 [progressivestages.js](examples/rehaul/kubejs/server_scripts/progressivestages.js).
+
+`ProgressiveStages.info('pack:stage')` includes `slotGroup`, `slotLimit`, and `slotPolicy`.
+`ProgressiveStages.slot(player, 'pack:stage')` returns the live active count, whether a grant is
+allowed, which stages would be replaced, and the denial explanation. `available` uses the same
+server decision, so scripts do not advertise a class that a full deny-policy group cannot accept.
 
 Metadata should include title, description, typed arguments, defaults, scopes, event interests,
 capabilities, examples, and missing callback policy. Registrations are frozen into one extension
