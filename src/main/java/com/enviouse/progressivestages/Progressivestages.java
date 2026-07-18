@@ -89,10 +89,6 @@ public class Progressivestages {
         generateDefaultStageFilesIfNeeded(configFolder);
     }
 
-    /**
-     * Generate default stage files (stone_age, iron_age, diamond_age) if none exist.
-     * Called during mod init so pack devs have example files immediately.
-     */
     private void generateDefaultStageFilesIfNeeded(Path configFolder) {
         // Count existing stage files (excluding triggers.toml)
         long stageFileCount;
@@ -114,31 +110,15 @@ public class Progressivestages {
 
         LOGGER.info("[ProgressiveStages] No stage files found, generating defaults...");
 
-        // Generate the three default stage files
-        generateStoneAgeFile(configFolder);
-        generateIronAgeFile(configFolder);
-        generateDiamondAgeFile(configFolder);
-    }
-
-    private void generateStoneAgeFile(Path configFolder) {
-        writeStageFile(configFolder.resolve("stone_age.toml"),
-            com.enviouse.progressivestages.server.loader.DefaultStageTemplates.stoneAge());
-    }
-
-    private void generateIronAgeFile(Path configFolder) {
-        writeStageFile(configFolder.resolve("iron_age.toml"),
-            com.enviouse.progressivestages.server.loader.DefaultStageTemplates.ironAge());
-    }
-
-    private void generateDiamondAgeFile(Path configFolder) {
-        writeStageFile(configFolder.resolve("diamond_age.toml"),
-            com.enviouse.progressivestages.server.loader.DefaultStageTemplates.diamondAge());
+        com.enviouse.progressivestages.server.loader.DefaultShowcaseStages.files().forEach((relative, content) ->
+            writeStageFile(configFolder.resolve(relative), content));
     }
 
     private void writeStageFile(Path file, String content) {
         try {
+            Files.createDirectories(file.getParent());
             Files.writeString(file, content);
-            LOGGER.info("[ProgressiveStages] Generated default stage file: {}", file.getFileName());
+            LOGGER.info("[ProgressiveStages] Generated showcase stage file: {}", file);
         } catch (IOException e) {
             LOGGER.error("[ProgressiveStages] Failed to write stage file: {} - {}", file.getFileName(), e.getMessage());
         }

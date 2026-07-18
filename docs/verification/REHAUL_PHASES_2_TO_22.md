@@ -14,7 +14,7 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 | 8 | Public condition registry, compiler, boolean trees, sequences, references, comparisons, and interests | `ConditionCompilerTest` |
 | 9 | Symmetric transactional grants and revokes with cycle and stability controls | `LifecycleTransactionEngineTest` |
 | 10 | Health, damage, death, hit, respawn, no damage, and rolling counters | `WindowCounterStoreTest` |
-| 11 | Contextual item attributes, effects, transforms, aggregation, stacking, and safe reconciliation | `ModifierResolverTest`, `CameraStabilityTest` |
+| 11 | Contextual item attributes, effects, transforms, aggregation, stacking, safe reconciliation, and selector based block output modifiers with tool, enchantment, stage, condition, priority, bounds, and exclusivity | `ModifierResolverTest`, `DropModifierResolverTest`, `CameraStabilityTest` |
 | 12 | Generic challenge sessions, ordered steps, registered measures, budgets, retries, actions, and a live configured HUD | `ChallengeEngineTest` and client payload compilation |
 | 13 | Affinity, proficiency, templates, parameters, variables, formulas, multi-state stages, and live runtime evaluation | `AdvancedProgressionModelTest`, `FormulaAndTemplateTest` |
 | 14 | Registered action pipelines, retries, failure policy, compensation, and extension adapters | `ActionExecutorTest` |
@@ -23,9 +23,9 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 | 17 | Revisioned permission-filtered compressed chunked client snapshot, safe deltas, exact base verification, decompression bounds, checksum, atomic activation, request, and acknowledgement | `ClientSnapshotAssemblerTest`, client cache tests |
 | 18 | Integrated and dedicated server operator authorization, expiring secrets, client loopback bridge, CSP, host and origin checks, limits, and cleanup | `EditorAvailabilityTest`, `PackagedEditorAssetsTest`, and bridge security inspection |
 | 19 | Server drafts, revisions, undo, redo, recovery, collaboration, diff, validation, conflict, atomic apply, backup, audit, and rollback | `EditorDraftTest` and editor apply tests |
-| 20 | Packaged Preact and TypeScript shell, neutral dark gray and gold stage-first easy builder, inline plain-name stage creation, visual all, any, and minimum dependency path policies, ancestry preview, cycle prevention, upward automatic graph layout, category and mod filtered live-registry rule cards, action, effect, priority, exception, JEI and EMI, temporary condition and lifetime controls, guided grants, revokes, rewards, costs, challenges, variables, modifiers, formulas, states, profiles, templates, draggable rules, contained draggable graph, optional three-tab source, inspector, create, duplicate, rename, move, archive, restore, import, export, delete, collaborator, priority analyzer, simulation, review, and apply | `npm run check`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
+| 20 | Packaged Preact and TypeScript shell, neutral dark gray and gold stage-first easy builder, inline plain-name stage creation, visual all, any, and minimum dependency path policies, ancestry preview, cycle prevention, upward automatic graph layout, category and mod filtered live-registry rule cards, action, effect, priority, exception, JEI and EMI, temporary condition and lifetime controls, guided grants, revokes, rewards, searchable item purchases, targeted mining bonuses, challenges, variables, modifiers, formulas, states, profiles, templates, draggable rules, contained draggable graph, optional three-tab source, inspector, create, duplicate, rename, move, archive, restore, import, export, delete, collaborator, priority analyzer, simulation, review, and apply | `npm run check`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
 | 21 | Advancement style player screen, panning, scroll, layering, background, triggers, why, live challenge HUD, effective held-item modifier and affinity preview, history, docs, and tested starter, Diamond, mage, knight, structure, End, Wither, migration, KubeJS, and Java examples | UI regression tests, `RehaulExamplesTest`, `RehaulDocumentationTest` |
-| 22 | Restart saved data, dependency audit, full unit suite, clean build, and JAR inspection | `RehaulStateCodecTest` and final evidence below |
+| 22 | Restart saved data, dependency audit, thirty stage and ninety file first-launch showcase validation, full unit suite, clean build, and JAR inspection | `RehaulStateCodecTest`, `DefaultShowcaseStagesTest`, and final evidence below |
 
 ## Final evidence
 
@@ -41,18 +41,21 @@ Recorded on July 18, 2026 from branch `envy/3.0.1`.
 
 ### Java and dedicated server
 
-- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in eleven seconds.
-- The clean suite ran 111 tests with zero failures, zero errors, and zero
+- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in ten seconds.
+- The clean suite ran 113 tests with zero failures, zero errors, and zero
   skipped tests.
-- `./gradlew runServer --no-daemon` initialized ProgressiveStages 3.0.1, generated or loaded the
-  main config from `config/progressivestages/progressivestages.toml`, reached the dedicated-server
-  ready line in 0.956 seconds, and loaded three stage definitions without a ProgressiveStages error.
+- `DefaultShowcaseStagesTest` wrote all ninety generated files into an empty temporary stages
+  directory, discovered thirty packages, parsed and compiled every package, validated the full
+  dependency graph, and verified the Diamond Engineer 32-diamond cost and Fortune multiplier.
+- The earlier `./gradlew runServer --no-daemon` smoke remains the dedicated-server compatibility
+  checkpoint for three existing legacy files. First-launch showcase generation does not replace
+  those files because existing installations are intentionally preserved.
 
 ### Release artifact
 
 - Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,566,718 bytes.
-- SHA-256: `01b51304b374383d1a1e41470630b563dad3f98621f7e38cdd047314d274a27f`.
+- Size: 1,592,181 bytes.
+- SHA-256: `14f36141375837188d43f61c8b83d62f71d3e3eed21672eae78892daa76a7d17`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
   logo, `assets/progressivestages/lang/en_us.json`, and all four production editor assets.
 - The source logo SHA-256 is

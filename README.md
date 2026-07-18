@@ -39,14 +39,30 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
   [CurseForge 3.0 Description](CURSEFORGE.md).
 - **Want known-good files to copy:** use the tested
   [Beginner Pack](examples/beginner_pack/README.md).
+- **Want to explore the complete first-launch class tree:** use the
+  [Thirty Stage Showcase Pack Guide](SHOWCASE_PACK.md).
 
-The generated `diamond_age.toml` also links directly to the GitHub copies of these guides so a
-pack author who discovers the file without this README can still find the current instructions.
+The older [`diamond_stage.toml`](examples/reference/diamond_stage.toml) remains the fully commented
+one-file reference. It is no longer generated into new installations because the thirty stage
+schema 4 showcase now demonstrates the editor and class tree directly.
 
 ---
 
 ## What's new in 3.0
 
+- **Thirty stage first-launch showcase tree** — an empty stages directory now receives six
+  independent beginner classes, twelve evolutions, seven mastery classes, four hybrid classes,
+  and an at-least-three Grandmaster finale. It demonstrates purchases, automatic grants, rewards,
+  rules, temporary conditions, modifiers, challenges, abilities, variables, formulas, states, and
+  the upward graph. Existing packs are never overwritten or injected with showcase stages.
+- **Item-purchased classes in the easy editor** — **How players obtain this stage** now has a
+  searchable live-registry payment builder. Choose items and amounts plus optional XP, cooldown,
+  trigger bypass, and revoke refund. The in-game tree uses the existing atomic server-authoritative
+  purchase engine.
+- **Selector-based `[[drop_modifiers]]`** — target source blocks, final output items, optional tools,
+  enchantments, owned or missing stages, conditions, priorities, caps, and exclusive stacking. The
+  showcase Diamond Engineer costs 32 diamonds and doubles only final diamond drops produced with
+  Fortune from diamond or deepslate diamond ore.
 - **Temporary and triggered lock rules** — `[[temporary_locks]]`, `[[temporary_unlocks]]`, `[[triggered_locks]]`, and `[[triggered_unlocks]]` apply priority-based locks or permissions by dimension, structure, biome, height, health, stage state, effect, movement state, KubeJS predicate, combat, attack, hurt, kill, command, or API timer. A single rule can target items, blocks, fluids, entities, recipes, dimensions, structures, and `jump`/`elytra`/`sprint`/`swim`/`climb`, with per-rule exceptions. Static gates are priority `0`, conditional rules default to `100`, the highest priority wins, and a lock safely wins an equal-priority tie.
 - **Vanilla advancement-style stage map** — `/stage`, `/stages`, `/pstages`, `/stage gui`, the keybind, or the lock button beside the inventory recipe-book button opens a draggable and wheel-scrollable progression graph using vanilla task/goal/challenge frames, dependency connectors, tiled backgrounds, hover cards, search, owned-stage filtering, click-to-pin details, trigger progress, unlock previews, and server-validated purchases.
 - **Author-controlled map layout** — each stage's `[display]` can set `x`, `y`, `frame`, `background`, `reveal`, and `sort_order`; omit `x` + `y` for automatic dependency-graph layout. Reveal can be `always`, `dependencies`, or `unlocked`.
@@ -132,14 +148,15 @@ pack author who discovers the file without this README can still find the curren
 1. Install [NeoForge](https://neoforged.net/) for Minecraft 1.21.1.
 2. Drop the jar into `mods/`.
 3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
-4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and three example stages under `config/progressivestages/stages/`.
-5. Edit or add `config/progressivestages/stages/<stage_id>.toml` files. Nested folders are supported. Reload at runtime with `/progressivestages reload`.
+4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and thirty schema 4 showcase packages under `config/progressivestages/stages/` when that folder is empty.
+5. Run `/pstages editor` as a permission level 3 operator to edit the showcase or create your own stages. Direct TOML remains available. Reload at runtime with `/pstages reload`.
 
 ---
 
 ## Quick Start
 
-`config/progressivestages/stages/iron_age.toml`:
+This compact legacy one-file example is still valid if you create
+`config/progressivestages/stages/iron_age.toml` yourself:
 
 ```toml
 [stage]
@@ -447,7 +464,8 @@ common/
 server/
   enforcement/*Enforcer       — one per category, all multi-stage; spectator + creative bypass
   loader/StageFileParser      — parses the per-category sections + [unlocks] + minecraft=true schema
-  loader/DefaultStageTemplates — first-launch templates (stone_age, diamond_age)
+  loader/DefaultShowcaseStages — first-launch thirty stage schema 4 class tree
+  loader/DefaultStageTemplates — legacy one-file documentation reference
   ServerEventHandler          — wires every NeoForge event (block-place, item-pickup, dim-travel, mob-spawn, ...)
   triggers/                   — advancement / item-pickup / boss-kill / dimension grants
 
@@ -566,7 +584,7 @@ compat/
 - **`isValidStageName` regex** validation on `starting_stages` to skip malformed config entries.
 
 ### v1.4
-- Mob spawn gating with creeper example in default `diamond_age.toml`.
+- Mob spawn gating with a creeper example in the former default `diamond_age.toml`.
 - Tick-based dimension safety net for modded portals.
 - Recipe ID lock debug logging in `CraftingMenuMixin`.
 - EMI / JEI / FTB Teams / FTB Quests all optional dependencies.

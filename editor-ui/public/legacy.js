@@ -190,7 +190,10 @@
     const dependencyMode = stringValue(readTomlValue(stageText, "stage.dependency_mode")) || "all";
     const dependencyCount = Math.max(1, Number(readTomlValue(stageText, "stage.dependency_count") || 1));
     const rules = ruleModels(state.boot.draft.files[stage.rulesPath] || "");
-    const progression = progressionModels(state.boot.draft.files[stage.progressionPath] || "");
+    const progressionText = state.boot.draft.files[stage.progressionPath] || "";
+    const progression = progressionModels(progressionText);
+    const purchase = purchaseModel(progressionText);
+    const dropModifierCount = extractArrayBlocks(state.boot.draft.files[stage.rulesPath] || "", "drop_modifiers").length;
     const hidden = booleanValue(readTomlValue(stageText, "stage.hidden"));
     const scope = stringValue(readTomlValue(stageText, "stage.scope")) || "team";
     const frame = stringValue(readTomlValue(stageText, "display.frame")) || "task";
@@ -215,13 +218,18 @@
         <label class="toggle-line"><input type="checkbox" data-stage-field="stage.hidden" data-boolean="true" ${hidden ? "checked" : ""}>Hide this stage from players until it is revealed</label>
       </div></div></article>
       <article class="builder-section"><div class="builder-section-head"><div><h2>Rules</h2><p>${rules.length ? `${rules.length} currently active` : "None currently active"}. Drag cards to organize advanced rules.</p></div><button id="addRule" class="primary" ${stage.archived ? "disabled" : ""}>＋ Add rule</button></div><div class="builder-section-body">${rulesHtml(rules)}</div></article>
-      <article class="builder-section"><div class="builder-section-head"><div><h2>Progression</h2><p>${progression.length ? `${progression.length} automatic events configured` : "No automatic grants or revokes yet"}.</p></div><button id="addProgression" class="primary" ${stage.legacy || stage.archived ? "disabled" : ""}>＋ Add progression</button></div><div class="builder-section-body">${progressionHtml(progression)}</div></article>
+      <article class="builder-section"><div class="builder-section-head"><div><h2>How players obtain this stage</h2><p>Use an item purchase automatic gameplay a quest command or API hook.</p></div><button id="addProgression" class="primary" ${stage.legacy || stage.archived ? "disabled" : ""}>＋ Add automatic path</button></div><div class="builder-section-body"><div class="acquisition-grid">
+        <article class="acquisition-card ${purchase.enabled ? "active" : ""}"><span class="acquisition-icon">◆</span><div><strong>Buy with items</strong><small>${escapeHtml(purchase.enabled ? purchase.summary : "Not configured. Players can pay items and XP from the in game stage tree.")}</small></div><button id="editPurchase">${purchase.enabled ? "Edit purchase" : "Set up purchase"}</button></article>
+        <article class="acquisition-card ${progression.length ? "active" : ""}"><span class="acquisition-icon">↟</span><div><strong>Earn through gameplay</strong><small>${progression.length ? `${progression.length} automatic grant or revoke paths configured.` : "Add kills mining crafting exploration or KubeJS events."}</small></div></article>
+        <article class="acquisition-card"><span class="acquisition-icon">⌘</span><div><strong>Quest command or API</strong><small>Always available through PSTages FTB Quests KubeJS and the Java API.</small></div></article>
+      </div>${progressionHtml(progression)}</div></article>
       <article class="builder-section"><div class="builder-section-head"><div><h2>More stage features</h2><p>Guided shortcuts for rewards, costs, challenges, variables, and advanced systems.</p></div></div><div class="builder-section-body"><div class="feature-grid">
         ${featureButton("rewards", "Rewards", "Items, effects, XP, commands, and teleport")}
         ${featureButton("cost", "Unlock cost", "Items, XP, cooldown, and refunds")}
         ${featureButton("challenges", "Challenges", "Boss sessions, budgets, timers, and failure")}
         ${featureButton("variables", "Variables", "Player, team, or server values")}
         ${featureButton("modifiers", "Modifiers", "Buff, debuff, and transform held items")}
+        ${featureButton("drop_modifier", "Targeted mining bonus", `${dropModifierCount} configured. Change drops for selected blocks tools and enchantments`)}
         ${featureButton("advanced", "All advanced fields", "Profiles, formulas, states, templates, and extensions")}
       </div></div></article>`;
     bindBuilder(stage, rules, progression);
@@ -261,6 +269,7 @@
     qa("[data-delete-rule]", $("formView")).forEach(button => button.onclick = () => deleteRule(stage, rules[Number(button.dataset.deleteRule)]).catch(error => toast(error.message)));
     bindRuleDragging(stage, rules);
     $("addProgression").onclick = () => openProgressionEditor(stage, null);
+    $("editPurchase").onclick = () => openPurchaseEditor(stage);
     qa("[data-edit-progression]", $("formView")).forEach(button => button.onclick = () => openProgressionEditor(stage, progression[Number(button.dataset.editProgression)]));
     qa("[data-delete-progression]", $("formView")).forEach(button => button.onclick = () => deleteProgression(stage, progression[Number(button.dataset.deleteProgression)]).catch(error => toast(error.message)));
     qa("[data-feature]", $("formView")).forEach(button => button.onclick = () => openFeatureEditor(stage, button.dataset.feature));
@@ -623,6 +632,22 @@
     return output;
   }
 
+  function purchaseModel(text) {
+    const enabled = /^\s*\[cost\]\s*(?:#.*)?$/m.test(text);
+    const items = (parseSimpleArray(readTomlValue(text, "cost.items")) || []).map(parseCostItem).filter(Boolean);
+    const xp = Math.max(0, Number(readTomlValue(text, "cost.xp_levels") || 0));
+    const parts = items.map(item => `${item.count} ${title(item.id.split(":").pop())}`);
+    if (xp) parts.push(`${xp} XP levels`);
+    return { enabled, items, xp, summary: parts.length ? parts.join(" and ") : "Free purchase" };
+  }
+
+  function parseCostItem(value) {
+    const match = String(value || "").trim().match(/^(.*):(\d+)$/);
+    const id = match ? match[1] : String(value || "").trim();
+    if (!id.includes(":")) return null;
+    return { id, count: Math.max(1, Number(match?.[2] || 1)) };
+  }
+
   function openProgressionEditor(stage, entry) {
     const current = entry || { kind: "grants", conditionType: "kill", conditionTarget: "", count: 1, repeat: "once", scope: "player", priority: 0, cooldown: "" };
     openModal(`<h2 id="modalTitle">${entry ? "Edit progression" : "Add progression"}</h2><p>Choose what a player does and whether it grants or revokes this stage.</p><form id="progressionForm"><div class="modal-grid">
@@ -686,15 +711,95 @@
   function openFeatureEditor(stage, kind) {
     if (stage.legacy && kind !== "rewards" && kind !== "cost") return toast("Create a three file stage to use this guided advanced feature");
     if (kind === "rewards") return openRewardsEditor(stage);
-    if (kind === "cost") return openObjectSectionEditor(stage, "cost", [
-      ["items", "Items and amounts", "list", "minecraft:diamond:5"], ["xp_levels", "XP levels", "number", "0"],
-      ["cooldown", "Purchase cooldown", "text", "5m"], ["refund_percent", "Refund percent after revoke", "number", "0"],
-      ["bypass_requirements", "Allow purchase before prerequisites", "boolean", "false"]
-    ]);
+    if (kind === "cost") return openPurchaseEditor(stage);
     if (kind === "challenges") return openChallengeEditor(stage);
     if (kind === "variables") return openVariableEditor(stage);
     if (kind === "modifiers") return openModifierEditor(stage);
+    if (kind === "drop_modifier") return openDropModifierEditor(stage);
     openAdvancedHub(stage);
+  }
+
+  function openPurchaseEditor(stage) {
+    const path = stage.progressionPath;
+    const content = state.boot.draft.files[path] || "";
+    const current = purchaseModel(content);
+    const items = current.items.map(item => ({ ...item }));
+    openModal(`<h2 id="modalTitle">Buy ${escapeHtml(stage.name)} with items</h2><p>Players give these items to the server from the in game progression tree. Payment prerequisite checks rewards cooldowns and refunds are server authoritative.</p><form id="purchaseForm"><div class="modal-grid">
+      <section class="modal-section"><h3>Item payment</h3><div id="purchaseItems" class="purchase-items"></div><label class="wide-field">Find an item on this server<input id="purchaseSearch" placeholder="Diamond"></label><div id="purchaseResults" class="picker-results compact-results"></div></section>
+      <label>Extra XP levels<input id="purchaseXp" type="number" min="0" value="${current.xp}"></label>
+      <label>Purchase cooldown<input id="purchaseCooldown" value="${escapeHtml(stringValue(readTomlValue(content, "cost.cooldown")) || "2s")}" placeholder="2s"></label>
+      <label>Refund after revoke<input id="purchaseRefund" type="number" min="0" max="100" value="${Math.max(0, Number(readTomlValue(content, "cost.refund_percent") || 0))}"><small>Percent of the payment returned.</small></label>
+      <label class="toggle-line"><input id="purchaseBypass" type="checkbox" ${booleanValue(readTomlValue(content, "cost.bypass_requirements")) ? "checked" : ""}>Allow payment before trigger requirements are complete. Required stages still apply.</label>
+    </div><div class="modal-actions">${current.enabled ? `<button type="button" id="removePurchase" class="danger">Remove purchase</button>` : ""}<button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">Save item purchase</button></div></form>`, () => {
+      const renderItems = () => {
+        $("purchaseItems").innerHTML = items.length ? items.map((item, index) => `<div class="purchase-item"><span><strong>${escapeHtml(title(item.id.split(":").pop()))}</strong><small>${escapeHtml(item.id)}</small></span><label>Amount<input data-purchase-count="${index}" type="number" min="1" value="${item.count}"></label><button type="button" data-remove-purchase-item="${index}" class="danger">×</button></div>`).join("") : `<div class="empty-state"><span>No item payment yet. Search below and click an item.</span></div>`;
+        qa("[data-purchase-count]", $("purchaseItems")).forEach(input => input.oninput = () => items[Number(input.dataset.purchaseCount)].count = Math.max(1, Number(input.value || 1)));
+        qa("[data-remove-purchase-item]", $("purchaseItems")).forEach(button => button.onclick = () => { items.splice(Number(button.dataset.removePurchaseItem), 1); renderItems(); });
+      };
+      const search = debounce(async () => {
+        const result = await api({ action: "catalog", catalog: "progressivestages:items", field: "cost.items", mode: "id", text: $("purchaseSearch").value, pageSize: 30, catalogRevision: state.boot.catalog.revision });
+        $("purchaseResults").innerHTML = result.entries.map(entry => `<button type="button" data-purchase-item="${escapeHtml(entry.key)}"><strong>${escapeHtml(entry.label)}</strong><small>${escapeHtml(entry.key)}</small></button>`).join("") || `<span class="muted">No matching items.</span>`;
+        qa("[data-purchase-item]", $("purchaseResults")).forEach(button => button.onclick = () => {
+          const id = stripSelectorPrefix(button.dataset.purchaseItem);
+          const existing = items.find(item => item.id === id);
+          if (existing) existing.count++;
+          else items.push({ id, count: 1 });
+          renderItems();
+        });
+      }, 180);
+      $("purchaseSearch").oninput = search;
+      $("purchaseForm").onsubmit = async event => {
+        event.preventDefault();
+        const xp = Math.max(0, Number($("purchaseXp").value || 0));
+        if (!items.length && !xp) return toast("Add at least one item or an XP cost");
+        let updated = state.boot.draft.files[path] || "";
+        updated = upsertToml(updated, "cost.items", items.map(item => `${item.id}:${Math.max(1, Number(item.count || 1))}`));
+        updated = upsertToml(updated, "cost.xp_levels", xp);
+        updated = upsertToml(updated, "cost.cooldown", $("purchaseCooldown").value.trim());
+        updated = upsertToml(updated, "cost.refund_percent", Math.max(0, Math.min(100, Number($("purchaseRefund").value || 0))));
+        updated = upsertToml(updated, "cost.bypass_requirements", $("purchaseBypass").checked);
+        try { await mutate(path, updated); closeModal(); toast(`${stage.name} can now be bought from the stage tree`); } catch (error) { toast(error.message); }
+      };
+      q("#removePurchase")?.addEventListener("click", async () => {
+        if (!confirm(`Remove the purchase option from ${stage.name}`)) return;
+        try { await mutate(path, removeTomlSection(state.boot.draft.files[path] || "", "cost")); closeModal(); toast("Purchase option removed"); } catch (error) { toast(error.message); }
+      });
+      renderItems();
+      search();
+    });
+  }
+
+  function openDropModifierEditor(stage) {
+    openModal(`<h2 id="modalTitle">Add a targeted mining bonus</h2><p>Change the final item count only when the source block output item tool stage and enchantment all match.</p><form id="dropModifierForm"><div class="modal-grid">
+      <label>Block selection<select id="dropBlockMode"><option value="id">Exact block</option><option value="mod">Whole mod</option><option value="tag">Block tag</option><option value="name">Name match</option></select></label>
+      <label>Source block<input id="dropBlock" list="dropBlockResults" placeholder="minecraft:diamond_ore" required><datalist id="dropBlockResults"></datalist></label>
+      <label>Output selection<select id="dropItemMode"><option value="id">Exact item</option><option value="mod">Whole mod</option><option value="tag">Item tag</option><option value="name">Name match</option></select></label>
+      <label>Output item<input id="dropItem" list="dropItemResults" placeholder="minecraft:diamond" required><datalist id="dropItemResults"></datalist></label>
+      <label>Tool selection<select id="dropToolMode"><option value="id">Exact tool</option><option value="mod">Whole mod</option><option value="tag" selected>Tool tag</option><option value="name">Name match</option></select></label>
+      <label>Required tool<input id="dropTool" list="dropToolResults" placeholder="minecraft:pickaxes"><datalist id="dropToolResults"></datalist></label>
+      <label>Required enchantment<input id="dropEnchantment" list="dropEnchantmentResults" placeholder="minecraft:fortune"><datalist id="dropEnchantmentResults"></datalist></label>
+      <label>Minimum enchantment level<input id="dropEnchantmentLevel" type="number" min="0" value="1"></label>
+      <label>Multiply final drops by<input id="dropMultiply" type="number" min="0" step="0.1" value="2"></label>
+      <label>Add before multiplying<input id="dropAdd" type="number" step="1" value="0"></label>
+      <label>Priority<input id="dropPriority" type="number" value="500"></label>
+      <label class="toggle-line"><input id="dropExclusive" type="checkbox" checked>Stop lower priority drop bonuses after this one matches</label>
+    </div><div class="modal-actions"><button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">Add mining bonus</button></div></form>`, () => {
+      bindCatalogAutocomplete("dropBlock", "dropBlockResults", "blocks");
+      bindCatalogAutocomplete("dropItem", "dropItemResults", "items");
+      bindCatalogAutocomplete("dropTool", "dropToolResults", "items");
+      bindCatalogAutocomplete("dropEnchantment", "dropEnchantmentResults", "enchantments");
+      $("dropModifierForm").onsubmit = async event => {
+        event.preventDefault();
+        const block = normalizeSelector($("dropBlockMode").value, $("dropBlock").value.trim(), $("dropBlock").value.trim());
+        const item = normalizeSelector($("dropItemMode").value, $("dropItem").value.trim(), $("dropItem").value.trim());
+        const toolValue = $("dropTool").value.trim();
+        const lines = ["[[drop_modifiers]]", `id = ${encodeToml(childId(stage.id, `drop_${Date.now().toString(36)}`))}`, `blocks = ${encodeToml([block])}`, `drops = ${encodeToml([item])}`];
+        if (toolValue) lines.push(`tools = ${encodeToml([normalizeSelector($("dropToolMode").value, toolValue, toolValue)])}`);
+        if ($("dropEnchantment").value.trim()) lines.push(`required_enchantment = ${encodeToml($("dropEnchantment").value.trim())}`, `minimum_enchantment_level = ${Math.max(0, Number($("dropEnchantmentLevel").value || 0))}`);
+        lines.push(`add = ${Number($("dropAdd").value || 0)}`, `multiply = ${Math.max(0, Number($("dropMultiply").value || 1))}`, `priority = ${Number($("dropPriority").value || 0)}`, `exclusive = ${$("dropExclusive").checked}`);
+        try { await mutate(stage.rulesPath, appendTomlBlock(state.boot.draft.files[stage.rulesPath] || "", lines.join("\n"))); closeModal(); toast("Targeted mining bonus added to the draft"); } catch (error) { toast(error.message); }
+      };
+    });
   }
 
   function openChallengeEditor(stage) {
@@ -1252,6 +1357,20 @@
     refresh();
   }
 
+  function bindCatalogAutocomplete(inputId, datalistId, catalog) {
+    const input = $(inputId);
+    const list = $(datalistId);
+    if (!input || !list) return;
+    const refresh = debounce(async () => {
+      try {
+        const result = await api({ action: "catalog", catalog: `progressivestages:${catalog}`, field: inputId, mode: "id", text: input.value, pageSize: 40, catalogRevision: state.boot.catalog.revision });
+        list.innerHTML = result.entries.map(entry => `<option value="${escapeHtml(stripSelectorPrefix(entry.key))}">${escapeHtml(entry.label)}</option>`).join("");
+      } catch (error) { list.innerHTML = ""; }
+    }, 180);
+    input.oninput = refresh;
+    refresh();
+  }
+
   function showInspector(view) {
     qa(".inspector-tabs button").forEach(button => button.classList.toggle("active", button.dataset.inspector === view));
     $("helpPanel").classList.toggle("hidden", view !== "help");
@@ -1459,6 +1578,21 @@
     }
     lines.splice(end, 0, `${key} = ${encoded}`);
     return lines.join("\n");
+  }
+
+  function removeTomlSection(text, section) {
+    const lines = text.split(/\r?\n/);
+    let start = -1;
+    let end = lines.length;
+    for (let index = 0; index < lines.length; index++) {
+      const match = lines[index].match(/^\s*\[([^\]]+)\]\s*(?:#.*)?$/);
+      if (!match) continue;
+      if (start >= 0) { end = index; break; }
+      if (match[1] === section) start = index;
+    }
+    if (start < 0) return text;
+    lines.splice(start, end - start);
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
   }
 
   function encodeToml(value) {

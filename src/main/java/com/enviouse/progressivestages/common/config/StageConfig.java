@@ -22,11 +22,11 @@ public class StageConfig {
     // ============ General Settings ============
 
     private static final ModConfigSpec.ConfigValue<List<? extends String>> STARTING_STAGES = BUILDER
-        .comment("Starting stages for new players (v1.3)",
+        .comment("Starting stages for new players",
                  "List of stage IDs to auto-grant on first join",
-                 "Example: [\"stone_age\", \"tutorial_complete\"]",
+                 "Example: [\"showcase:mage\", \"my_pack:tutorial_complete\"]",
                  "Set to empty list [] for no starting stages")
-        .defineList("general.starting_stages", List.of("stone_age"), () -> "", obj -> obj instanceof String);
+        .defineList("general.starting_stages", List.of(), () -> "", obj -> obj instanceof String);
 
     private static final ModConfigSpec.ConfigValue<String> TEAM_MODE = BUILDER
         .comment("Team mode: \"ftb_teams\" (requires FTB Teams mod) or \"solo\" (each player is their own team)",

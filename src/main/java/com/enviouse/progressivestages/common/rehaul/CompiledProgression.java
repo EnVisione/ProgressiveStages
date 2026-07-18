@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.common.rehaul;
 import com.enviouse.progressivestages.common.rehaul.lifecycle.CompiledLifecycleRule;
 import com.enviouse.progressivestages.common.rehaul.challenge.CompiledChallenge;
 import com.enviouse.progressivestages.common.rehaul.modifier.CompiledModifier;
+import com.enviouse.progressivestages.common.rehaul.modifier.CompiledDropModifier;
 import com.enviouse.progressivestages.common.rehaul.profile.AffinityProfile;
 import com.enviouse.progressivestages.common.rehaul.state.StageStateDefinition;
 import com.enviouse.progressivestages.common.rehaul.template.TemplateDefinition;
@@ -13,6 +14,7 @@ import java.util.Map;
 
 public record CompiledProgression(List<CompiledLifecycleRule> lifecycleRules,
                                   List<CompiledModifier> modifiers,
+                                  List<CompiledDropModifier> dropModifiers,
                                   List<CompiledChallenge> challenges,
                                   List<AffinityProfile> profiles,
                                   List<VariableDefinition> variables,
@@ -22,11 +24,12 @@ public record CompiledProgression(List<CompiledLifecycleRule> lifecycleRules,
                                   Map<String, Object> extensions) {
 
     public static final CompiledProgression EMPTY = new CompiledProgression(
-        List.of(), List.of(), List.of(), List.of(), List.of(), Map.of(), List.of(), List.of(), Map.of());
+        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), Map.of(), List.of(), List.of(), Map.of());
 
     public CompiledProgression {
         lifecycleRules = lifecycleRules == null ? List.of() : List.copyOf(lifecycleRules);
         modifiers = modifiers == null ? List.of() : List.copyOf(modifiers);
+        dropModifiers = dropModifiers == null ? List.of() : List.copyOf(dropModifiers);
         challenges = challenges == null ? List.of() : List.copyOf(challenges);
         profiles = profiles == null ? List.of() : List.copyOf(profiles);
         variables = variables == null ? List.of() : List.copyOf(variables);

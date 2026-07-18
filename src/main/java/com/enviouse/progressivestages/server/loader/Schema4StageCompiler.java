@@ -34,6 +34,7 @@ import com.enviouse.progressivestages.common.rehaul.modifier.AggregationMode;
 import com.enviouse.progressivestages.common.rehaul.modifier.AttributeChange;
 import com.enviouse.progressivestages.common.rehaul.modifier.AttributeOperation;
 import com.enviouse.progressivestages.common.rehaul.modifier.CompiledModifier;
+import com.enviouse.progressivestages.common.rehaul.modifier.CompiledDropModifier;
 import com.enviouse.progressivestages.common.rehaul.modifier.EffectChange;
 import com.enviouse.progressivestages.common.rehaul.modifier.ItemContext;
 import com.enviouse.progressivestages.common.rehaul.modifier.NumericTransform;
@@ -78,13 +79,14 @@ public final class Schema4StageCompiler {
         addLifecycle(lifecycle, source, stage, "grants", LifecycleDirection.GRANT);
         addLifecycle(lifecycle, source, stage, "revokes", LifecycleDirection.REVOKE);
         List<CompiledModifier> modifiers = parseModifiers(source, stage);
+        List<CompiledDropModifier> dropModifiers = parseDropModifiers(source, stage);
         List<CompiledChallenge> challenges = parseChallenges(source, stage);
         List<AffinityProfile> profiles = parseProfiles(source);
         List<VariableDefinition> variables = parseVariables(source);
         Map<String, String> formulas = parseFormulas(source);
         List<TemplateDefinition> templates = parseTemplates(source);
         List<StageStateDefinition> states = parseStates(source, stage);
-        CompiledProgression progression = new CompiledProgression(lifecycle, modifiers, challenges,
+        CompiledProgression progression = new CompiledProgression(lifecycle, modifiers, dropModifiers, challenges,
             profiles, variables, formulas, templates, states, extensionFields(source));
         return new CompiledStage(stage.getId(), stage.getDisplayName(), stage.getDescription(),
             stage.getPriority(), 4, sourceId, rules, progression, legacy.metadata(), stage,
@@ -262,6 +264,39 @@ public final class Schema4StageCompiler {
         return List.copyOf(output);
     }
 
+    private static List<CompiledDropModifier> parseDropModifiers(Config source, StageDefinition stage) {
+        List<Map<String, Object>> entries = maps(source.getRaw("drop_modifiers"));
+        List<CompiledDropModifier> output = new ArrayList<>();
+        for (int index = 0; index < entries.size(); index++) {
+            Map<String, Object> entry = entries.get(index);
+            ResourceLocation id = optionalId(entry.get("id"), childId(stage.getId(), "drop_modifier/" + index));
+            List<SelectorSpec> blocks = selectorList(entry, "blocks", "source_blocks");
+            List<SelectorSpec> drops = selectorList(entry, "drops", "output_items", "items");
+            List<SelectorSpec> tools = selectorList(entry, "tools", "tool_items");
+            Set<StageId> required = entry.containsKey("with_stages")
+                ? stageIds(entry.get("with_stages")) : Set.of(stage.getId());
+            ResourceLocation enchantment = entry.get("required_enchantment") == null
+                ? null : namespacedId(entry.get("required_enchantment"));
+            output.add(new CompiledDropModifier(id, stage.getId(), blocks, drops, tools,
+                required, stageIds(entry.get("without_stages")), condition(entry), enchantment,
+                integer(entry.get("minimum_enchantment_level"), enchantment == null ? 0 : 1),
+                decimal(entry.get("add"), 0), decimal(entry.get("multiply"), 1),
+                integer(entry.get("minimum"), 0), integer(entry.get("maximum"), Integer.MAX_VALUE),
+                integer(entry.get("priority"), stage.getPriority()), bool(entry.get("exclusive"), false),
+                provenance(stage, "drop_modifiers", Integer.toString(index))));
+        }
+        return List.copyOf(output);
+    }
+
+    private static List<SelectorSpec> selectorList(Map<String, Object> source, String... keys) {
+        for (String key : keys) {
+            if (!source.containsKey(key)) continue;
+            return strings(source.get(key)).stream().map(value -> SelectorSpec.parse(value)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid selector. " + value))).toList();
+        }
+        return List.of();
+    }
+
     private static List<CompiledChallenge> parseChallenges(Config source, StageDefinition stage) {
         List<CompiledChallenge> output = new ArrayList<>();
         List<Map<String, Object>> entries = maps(source.getRaw("challenges"));
@@ -364,7 +399,7 @@ public final class Schema4StageCompiler {
         if (raw == null) return Map.of();
         Map<String, String> output = new LinkedHashMap<>();
         if (raw instanceof Config config) {
-            config.entrySet().forEach(entry -> output.put(entry.getKey(), String.valueOf(entry.getValue())));
+            config.entrySet().forEach(entry -> output.put(entry.getKey(), String.valueOf((Object) entry.getValue())));
         } else {
             for (Map<String, Object> entry : maps(raw)) {
                 String id = String.valueOf(entry.getOrDefault("id", ""));

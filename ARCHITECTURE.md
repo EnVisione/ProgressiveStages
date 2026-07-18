@@ -37,9 +37,15 @@ config/
 └── progressivestages/
     ├── progressivestages.toml
     └── stages/
-        ├── stone_age.toml
-        ├── iron_age.toml
-        └── diamond_age.toml
+        ├── mage/
+        │   ├── stage.toml
+        │   ├── rules.toml
+        │   └── progression.toml
+        ├── diamond_engineer/
+        │   ├── stage.toml
+        │   ├── rules.toml
+        │   └── progression.toml
+        └── 28 more showcase stage packages
 ```
 
 ### `config/progressivestages/progressivestages.toml`
@@ -77,9 +83,19 @@ The value at `[stage].id` is authoritative. The folder and filename are for huma
 
 `triggers.toml` is deliberately ignored. In 3.0, triggers belong inside the stage they grant as one or more `[[triggers]]` blocks.
 
-### Generated reference files
+### Generated showcase packages
 
-If no stage files exist, `DefaultStageTemplates` writes the stone, iron, and diamond examples. `diamond_age.toml` is the complete commented reference. Its tracked copy is [examples/reference/diamond_stage.toml](examples/reference/diamond_stage.toml), and a unit test requires the tracked copy and generated Java text block to remain identical.
+If no stage files exist, `DefaultShowcaseStages` writes thirty schema 4 stage packages and ninety
+files. The dependency graph contains independent class roots, evolutions, mastery stages, hybrid
+stages, and an at-least-three finale. It also provides real runtime examples of purchases,
+automatic grants, rewards, temporary rules, contextual modifiers, drop modifiers, challenges,
+variables, formulas, states, and ability gates. [SHOWCASE_PACK.md](SHOWCASE_PACK.md) documents the
+whole tree. Existing installations are never modified by this generator because any discovered
+stage causes generation to be skipped.
+
+`DefaultStageTemplates` retains the older one-file examples for compatibility and documentation
+tests. [examples/reference/diamond_stage.toml](examples/reference/diamond_stage.toml) remains the
+complete commented legacy reference, but it is not generated into new installations.
 
 ### Migration behavior
 
@@ -270,7 +286,8 @@ The server package contains:
 - `StageFileLoader` scans config files, merges datapack stages, validates a complete candidate, applies a snapshot, and rolls back a failed reload.
 - `StageFileParser` converts TOML into immutable stage models and detailed parse errors.
 - `DatapackStageLoader` reads server resource stages.
-- `DefaultStageTemplates` owns the first-launch reference files and scaffolding content.
+- `DefaultShowcaseStages` owns the thirty-package first-launch showcase.
+- `DefaultStageTemplates` retains the legacy one-file documentation and compatibility references.
 
 ### `server/enforcement`
 
@@ -477,7 +494,7 @@ The broader client, dedicated server, multiplayer, UI, and optional-mod matrix i
 | Goal | First place to inspect |
 |---|---|
 | Add a global option | `StageConfig`, then the relevant enforcer and documentation. |
-| Add a stage TOML field | `StageDefinition`, `StageFileParser`, `DefaultStageTemplates`, documentation, and parser tests. |
+| Add a stage TOML field | Schema model or `StageDefinition`, the matching compiler or parser, editor schema, documentation, and focused tests. |
 | Add a lock category | Lock model, `LockRegistry`, focused enforcer, network cache if rendered, docs, and tests. |
 | Add a trigger condition | `TriggerConditionType`, parser, evaluator index and value logic, progress labels, docs, and tests. |
 | Add a command | `StageCommand`, permission and suggestions, docs, and a runtime check. |
@@ -486,7 +503,7 @@ The broader client, dedicated server, multiplayer, UI, and optional-mod matrix i
 | Change the stage map | `StageTreeScreen`, definition or GUI payloads, client cache tests, and the UI matrix. |
 | Add an optional integration | A focused `compat` package, safe detection, optional mixin gate if needed, and absent-mod build testing. |
 | Change saved ownership | `TeamStageData`, codecs, migration compatibility, multiplayer tests, and server restart tests. |
-| Change first-launch examples | `DefaultStageTemplates`, tracked examples, documentation reference tests, and beginner pack tests. |
+| Change first-launch examples | `DefaultShowcaseStages`, showcase documentation, package compilation tests, and graph validation tests. |
 
 ## 13. Release files
 

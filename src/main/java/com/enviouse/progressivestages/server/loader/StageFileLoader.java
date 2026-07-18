@@ -540,32 +540,15 @@ public class StageFileLoader {
         return count;
     }
 
-    // ============================================================================
-    // Default 2.0 stage file templates
-    // ============================================================================
-
     private void generateDefaultStageFiles() {
-        generateStoneAgeFile();
-        generateIronAgeFile();
-        generateDiamondAgeFile();
-    }
-
-    private void generateStoneAgeFile() {
-        writeStageFile("stone_age.toml", DefaultStageTemplates.stoneAge());
-    }
-
-    private void generateIronAgeFile() {
-        writeStageFile("iron_age.toml", DefaultStageTemplates.ironAge());
-    }
-
-    private void generateDiamondAgeFile() {
-        writeStageFile("diamond_age.toml", DefaultStageTemplates.diamondAge());
+        DefaultShowcaseStages.files().forEach(this::writeStageFile);
     }
     private void writeStageFile(String fileName, String content) {
         Path filePath = stagesDirectory.resolve(fileName);
         try {
+            Files.createDirectories(filePath.getParent());
             Files.writeString(filePath, content);
-            LOGGER.info("Generated default stage file: {}", fileName);
+            LOGGER.info("Generated showcase stage file: {}", fileName);
         } catch (IOException e) {
             LOGGER.error("Failed to write stage file: {}", fileName, e);
         }

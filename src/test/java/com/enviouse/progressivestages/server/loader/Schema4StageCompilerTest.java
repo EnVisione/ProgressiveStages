@@ -57,6 +57,17 @@ class Schema4StageCompilerTest {
             id = "minecraft:generic.attack_damage"
             amount = -0.5
             operation = "add_multiplied_total"
+
+            [[drop_modifiers]]
+            id = "pack:diamond_fortune"
+            blocks = ["minecraft:diamond_ore"]
+            drops = ["minecraft:diamond"]
+            tools = ["tag:minecraft:pickaxes"]
+            required_enchantment = "minecraft:fortune"
+            minimum_enchantment_level = 1
+            multiply = 2.0
+            priority = 650
+            exclusive = true
             """;
         String progression = """
             [[grants]]
@@ -89,6 +100,8 @@ class Schema4StageCompilerTest {
             && rule.lifetime() == RuleLifetime.DURATION && rule.priority() == 800));
         assertEquals(2, compiled.progression().lifecycleRules().size());
         assertEquals(1, compiled.progression().modifiers().size());
+        assertEquals(1, compiled.progression().dropModifiers().size());
+        assertEquals(2.0, compiled.progression().dropModifiers().getFirst().multiply());
         assertEquals(1, compiled.progression().challenges().size());
         assertEquals(2, compiled.progression().challenges().getFirst().budgets().getFirst().maximum());
     }

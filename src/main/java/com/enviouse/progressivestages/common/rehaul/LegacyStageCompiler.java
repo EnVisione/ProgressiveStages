@@ -114,7 +114,7 @@ public final class LegacyStageCompiler {
                 false, false, 0, 0, 0, "", ActionChain.EMPTY, ActionChain.EMPTY,
                 root.child("stage", "duration")));
         }
-        return new CompiledProgression(lifecycle, List.of(), List.of(), List.of(), List.of(), Map.of(),
+        return new CompiledProgression(lifecycle, List.of(), List.of(), List.of(), List.of(), List.of(), Map.of(),
             List.of(), List.of(), Map.of());
     }
 

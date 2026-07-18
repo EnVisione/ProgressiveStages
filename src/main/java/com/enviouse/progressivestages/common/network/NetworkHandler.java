@@ -330,6 +330,14 @@ public class NetworkHandler {
         compiled.progression().modifiers().stream().map(modifier -> modifier.id() + ". "
             + modifier.items().stream().map(item -> item.raw()).toList() + ". " + modifier.contexts()
             + ". Priority " + modifier.priority()).forEach(output::add);
+        compiled.progression().dropModifiers().stream().map(modifier -> "Block drop modifier. "
+            + modifier.id() + ". Blocks " + modifier.blocks().stream().map(item -> item.raw()).toList()
+            + ". Drops " + modifier.drops().stream().map(item -> item.raw()).toList()
+            + ". Tools " + modifier.tools().stream().map(item -> item.raw()).toList()
+            + ". Enchantment " + (modifier.requiredEnchantment() == null ? "any" : modifier.requiredEnchantment())
+            + ". Minimum level " + modifier.minimumEnchantmentLevel() + ". Add " + modifier.add()
+            + ". Multiply " + modifier.multiply() + ". Priority " + modifier.priority()
+            + ". Exclusive " + modifier.exclusive() + ".").forEach(output::add);
         var held = player.getMainHandItem();
         if (held.isEmpty()) return List.copyOf(output);
         ResourceLocation item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem());

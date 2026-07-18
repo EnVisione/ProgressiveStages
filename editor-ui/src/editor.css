@@ -141,6 +141,19 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 9px; bac
 .dependency-mode-help { grid-column: 1 / -1; padding: 9px 11px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--accent-soft); color: var(--muted); }
 
 .rule-list, .progression-list { display: grid; gap: 9px; }
+.acquisition-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 13px; }
+.acquisition-card { display: grid; grid-template-columns: 32px 1fr; align-items: start; gap: 9px; min-height: 104px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
+.acquisition-card.active { border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); background: var(--accent-soft); }
+.acquisition-card .acquisition-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--panel3); color: var(--accent-strong); }
+.acquisition-card strong, .acquisition-card small { display: block; }
+.acquisition-card small { margin-top: 3px; color: var(--muted); line-height: 1.35; }
+.acquisition-card button { grid-column: 1 / -1; width: 100%; align-self: end; }
+.purchase-items { display: grid; gap: 7px; margin-bottom: 10px; }
+.purchase-item { display: grid; grid-template-columns: minmax(180px, 1fr) 100px auto; align-items: end; gap: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
+.purchase-item strong, .purchase-item small { display: block; }
+.purchase-item small { color: var(--muted); margin-top: 2px; }
+.purchase-item label { color: var(--muted); font-size: 11px; }
+.compact-results { max-height: 170px; }
 .rule-card, .progression-card { display: grid; grid-template-columns: 28px minmax(160px, 1fr) minmax(170px, 1.4fr) auto; align-items: center; gap: 10px; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
 .rule-card.dragging { opacity: .45; border-color: var(--accent); }
 .drag-handle { color: var(--muted); cursor: grab; font-size: 17px; text-align: center; }

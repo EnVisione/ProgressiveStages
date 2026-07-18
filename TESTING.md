@@ -90,6 +90,8 @@ The test sources live under `src/test/java`.
 | `ConditionalLockEngineTest` | Priority ordering, static-gate overrides, safe lock-on-tie behavior, and deterministic same-effect ties. |
 | `StageModelImmutabilityTest` | Defensive copies for rewards, regions, and enforcement maps. |
 | `StagePurchaseDataTest` | Namespaced offline refund persistence. |
+| `DefaultShowcaseStagesTest` | Thirty schema 4 packages, ninety files, acyclic class tree, Diamond Engineer payment, and Fortune drop modifier. |
+| `DropModifierResolverTest` | Block, output, tool, owned-stage, and enchantment matching for targeted count transforms. |
 | `ScriptHooksTest` | Normalized script provider identifiers. |
 | `OptionalCompatMixinPluginTest` | Optional integration mixins apply only when their target classes exist. |
 | `ClientLockCacheTest` | Immutable defensive client lock snapshots. |

@@ -26,7 +26,7 @@
 >
 > **Want one complete file you can read and copy?** Open
 > [`diamond_stage.toml`](examples/reference/diamond_stage.toml). It is the directly browsable,
-> fully commented copy of the generated `diamond_age.toml` reference. Start with its numbered
+> fully commented legacy one-file reference. Start with its numbered
 > safe five minute edit, then use its table of contents to find every lock category and feature.
 > Conditional access authors can also use the focused
 > [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
@@ -40,7 +40,7 @@
 1. [What ProgressiveStages Is](#1-what-progressivestages-is)
 2. [Core Concepts](#2-core-concepts)
 3. [Quick Start — Your First Stage in 90 Seconds](#3-quick-start--your-first-stage-in-90-seconds)
-   - [3.1 How to use the complete Diamond Stage reference](#31-how-to-use-the-complete-diamond-stage-reference)
+   - [3.1 How to use the complete legacy Diamond Stage reference](#31-how-to-use-the-complete-legacy-diamond-stage-reference)
    - [3.2 No-code localhost stage editor](#32-no-code-localhost-stage-editor)
 4. [Stage Files — The Unified TOML Schema](#4-stage-files--the-unified-toml-schema)
    - [4.1 The Prefix System](#41-the-prefix-system)
@@ -81,6 +81,7 @@
    - [4.33 `[enchants].max_levels`, `[beacon]`, `[brewing]` — finer-grained gates](#433-enchantsmax_levels-beacon-brewing--finer-grained-gates) — **New in 3.0**
    - [4.34 Temporary, triggered, and priority-based lock rules](#434-temporary-triggered-and-priority-based-lock-rules) — **New in 3.0.1**
    - [4.35 Structure session providers, leased stages, and active locks](#435-structure-session-providers-leased-stages-and-active-locks) — **New in 3.0.1**
+   - [4.36 `[[drop_modifiers]]` — selector based block output bonuses](#436-drop_modifiers--selector-based-block-output-bonuses) — **New in 3.0.1**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -244,23 +245,26 @@ server/instance. Per-world stage state lives inside each world's saved data.
 > stage file's `[[triggers]]` block (see §5). A leftover legacy `triggers.toml`
 > is simply ignored.
 
-Three default stage files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`)
-are generated on first launch if the directory is empty. The `diamond_age.toml`
-template is the canonical reference file — every category, the `[display]`
-overrides, and a worked `[[triggers]]` example are shown with inline
-documentation. The same file is available in the repository as the directly
-browsable [`diamond_stage.toml`](examples/reference/diamond_stage.toml) reference.
+Thirty schema 4 stage packages are generated on first launch if the stages directory is empty.
+They form a complete branching class tree with independent roots, single-path evolutions, hybrid
+classes, item purchases, automatic grants, rewards, temporary conditions, modifiers, challenges,
+and an at-least-three finale. See the [Showcase Pack Guide](SHOWCASE_PACK.md) for every stage and a
+manual verification checklist. Existing stage files are never deleted, replaced, or supplemented
+with the showcase during an update.
+
+The directly browsable [`diamond_stage.toml`](examples/reference/diamond_stage.toml) remains the
+canonical fully commented legacy one-file reference. It is documentation and is not generated on
+new installations.
 
 ---
 
 ## 3. Quick Start — Your First Stage in 90 Seconds
 
-1. Launch the game once with ProgressiveStages installed. The default stage
-   files (`stone_age.toml`, `iron_age.toml`, `diamond_age.toml`) appear in
-   `config/progressivestages/stages/`.
+1. Launch the game once with ProgressiveStages installed. Thirty showcase stage package folders
+   appear in `config/progressivestages/stages/` when that directory was empty.
 
-2. Open `config/progressivestages/stages/iron_age.toml`. The minimum useful 3.0 stage
-   file looks like this:
+2. Run `/pstages editor`, select a showcase stage, or click the gold plus button to create one. If
+   you prefer a manual one-file stage, this remains the minimum valid example:
 
    ```toml
    [stage]
@@ -285,7 +289,7 @@ browsable [`diamond_stage.toml`](examples/reference/diamond_stage.toml) referenc
    ]
    ```
 
-3. In the **same** `iron_age.toml`, add a `[[triggers]]` rule so the stage
+3. In the same manual `iron_age.toml`, add a `[[triggers]]` rule so the stage
    grants itself when the player earns the smelt-iron advancement:
 
    ```toml
@@ -309,20 +313,20 @@ browsable [`diamond_stage.toml`](examples/reference/diamond_stage.toml) referenc
 That's the entire core loop. Sections 4 and 5 below cover every category and
 trigger in depth.
 
-### 3.1 How to use the complete Diamond Stage reference
+### 3.1 How to use the complete legacy Diamond Stage reference
 
 The repository contains a real, parseable, directly browsable reference named
 [`examples/reference/diamond_stage.toml`](examples/reference/diamond_stage.toml). This is not a
-short fragment. It is an exact tracked copy of the complete default Diamond Age template returned
-by `DefaultStageTemplates.diamondAge()`. An automated test fails if the tracked file and generated
-default ever differ.
+short fragment. It is an exact tracked copy of the legacy Diamond Age reference returned by
+`DefaultStageTemplates.diamondAge()`. An automated test fails if the tracked file and Java
+reference ever differ.
 
 The two filenames have different jobs:
 
 - `examples/reference/diamond_stage.toml` is the friendly GitHub documentation filename. Read it
   in a browser, download it, or copy sections from it.
-- `config/progressivestages/stages/diamond_age.toml` is the file generated in an installed game.
-  Keep this runtime filename unless you intentionally reorganize the stage directory.
+- `config/progressivestages/stages/diamond_age.toml` is an optional filename you may create by
+  copying the reference. It is not part of the new first-launch showcase.
 - `id = "diamond_age"` inside `[stage]` is the authoritative identifier. Commands, dependencies,
   KubeJS, FTB Quests, saved ownership, and API calls use this ID rather than the documentation
   filename.
@@ -378,13 +382,20 @@ To create a stage without knowing TOML:
    dimension, biome, structure, stage, mob, item, advancement, combat, boss, KubeJS, or other
    listed activation condition.
 9. Click `Add progression` to make a condition grant or revoke the stage. Choose its count, repeat
-   policy, player/team/server scope, priority, and cooldown. Use the reward and cost cards for
-   items, effects, commands, teleportation, XP, purchase price, refund, and cooldown.
-10. Drag advanced rule cards to organize them. Open `Stage graph` and drag stage nodes to save
+   policy, player/team/server scope, priority, and cooldown. The **How players obtain this stage**
+   section separately shows automatic gameplay, item purchase, and quest, command, or API paths.
+   Choose **Set up purchase**, search the live item registry, click payment items, and set each
+   amount plus optional XP, cooldown, refund, and trigger bypass. Use reward cards for items,
+   effects, commands, teleportation, and XP granted after ownership changes.
+10. Choose **Targeted mining bonus** to select a broken block, final output item, optional tool,
+    optional enchantment and level, multiplier, addition, priority, and exclusive stacking. This
+    creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates 32-diamond purchase
+    plus a Fortune-only double-diamond rule.
+11. Drag advanced rule cards to organize them. Open `Stage graph` and drag stage nodes to save
     their map coordinates. The graph stays inside its own scrollable canvas even when a node is
     moved far from the origin. Automatic layout puts beginner stages at the bottom and evolutions
     above them. `Arrange paths upward` clears manual coordinates and restores that branching view.
-11. Click `Check my work`. Then click `Review and apply`, inspect the file diff, and confirm.
+12. Click `Check my work`. Then click `Review and apply`, inspect the file diff, and confirm.
 
 The easy builder writes the same schema that a TOML expert would write. There is no reduced
 runtime, separate simple-rule engine, or client-only shortcut. Priority, exclusions, temporary
@@ -2236,6 +2247,62 @@ lease rules, team behavior, lifecycle semantics, commands, failure handling, and
 acceptance matrix are in
 [STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md).
 
+### 4.36 `[[drop_modifiers]]` — selector based block output bonuses
+
+A drop modifier changes the count of matching final item entities produced by a broken block. It is
+server authoritative and active only when its owning stage is owned unless `with_stages` overrides
+that requirement. The normal prefix system works independently for source blocks, output items,
+and tools.
+
+```toml
+[[drop_modifiers]]
+id = "my_pack:diamond_engineer/diamond_fortune"
+blocks = ["minecraft:diamond_ore", "minecraft:deepslate_diamond_ore"]
+drops = ["minecraft:diamond"]
+tools = ["tag:minecraft:pickaxes"]
+required_enchantment = "minecraft:fortune"
+minimum_enchantment_level = 1
+multiply = 2.0
+add = 0
+minimum = 0
+maximum = 64
+priority = 600
+exclusive = true
+```
+
+| Field | Required | Meaning |
+|---|---:|---|
+| `id` | No | Stable rule ID. A deterministic stage child ID is generated when omitted. |
+| `blocks` or `source_blocks` | Yes | Source block selectors. At least one must match the block that was broken. |
+| `drops`, `output_items`, or `items` | Yes | Final output item selectors. At least one must match each stack being transformed. |
+| `tools` or `tool_items` | No | Tool selectors. Empty means any tool, including an empty tool. |
+| `with_stages` | No | Every listed stage must be owned. Defaults to the stage that contains the rule. |
+| `without_stages` | No | None of the listed stages may be owned. |
+| `condition`, `when`, or `while` | No | Any compiled live condition, such as dimension, biome, structure, or session state. |
+| `required_enchantment` | No | Exact enchantment registry ID that the used tool must contain. |
+| `minimum_enchantment_level` | No | Minimum level of the required enchantment. Defaults to 1 when an enchantment is configured. |
+| `add` | No | Added to the current stack count before multiplication. Defaults to 0. |
+| `multiply` | No | Multiplies the count after addition. Defaults to 1. |
+| `minimum` | No | Lower bound after transformation. Defaults to 0. |
+| `maximum` | No | Upper bound after transformation. Defaults to the Java integer maximum. |
+| `priority` | No | Higher priority rules run first. Defaults to the owning stage priority. |
+| `exclusive` | No | Stop evaluating lower priority rules after this rule matches. Defaults to false. |
+
+The count formula is `floor((current + add) * multiply)`, then the minimum and maximum bounds are
+applied. Several nonexclusive rules intentionally stack in descending priority order. An exclusive
+match applies itself and stops lower priority rules. Item stacks larger than their maximum stack
+size are split into safe additional item entities rather than creating an oversized stack.
+
+The event order is loot lock filtering, crop filtering, ore masquerade replacement, then drop
+modifiers. This prevents a hidden real ore from leaking its multiplied real output. Conditions and
+stage ownership are read at break time, so grants, revokes, temporary stage changes, and reloads
+take effect without a relog.
+
+The first-launch [Showcase Pack](SHOWCASE_PACK.md) contains Diamond Engineer. It requires Miner and
+Mechanist, costs 32 diamonds, and doubles only diamond item output from diamond or deepslate
+diamond ore when the used pickaxe has at least Fortune I. The easy editor exposes the same system
+under **Targeted mining bonus**.
+
 ## 5. Triggers — The Per-Stage `[[triggers]]` System
 
 Triggers are declared **per stage**, inside that stage's own TOML, in one or
@@ -2697,7 +2764,7 @@ Default values are shown below.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `starting_stages` | `["stone_age"]` | Stages auto-granted on first join. Empty list = no auto-grant. |
+| `starting_stages` | `[]` | Stages auto-granted on first join. Empty by default so showcase classes remain player choices. |
 | `reapply_starting_stages_on_login` | `false` | If true, the starting list is re-checked on every login (idempotent — already-granted stages are not re-granted). |
 | `team_mode` | `"ftb_teams"` | `"ftb_teams"` (shared per FTB team) or `"solo"` (per player). Falls back to solo if FTB Teams is not installed. |
 | `debug_logging` | `false` | Verbose logging for stage checks, lock queries, team operations. |
@@ -3667,9 +3734,15 @@ config/
 └── progressivestages/
     ├── progressivestages.toml
     └── stages/
-        ├── stone_age.toml
-        ├── iron_age.toml
-        └── diamond_age.toml
+        ├── mage/
+        │   ├── stage.toml
+        │   ├── rules.toml
+        │   └── progression.toml
+        ├── diamond_engineer/
+        │   ├── stage.toml
+        │   ├── rules.toml
+        │   └── progression.toml
+        └── 28 more showcase stage packages
 ```
 
 `progressivestages.toml` contains global defaults. Every `.toml` beneath
@@ -3753,6 +3826,7 @@ server/
     InteractionEnforcer.java         ← [[interactions]] X-on-Y rules
     InventoryScanner.java            ← periodic locked-item scan
     LootEnforcer.java                ← mob + block drop filter
+    DropModifierApplier.java         ← selector-aware server-side block drop transforms (3.0.1)
     MobReplacementEnforcer.java      ← [[mobs.replacements]] swap
     MobSpawnEnforcer.java            ← [mobs].locked_spawns
     NearestPlayerCheck.java          ← shared nearest-player utility
@@ -3767,7 +3841,8 @@ server/
   integration/
     FTBTeamsIntegration.java         ← FTB Teams membership wiring
   loader/
-    DefaultStageTemplates.java       ← built-in stage TOML strings (locks + [[triggers]] + [display])
+    DefaultShowcaseStages.java       ← thirty schema 4 first-launch showcase packages
+    DefaultStageTemplates.java       ← legacy one-file documentation and compatibility references
     StageFileLoader.java             ← directory scan + reload; datapack/config merge + deep validate (2.5)
     StageFileParser.java             ← TOML → StageDefinition (parses [[triggers]] + [display])
     DatapackStageLoader.java         ← loads data/<ns>/progressivestages/stages/*.toml (2.5)
@@ -3835,12 +3910,15 @@ compat/                              ← every soft-dep integration
   visualworkbench/VisualWorkbenchShim.java
 ```
 
-The default stage templates are bundled in
-[`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java) —
-specifically `stoneAge()`, `ironAge()`, and `diamondAge()`. The
-`diamondAge()` template is the canonical 3.0 reference file. Read its tracked
-[`diamond_stage.toml`](examples/reference/diamond_stage.toml) copy to see the actual TOML rather
-than a Java text block. The automated documentation test proves that both copies remain identical.
+The first-launch showcase is generated by
+[`DefaultShowcaseStages`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultShowcaseStages.java).
+It emits thirty schema 4 packages and ninety files only when no stages already exist. The complete
+tree is documented in [SHOWCASE_PACK.md](SHOWCASE_PACK.md).
+
+[`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java)
+retains the older one-file references for documentation and compatibility tests. Its tracked
+[`diamond_stage.toml`](examples/reference/diamond_stage.toml) copy remains the exhaustive commented
+legacy schema reference, but it is no longer generated during first launch.
 
 ---
 

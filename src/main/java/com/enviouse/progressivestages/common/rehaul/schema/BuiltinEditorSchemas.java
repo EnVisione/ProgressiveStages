@@ -94,6 +94,9 @@ final class BuiltinEditorSchemas {
         add(sink, "rules.modifiers", "rules.toml", "item_modifiers", "Item modifiers",
             "Contextual attributes effects and behavior.", SchemaValueType.OBJECT, List.of(), false,
             null, Set.of(), List.of());
+        add(sink, "rules.drop_modifiers", "rules.toml", "drop_modifiers", "Drop modifiers",
+            "Selector based block drops with tool enchantment stage condition priority and stacking controls.",
+            SchemaValueType.OBJECT, List.of(), false, catalog("blocks"), PREFIXES, List.of("drop"));
         add(sink, "rules.generic", "rules.toml", "rules", "Advanced rules",
             "Permanent lock allow exclusion replacement and presentation entries.", SchemaValueType.OBJECT,
             List.of(), false, null, Set.of(), List.of());

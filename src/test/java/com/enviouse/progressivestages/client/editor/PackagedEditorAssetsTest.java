@@ -46,6 +46,10 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("Build the path into"));
         assertTrue(controller.contains("Require every selected path"));
         assertTrue(controller.contains("creates a loop"));
+        assertTrue(controller.contains("How players obtain this stage"));
+        assertTrue(controller.contains("Buy with items"));
+        assertTrue(controller.contains("Find an item on this server"));
+        assertTrue(controller.contains("Add a targeted mining bonus"));
         assertTrue(css.contains("#e3aa32"));
         assertTrue(css.contains("#101114"));
         assertTrue(css.contains("dependency-visualizer"));

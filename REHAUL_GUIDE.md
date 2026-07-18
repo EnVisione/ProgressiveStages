@@ -398,6 +398,27 @@ type = "progressivestages:outgoing_damage"
 multiply = 0.75
 ```
 
+Block output modifiers use the same selector and priority philosophy but run against the real
+broken block, final drop item, used tool, and optional enchantment:
+
+```toml
+[[drop_modifiers]]
+id = "my_pack:diamond_engineer/diamond_fortune"
+blocks = ["minecraft:diamond_ore", "minecraft:deepslate_diamond_ore"]
+drops = ["minecraft:diamond"]
+tools = ["tag:minecraft:pickaxes"]
+required_enchantment = "minecraft:fortune"
+minimum_enchantment_level = 1
+multiply = 2.0
+priority = 600
+exclusive = true
+```
+
+The rule defaults to requiring its owning stage. `with_stages`, `without_stages`, and any compiled
+`condition` can narrow it further. Nonexclusive matching rules stack in descending priority order;
+an exclusive match stops lower-priority rules. The [thirty stage showcase](SHOWCASE_PACK.md)
+generates Diamond Engineer with this rule and a server-authoritative 32-diamond purchase.
+
 Aggregation and stacking are explicit and bounded. Stable modifier IDs prevent duplicate stacking.
 Reconciliation clamps health safely when maximum health falls. It never moves the player, changes
 camera position, or recreates the player entity, which prevents the old ground-clipping snap.

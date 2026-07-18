@@ -39,7 +39,7 @@ Use the supported runtime:
 - Minecraft 1.21.1.
 - NeoForge 21.1 or a compatible 21.1 build.
 - Java 21.
-- ProgressiveStages 3.0.0.
+- ProgressiveStages 3.0.1.
 
 Make a backup before changing an existing pack. At minimum, copy these locations somewhere safe:
 
@@ -54,7 +54,7 @@ players and teams. Backing up only one of these is not enough for a complete rol
 ## 3. Install and generate the folders
 
 1. Stop Minecraft or the dedicated server.
-2. Put `progressivestages-3.0.0.jar` in the instance or server `mods` folder.
+2. Put `progressivestages-3.0.1.jar` in the instance or server `mods` folder.
 3. Start the game or server once.
 4. Wait until startup completes.
 5. Stop it cleanly before editing generated files.
@@ -66,13 +66,25 @@ config/
 └── progressivestages/
     ├── progressivestages.toml
     └── stages/
-        ├── stone_age.toml
-        ├── iron_age.toml
-        └── diamond_age.toml
+        ├── mage/
+        │   ├── stage.toml
+        │   ├── rules.toml
+        │   └── progression.toml
+        ├── warrior/
+        │   ├── stage.toml
+        │   ├── rules.toml
+        │   └── progression.toml
+        ├── diamond_engineer/
+        │   ├── stage.toml
+        │   ├── rules.toml
+        │   └── progression.toml
+        └── 27 more showcase stage packages
 ```
 
-The main file controls server-wide defaults. Every file inside `stages` defines one stage. Nested
-folders are supported, so a large pack can use paths such as:
+The main file controls server-wide defaults. The first empty launch creates the complete
+[thirty stage showcase tree](SHOWCASE_PACK.md). Each folder is one schema 4 stage package. Existing
+stage folders are never replaced. Nested folders and legacy one-file stages are also supported, so
+a large pack can use paths such as:
 
 ```text
 config/progressivestages/stages/magic/beginner_magic.toml

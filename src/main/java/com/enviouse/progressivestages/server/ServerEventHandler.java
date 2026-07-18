@@ -799,6 +799,9 @@ public class ServerEventHandler {
                 event.setDroppedExperience(0);
             }
         }
+        if (breaker instanceof ServerPlayer sp) {
+            com.enviouse.progressivestages.server.enforcement.DropModifierApplier.apply(event, sp);
+        }
     }
 
     // ============ 2.0: Fluid Enforcement ============

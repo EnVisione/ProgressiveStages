@@ -45,6 +45,7 @@ class EditorSchemaRegistryTest {
             "rules.toml:abilities.locked",
             "rules.toml:temporary_rules",
             "rules.toml:item_modifiers",
+            "rules.toml:drop_modifiers",
             "progression.toml:grants",
             "progression.toml:revokes",
             "progression.toml:rewards",
