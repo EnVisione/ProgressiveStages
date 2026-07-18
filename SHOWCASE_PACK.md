@@ -38,7 +38,7 @@ slot_policy = "deny"
 ```
 
 `slot_group` gives related stages one shared ownership pool. `slot_limit = 2` means a team can own
-any two of Mage, Warrior, and Ranger. A third beginner purchase is rejected. Change the value to
+any two of Mage, Warrior, and Ranger. A third beginner grant is rejected. Change the value to
 `1` for one permanent class choice, `3` for all three beginner paths, or `0` for unlimited stacking.
 The editor applies the same setting to every member of a group so the group cannot become
 internally contradictory.
@@ -91,32 +91,32 @@ old group.
 
 | Stage | Requires | How it is obtained | Feature demonstrated |
 |---|---|---|---|
-| Mage | Nothing | 16 lapis lazuli | Beginner limit, enchantment gate, reward |
-| Warrior | Nothing | 16 iron ingots | Beginner limit, tag selector, local wooden-sword exclusion, JEI and EMI hiding |
-| Ranger | Nothing | 32 arrows | Beginner limit, bow gate, item reward |
+| Mage | Nothing | Buy with 16 lapis lazuli | Beginner limit, enchantment gate, reward |
+| Warrior | Nothing | Buy with 16 iron ingots | Beginner limit, tag selector, local wooden-sword exclusion, JEI and EMI hiding |
+| Ranger | Nothing | Tame one wolf | Beginner limit, automatic gameplay trigger, bow gate, item reward |
 | Wizard | Mage | Lapis, books, and XP | Block and recipe gates |
 | Warlock | Mage | Kill an evoker | Dimension-conditioned temporary allowance |
-| Cleric | Mage | Emeralds and XP | Potion brewing gate |
-| Knight | Warrior | Iron and XP | Equipped armor attribute and Curios slot rule |
+| Cleric | Mage | Craft a brewing stand | Potion brewing gate and item reward |
+| Knight | Warrior | Possess an iron chestplate | Equipped armor attribute, Curios slot rule, and shield reward |
 | Berserker | Warrior | Kill a ravager | Axe attribute and effect reward |
-| Paladin | Warrior | Gold and XP | Beacon effect gate |
-| Marksman | Ranger | Kill skeletons with an item or buy arrows | Item-specific movement attribute |
-| Beastmaster | Ranger | Tame three wolves | Pet taming rule and reward |
+| Paladin | Warrior | Possess a shield | Beacon effect gate and golden apple reward |
+| Marksman | Ranger | Kill twenty skeletons with a bow | Item-specific movement attribute and arrow reward |
+| Beastmaster | Ranger | Tame two horses | Pet taming rule and reward |
 | Scout | Ranger | Adventure advancement | Screen gate and navigation reward |
 
 ### Direct masteries
 
 | Stage | Requires | How it is obtained | Feature demonstrated |
 |---|---|---|---|
-| Archmage | Wizard | Enderman research and item cost | Advancement display rule |
-| Necromancer | Warlock | Kill wither skeletons | Mob spawn rule |
+| Archmage | Wizard | Kill thirty two endermen | Advancement display rule and reward |
+| Necromancer | Warlock | Secret trigger. Kill twenty five wither skeletons | Mob spawn rule and unlock-only reveal |
 | Oracle | Cleric | Adventuring Time | Trade result rule and advancement trigger |
-| Vanguard | Knight | Raid combat and diamond cost | Equipment maximum-health modifier |
-| Warlord | Berserker | Netherite and XP | Timed boss challenge, hits, retries, and HUD |
-| Templar | Paladin | Golden apples | Ability rule and shield health modifier |
-| Deadeye | Marksman | Kill strays with an item | Item-on-entity interaction gate |
+| Vanguard | Knight | Kill three ravagers | Equipment maximum-health modifier and reward |
+| Warlord | Berserker | Complete the ravager trial and kill four ravagers | Timed boss challenge, hits, retries, and HUD |
+| Templar | Paladin | Earn Hero of the Village | Ability rule, shield health modifier, and reward |
+| Deadeye | Marksman | Kill twenty four strays with a crossbow | Item-on-entity interaction gate |
 | Wildspeaker | Beastmaster | Tame cats | Crop growth rule |
-| Pathfinder | Scout | Enter an ancient city | Structure and named-region entry rules |
+| Pathfinder | Scout | Enter a mineshaft | Ancient-city structure and named-region entry rules without a self-blocking trigger |
 
 ### Merged class paths
 
@@ -125,11 +125,11 @@ old group.
 | Spellblade | Wizard and Knight | Sword, lapis, and XP | Two-family merged path and sword attribute |
 | Dark Paladin | Warlock and Paladin | Kill the Wither | Nether-only allowance and reward |
 | Battle Medic | Vanguard and Cleric | Golden apples, diamonds, and XP | Held shield regeneration |
-| Arcane Archer | Wizard and Marksman | Arrows, lapis, and XP | Elytra ability and bow speed |
+| Arcane Archer | Wizard and Marksman | Kill twelve phantoms with a bow | Elytra ability and bow speed |
 | Monster Hunter | Berserker and Beastmaster | Kill elder guardians | Entity attack gate |
-| Holy Ranger | Templar and Scout | Gold, compass, and XP | Held spyglass night vision |
-| Shadow Scout | Warlock and Scout | Kill shulkers | Dimension gate and reward |
-| Nature Mage | Cleric and Wildspeaker | Emeralds and bone meal | Loot-table rule |
+| Holy Ranger | Templar and Scout | Earn Take Aim | Held spyglass night vision |
+| Shadow Scout | Warlock and Scout | Secret trigger. Kill eight shulkers | Dimension gate, reward, and unlock-only reveal |
+| Nature Mage | Cleric and Wildspeaker | Craft sixteen golden carrots | Loot-table rule and reward |
 | Siege Master | Warlord and Deadeye | Craft TNT | Block placement gate and crafting grant |
 
 ### Stackable engineers
@@ -140,8 +140,8 @@ old group.
 | Iron Engineer | Coal Engineer | 32 iron and XP | Keeps Coal Engineer and adds an iron multiplier |
 | Diamond Engineer | Iron Engineer | 32 diamonds | Keeps prior buffs and doubles Fortune diamond output only |
 | Netherite Engineer | Diamond Engineer | Netherite and XP | Keeps prior buffs and doubles ancient debris output |
-| Redstone Engineer | Iron Engineer | Comparator work and redstone | Adds a redstone output multiplier |
-| Quantum Engineer | Diamond and Redstone Engineer | Nether star, diamonds, and XP or KubeJS condition | Merged engineer path and lower all-ore multiplier |
+| Redstone Engineer | Iron Engineer | Craft eight comparators | Adds a redstone output multiplier |
+| Quantum Engineer | Diamond and Redstone Engineer | Secret exact KubeJS event `showcase:quantum_calibrated` | Merged engineer path, lower all-ore multiplier, and unlock-only reveal |
 
 These six use `slot_limit = 0`, so every earned tier remains owned. Drop rules are sorted by
 priority. Nonexclusive matches compose with previous matches; an exclusive rule stops remaining
@@ -166,10 +166,10 @@ configured payment. Change the limit to `2` if a pack should allow two modes tog
 | Stage | Requires | Duration | Feature demonstrated |
 |---|---|---:|---|
 | Battle Fury | Warrior | 10 minutes | Sword damage and revoke on death |
-| Miners Focus | Coal Engineer | 15 minutes | Pickaxe movement buff |
-| Aquatic Blessing | Ranger | 20 minutes | Swim ability and held water breathing |
+| Miners Focus | Coal Engineer | 15 minutes | Mine sixty four iron ore, gain pickaxe movement, expire, and revoke on death |
+| Aquatic Blessing | Ranger | 20 minutes | Tactical Fishing trigger, swim ability, and held water breathing |
 | Village Hero | Cleric | 30 minutes | Profession rule, kill grant, effect reward |
-| End Resolve | Archmage | 12 minutes | End-conditioned ability allowance and dragon reward |
+| End Resolve | Archmage | 12 minutes | Hidden dragon-kill trigger, End-conditioned ability allowance, reward, and death revoke |
 
 Duration is real time. It continues while the player is offline. A permanent stage and a temporary
 rule are different: `[stage].duration` expires ownership, while `[[temporary_rules]]` changes a rule
@@ -179,28 +179,47 @@ only while its condition or session is active.
 
 | Stage | Requires | Feature demonstrated |
 |---|---|---|
-| Stronghold Key | Pathfinder | Structure entry and purchase |
-| Nether License | Warlock | Portal, dimension, fluid, and submersion control |
+| Stronghold Key | Pathfinder | Structure entry unlocked by possessing twelve Eyes of Ender |
+| Nether License | Warlock | Possess ten obsidian to unlock portal, dimension, fluid, and submersion control |
 | Wither Protocol | Necromancer and Warlord | Boss challenge, loot, and kill grants |
 | End Protocol | Stronghold Key and Archmage | Ability and End-only item allowance |
 | Grandmaster | Any 3 of 20 selected end paths | `at_least` dependency policy, cost, rewards, variable, formula, and custom states |
 
-## Using the repaired Stage graph
+## Editing the player progression UI layout
 
-Open `/pstages editor`, then choose **Stage graph**.
+Open `/pstages editor`, then choose **Player UI layout**. The coordinates in this view are the
+coordinates used by the advancement-style progression screen inside Minecraft.
 
 - **Category** opens a direct list. Use it to isolate Core paths, Hybrid paths, Engineering, Mining
   modes, Temporary power, World rules, or Finale.
 - **Find a stage** keeps matching stages and automatically includes their prerequisite ancestry.
 - **Fit graph** zooms the complete result into the visible panel.
 - **Minus**, **percentage**, and **plus** control zoom without rewriting stage files.
-- **Arrange paths upward** clears saved manual coordinates and recalculates dependency lanes.
-- Dragging a node saves its position in the server draft. Curved connectors follow while dragging,
-  including while zoomed out.
+- **Arrange and save** calculates dependency lanes for the complete unfiltered tree and stores
+  every resulting player-map coordinate.
+- **Use automatic layout** removes every manual `display.x` and `display.y`, allowing Minecraft to
+  calculate the same centered upward layout at runtime.
+- Dragging a node saves its compact player-map coordinate in the server draft. Curved connectors
+  follow while dragging, including while zoomed out.
+- **Easy builder**, **Stage details**, **Edit player UI position** provides exact X and Y entry for
+  a selected stage and a one-stage automatic reset.
 
-The layout orders related parent and child lanes repeatedly to reduce crossings. Invalid, negative,
-zero-pair, or wildly out-of-bounds saved coordinates fall back to automatic positions. The full
+The browser scales those compact Minecraft coordinates so cards stay readable while editing. It
+does not store browser pixels. The layout orders related parent and child lanes repeatedly to
+reduce crossings. Missing or invalid saved coordinates fall back to automatic positions. The full
 tree opens fitted to the panel instead of rendering most nodes beyond the right edge.
+
+## Purchases, gameplay triggers, revokes, and secrets
+
+Only fifteen of the fifty showcase stages are purchases. Thirty five are driven by gameplay or
+external events. This keeps the showcase from behaving like a shop and demonstrates automatic
+grants, timed ownership, death revokes, advancement triggers, possession checks, crafting, mining,
+taming, structure entry, boss kills, item-specific kills, and KubeJS events.
+
+The three beginner paths deliberately use two different acquisition styles. Mage and Warrior are
+purchased. Ranger is granted after taming one wolf. Necromancer, Shadow Scout, and Quantum Engineer
+use `reveal = "unlocked"`, so their exact route stays secret until completed. End Resolve is an
+internal hidden temporary stage granted by the dragon-kill trigger.
 
 ## Buying a class with items
 
@@ -256,7 +275,7 @@ To intentionally generate it in a test instance:
 2. Move the current contents outside that directory.
 3. Start Minecraft or the server.
 4. Run `/pstages editor` as a permission level 3 operator.
-5. Open **Stage graph** and press **Fit graph**.
+5. Open **Player UI layout** and press **Fit graph**.
 
 The fully commented one-file reference remains at
 [`examples/reference/diamond_stage.toml`](examples/reference/diamond_stage.toml). It is
@@ -270,9 +289,10 @@ documentation, not a generated first-launch stage.
 4. Confirm Wizard and Warlock connect only through Mage.
 5. Confirm Spellblade joins Wizard and Knight.
 6. Confirm Grandmaster says any three of twenty paths.
-7. Buy Mage and Warrior, then confirm Ranger is refused while the beginner limit is two.
-8. Change the beginner limit to three in **Configure slots**, review, apply, and confirm Ranger can
-   now be granted.
+7. Buy Mage and Warrior, tame a wolf, and confirm the Ranger trigger is refused while the beginner
+   limit is two.
+8. Change the beginner limit to three in **Configure slots**, review, apply, tame a wolf, and
+   confirm Ranger is granted without a purchase.
 9. Buy Fortune Mode, then Silk Mode, and confirm Silk replaces Fortune.
 10. Grant Coal Engineer through Diamond Engineer and confirm every engineering tier remains owned.
 11. Confirm Diamond Engineer costs 32 diamonds.
@@ -280,3 +300,9 @@ documentation, not a generated first-launch stage.
 13. Mine it with Fortune and confirm the final diamond count is doubled.
 14. Mine coal with the same pickaxe and confirm Diamond Engineer does not alter it.
 15. Revoke Diamond Engineer and confirm the targeted bonus stops immediately.
+16. Drag two stages into a staggered layout, apply, reopen the in-game tree, and confirm their icons
+    use the same relative positions.
+17. Use **Edit player UI position** on one stage, save exact X and Y values, apply, and confirm the
+    in-game icon moves to that point.
+18. Use **Use automatic layout**, apply, and confirm the in-game tree returns to centered upward
+    dependency lanes instead of overlapping at one coordinate.

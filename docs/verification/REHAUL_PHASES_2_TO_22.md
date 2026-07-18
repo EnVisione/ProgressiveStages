@@ -23,8 +23,8 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 | 17 | Revisioned permission-filtered compressed chunked client snapshot, safe deltas, exact base verification, decompression bounds, checksum, atomic activation, request, and acknowledgement | `ClientSnapshotAssemblerTest`, client cache tests |
 | 18 | Integrated and dedicated server operator authorization, expiring secrets, client loopback bridge, CSP, host and origin checks, limits, and cleanup | `EditorAvailabilityTest`, `PackagedEditorAssetsTest`, and bridge security inspection |
 | 19 | Server drafts, revisions, undo, redo, recovery, collaboration, diff, validation, conflict, atomic apply, backup, audit, and rollback | `EditorDraftTest` and editor apply tests |
-| 20 | Packaged Preact and TypeScript shell, neutral dark gray and gold stage-first easy builder, inline plain-name stage creation, visual all, any, and minimum dependency path policies, ancestry preview, cycle prevention, guided slot limits and stacking policies, category and search filtered graph, crossing-reduced upward layout, curved live drag connectors, zoom and fit controls, category and mod filtered live-registry rule cards, action, effect, priority, exception, JEI and EMI, temporary condition and lifetime controls, guided grants, revokes, rewards, searchable item purchases, targeted mining bonuses, challenges, variables, modifiers, formulas, states, profiles, templates, draggable rules, optional three-tab source, inspector, create, duplicate, rename, move, archive, restore, import, export, delete, collaborator, priority analyzer, simulation, review, and apply | `npm run check`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
-| 21 | Advancement style player screen, panning, scroll, layering, background, triggers, why, live challenge HUD, effective held-item modifier and affinity preview, history, docs, and tested starter, Diamond, mage, knight, structure, End, Wither, migration, KubeJS, and Java examples | UI regression tests, `RehaulExamplesTest`, `RehaulDocumentationTest` |
+| 20 | Packaged Preact and TypeScript shell, neutral dark gray and gold stage-first easy builder, inline plain-name stage creation, visual all, any, and minimum dependency path policies, ancestry preview, cycle prevention, guided slot limits and stacking policies, player UI layout with compact map coordinates, exact X and Y editing, category and search filtering, crossing-reduced arrange and save, true automatic reset, curved live drag connectors, zoom and fit controls, category and mod filtered live-registry rule cards, action, effect, priority, exception, JEI and EMI, temporary condition and lifetime controls, guided grants, revokes, rewards, searchable item purchases, targeted mining bonuses, challenges, variables, modifiers, formulas, states, profiles, templates, draggable rules, optional three-tab source, inspector, create, duplicate, rename, move, archive, restore, import, export, delete, collaborator, priority analyzer, simulation, review, and apply | `npm run check`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
+| 21 | Advancement style player screen, centered upward automatic layout, author coordinates, panning, scroll, layering, background, triggers, why, readable pluralized purchase costs, live challenge HUD, effective held-item modifier and affinity preview, history, docs, and tested starter, Diamond, mage, knight, structure, End, Wither, migration, KubeJS, and Java examples | `StageTreeLayoutTest`, `NetworkCostSummaryTest`, UI regression tests, `RehaulExamplesTest`, `RehaulDocumentationTest` |
 | 22 | Restart saved data, dependency audit, fifty stage and one hundred fifty file first-launch showcase validation, stage slot runtime validation, full unit suite, clean build, and JAR inspection | `RehaulStateCodecTest`, `DefaultShowcaseStagesTest`, `StageSlotResolverTest`, and final evidence below |
 
 ## Final evidence
@@ -41,13 +41,17 @@ Recorded on July 18, 2026 from branch `envy/3.0.1`.
 
 ### Java and dedicated server
 
-- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in eleven seconds.
-- The clean suite ran 118 tests with zero failures, zero errors, and zero
+- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in ten seconds.
+- The clean suite ran 120 tests with zero failures, zero errors, and zero
   skipped tests.
 - `DefaultShowcaseStagesTest` wrote all one hundred fifty generated files into an empty temporary
   stages directory, discovered fifty packages, parsed and compiled every package, validated the
-  dependency graph, checked the three beginner paths, stackable engineers, mutually exclusive
-  mining modes, temporary stages, and verified the Diamond Engineer cost and Fortune multiplier.
+  dependency graph, checked exactly two purchased beginner paths and one trigger-earned beginner,
+  fifteen total purchases, thirty five trigger paths, secret reveal policies, stackable engineers,
+  mutually exclusive mining modes, temporary stages, exact kill-with-item conditions, and the
+  Diamond Engineer cost and Fortune multiplier.
+- `StageTreeLayoutTest` verifies that automatic player nodes grow upward and center narrow layers.
+  `NetworkCostSummaryTest` verifies readable singular, plural, and uncountable payment names.
 - `StageSlotResolverTest`, `StageFileParserTest`, and `StageOrderTest` verify unlimited stacking,
   denial, oldest and priority replacement, schema parsing, and consistent group validation.
 - The earlier `./gradlew runServer --no-daemon` smoke remains the dedicated-server compatibility
@@ -57,8 +61,8 @@ Recorded on July 18, 2026 from branch `envy/3.0.1`.
 ### Release artifact
 
 - Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,613,232 bytes.
-- SHA-256: `1e0f2fab2f89e6a02780d97e03977020a9d422ee07e4accda4745d292cdb1e7a`.
+- Size: 1,618,256 bytes.
+- SHA-256: `f413bf4303f599a2bb2c1425876b9239f81d2c7d6ddad21945fa147c0e90db0b`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
   logo, `assets/progressivestages/lang/en_us.json`, and all four production editor assets.
 - The source logo SHA-256 is

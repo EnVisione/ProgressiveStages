@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.server.loader;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.config.StageSlotPolicy;
+import com.enviouse.progressivestages.common.rehaul.ConditionNode;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -77,6 +78,28 @@ class DefaultShowcaseStagesTest {
         assertEquals(3, grandmaster.getDependencyCount());
         assertEquals(20, grandmaster.getDependencies().size());
         assertEquals(5, definitions.stream().filter(StageDefinition::isTemporary).count());
+        assertEquals(15, definitions.stream().filter(StageDefinition::isPurchasable).count());
+        StageDefinition mage = stage(definitions, "showcase:mage");
+        StageDefinition warrior = stage(definitions, "showcase:warrior");
+        StageDefinition ranger = stage(definitions, "showcase:ranger");
+        assertTrue(mage.isPurchasable());
+        assertTrue(warrior.isPurchasable());
+        assertFalse(ranger.isPurchasable());
+        assertFalse(stage(definitions, "showcase:necromancer").isHidden());
+        assertEquals("unlocked", stage(definitions, "showcase:necromancer").getUiReveal());
+        assertEquals("unlocked", stage(definitions, "showcase:shadow_scout").getUiReveal());
+        assertEquals("unlocked", stage(definitions, "showcase:quantum_engineer").getUiReveal());
+        assertTrue(stage(definitions, "showcase:end_resolve").isHidden());
+        assertTrue(compiledStages.get(StageId.parse("showcase:ranger")).progression().lifecycleRules().size() >= 1);
+        assertTrue(compiledStages.values().stream()
+            .filter(stage -> !stage.progression().lifecycleRules().isEmpty()).count() >= 35);
+        ConditionNode marksmanCondition = compiledStages.get(StageId.parse("showcase:marksman"))
+            .progression().lifecycleRules().getFirst().condition();
+        assertTrue(marksmanCondition instanceof ConditionNode.Leaf);
+        ConditionNode.Leaf marksmanLeaf = (ConditionNode.Leaf) marksmanCondition;
+        assertEquals("progressivestages:kill_with_item", marksmanLeaf.providerId().toString());
+        assertEquals("minecraft:skeleton", marksmanLeaf.arguments().get("id"));
+        assertEquals("minecraft:bow", marksmanLeaf.arguments().get("with"));
         assertEquals(32, diamondEngineer.compatibilityView().getCost().items().getFirst().count());
         assertEquals("minecraft:diamond", diamondEngineer.compatibilityView().getCost().items().getFirst().item().toString());
         assertEquals(1, diamondEngineer.progression().dropModifiers().size());
@@ -95,5 +118,10 @@ class DefaultShowcaseStagesTest {
             stage.progression().challenges().forEach(rule ->
                 assertTrue(ids.add(rule.id()), "Duplicate challenge id. " + rule.id()));
         });
+    }
+
+    private static StageDefinition stage(List<StageDefinition> definitions, String id) {
+        StageId stageId = StageId.parse(id);
+        return definitions.stream().filter(stage -> stage.getId().equals(stageId)).findFirst().orElseThrow();
     }
 }

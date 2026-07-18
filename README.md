@@ -59,18 +59,21 @@ schema 4 showcase now demonstrates the editor and class tree directly.
 - **Direct category picker and repaired maps** — the in-game progression menu opens a category list
   instead of cycling one category per click. The editor graph adds category filtering, search with
   prerequisite context, curved connectors that follow dragged nodes, crossing reduction, zoom,
-  true fit-to-panel behavior, and safe automatic fallback for invalid saved positions.
+  true fit-to-panel behavior, exact player-map coordinates, drag placement, arrange-and-save, and a
+  real automatic-layout reset that removes manual coordinates instead of overlapping nodes at zero.
 - **Item-purchased classes in the easy editor** — **How players obtain this stage** now has a
   searchable live-registry payment builder. Choose items and amounts plus optional XP, cooldown,
   trigger bypass, and revoke refund. The in-game tree uses the existing atomic server-authoritative
-  purchase engine.
+  purchase engine. Cost summaries use readable translated names such as `12x Gold Ingots, 2s
+  cooldown` instead of registry paths. The showcase uses exactly two purchased beginner paths and
+  one gameplay-triggered beginner, while only fifteen of fifty stages are purchases.
 - **Selector-based `[[drop_modifiers]]`** — target source blocks, final output items, optional tools,
   enchantments, owned or missing stages, conditions, priorities, caps, and exclusive stacking. The
   showcase Diamond Engineer costs 32 diamonds and doubles only final diamond drops produced with
   Fortune from diamond or deepslate diamond ore.
 - **Temporary and triggered lock rules** — `[[temporary_locks]]`, `[[temporary_unlocks]]`, `[[triggered_locks]]`, and `[[triggered_unlocks]]` apply priority-based locks or permissions by dimension, structure, biome, height, health, stage state, effect, movement state, KubeJS predicate, combat, attack, hurt, kill, command, or API timer. A single rule can target items, blocks, fluids, entities, recipes, dimensions, structures, and `jump`/`elytra`/`sprint`/`swim`/`climb`, with per-rule exceptions. Static gates are priority `0`, conditional rules default to `100`, the highest priority wins, and a lock safely wins an equal-priority tie.
 - **Vanilla advancement-style stage map** — `/stage`, `/stages`, `/pstages`, `/stage gui`, the keybind, or the lock button beside the inventory recipe-book button opens a draggable and wheel-scrollable progression graph using vanilla task/goal/challenge frames, dependency connectors, tiled backgrounds, hover cards, search, owned-stage filtering, click-to-pin details, trigger progress, unlock previews, and server-validated purchases.
-- **Author-controlled map layout** — each stage's `[display]` can set `x`, `y`, `frame`, `background`, `reveal`, and `sort_order`; omit `x` + `y` for automatic dependency-graph layout. Reveal can be `always`, `dependencies`, or `unlocked`.
+- **Author-controlled map layout** — each stage's `[display]` can set `x`, `y`, `frame`, `background`, `reveal`, and `sort_order`; omit `x` + `y` for automatic dependency-graph layout. Reveal can be `always`, `dependencies`, or `unlocked`. The localhost editor's **Player UI layout** tab drags icons using these same coordinates, and Stage details supports exact X and Y entry.
 - **Named trigger counters** — `type = "custom_counter", counter = "quest_points", count = 10` bridges stage TOML to `/stage counter get|add|set|reset ...` and `ProgressiveStages.counter/addCounter/setCounter/resetCounter(...)` in KubeJS.
 - **Expanded KubeJS API** — actual-change `grant`/`revoke`, plus `toggle`, `exists`, slot-aware `available`, `slot` decision details, dependency queries, tag queries/bulk operations, counters, immediate trigger evaluation, and `openGui`.
 - **Correctness and dedicated-server parity** — per-stage exemptions and `[unlocks]` are scoped to their owning stage, secondary categories retain every gating stage, mixed team/server-scope dependencies store correctly, reload/stop clears runtime state, biome time is exact for any polling interval, and block/fluid/mod locks now sync to dedicated clients and recipe viewers.

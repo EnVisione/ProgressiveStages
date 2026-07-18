@@ -46,7 +46,7 @@ This workflow works in an integrated single-player world and on a dedicated serv
 7. Select the new stage card. The easy builder shows `Stage details`, `Rules`, `Progression`, and
    `More stage features`. It never makes the three backing files part of the normal workflow.
 8. Fill in the name, description, icon, required stages, ownership scope, stage slots, map category,
-   color, frame, reveal policy, and advancement background. Use `Browse` to choose an icon from the live
+   color, frame, reveal policy, advancement background, and player UI position. Use `Browse` to choose an icon from the live
    item registry. `Required stages` opens a visual path builder rather than a text field. Select
    parent stage cards, then choose `Require every selected path`, `Require any one selected path`,
    or `Require a minimum number`. The preview places the new evolution above its parents and shows
@@ -63,12 +63,15 @@ This workflow works in an integrated single-player world and on a dedicated serv
     advancement, dimension, structure, KubeJS event, or another listed condition. Select count,
     repeat policy, player/team/server scope, priority, and cooldown. Rewards and costs have their
     own guided forms.
-12. Use `Stage graph` to inspect or drag the dependency map. The graph opens fitted inside its
+12. Use `Player UI layout` to inspect or drag the actual in-game dependency map. The graph opens fitted inside its
     scrollable canvas. Filter by category, search while retaining prerequisite context, zoom with
     the minus and plus buttons, or press `Fit graph` to restore a complete overview. Automatic
     layout puts independent beginner paths at the bottom, their evolutions above them, and hybrid
     stages above every branch they join. Curved connectors follow dragged nodes at every zoom.
-    `Arrange paths upward` clears manual positions and recalculates crossing-reduced lanes.
+    `Arrange and save` stores crossing-reduced coordinates for the complete tree. `Use automatic
+    layout` removes the manual coordinates. A selected stage also has `Edit player UI position`
+    under Stage details for exact X and Y entry or a one-stage automatic reset. Browser cards are
+    scaled for readability, while the saved coordinates are the compact values used in Minecraft.
 13. Use `TOML source` only when you want direct control. `stage.toml`, `rules.toml`, and
     `progression.toml` remain available as separate advanced tabs, and unknown extension fields are
     preserved.

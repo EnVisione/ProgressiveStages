@@ -49,8 +49,6 @@ public final class StageTreeScreen extends Screen {
     private static final int HEADER_H = 18;
     private static final int BOTTOM_H = 9;
     private static final int NODE = 26;
-    private static final int LAYER_X = 84;
-    private static final int LANE_Y = 46;
 
     private int left, top, right, bottom;
     private int mapLeft, mapTop, mapRight, mapBottom;
@@ -171,12 +169,16 @@ public final class StageTreeScreen extends Screen {
             .thenComparing(ClientStageCache::getCategory, String.CASE_INSENSITIVE_ORDER)
             .thenComparing(ClientStageCache::getDisplayName, String.CASE_INSENSITIVE_ORDER);
         Map<StageId, int[]> positions = new HashMap<>();
+        int maxDepth = layers.keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
+        int widestLayer = layers.values().stream().mapToInt(List::size).max().orElse(1);
         for (Map.Entry<Integer, List<StageId>> layer : layers.entrySet()) {
             layer.getValue().sort(order);
             for (int lane = 0; lane < layer.getValue().size(); lane++) {
                 StageId id = layer.getValue().get(lane);
-                int x = ClientStageCache.getUiX(id).orElse(layer.getKey() * LAYER_X);
-                int y = ClientStageCache.getUiY(id).orElse(lane * LANE_Y);
+                StageTreeLayout.Position automatic = StageTreeLayout.automaticPosition(
+                    layer.getKey(), maxDepth, lane, layer.getValue().size(), widestLayer);
+                int x = ClientStageCache.getUiX(id).orElse(automatic.x());
+                int y = ClientStageCache.getUiY(id).orElse(automatic.y());
                 positions.put(id, new int[]{x, y});
             }
         }

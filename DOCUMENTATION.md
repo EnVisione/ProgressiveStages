@@ -248,7 +248,8 @@ server/instance. Per-world stage state lives inside each world's saved data.
 
 Fifty schema 4 stage packages are generated on first launch if the stages directory is empty.
 They form a complete branching class tree with three limited beginner paths, evolutions, merged
-classes, stackable specialists, replaceable modes, temporary powers, item purchases, automatic
+classes, stackable specialists, replaceable modes, temporary powers, fifteen item purchases, thirty
+five gameplay or external-event paths, automatic
 grants, rewards, conditions, modifiers, challenges, and an at-least-three finale. See the
 [Showcase Pack Guide](SHOWCASE_PACK.md) for every stage and a
 manual verification checklist. Existing stage files are never deleted, replaced, or supplemented
@@ -369,7 +370,7 @@ To create a stage without knowing TOML:
 3. Leave the collapsed pack name at `pack`, or change it to the modpack namespace.
 4. Confirm the preview, such as `pack:iron_age`, and click `Create stage`.
 5. Fill out the stage name, description, icon, required stages, stage slots, team or server ownership, map
-   category, color, frame, reveal policy, and advancement background.
+   category, color, frame, reveal policy, advancement background, and optional player UI position.
    `Required stages` is a visual branch builder. It lists existing stages as selectable cards,
    explains each card's parents, prevents dependency cycles, and previews selected paths flowing
    upward into the stage being edited. Choose all selected paths for a hybrid class, any one path
@@ -393,11 +394,13 @@ To create a stage without knowing TOML:
     optional enchantment and level, multiplier, addition, priority, and exclusive stacking. This
     creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates 32-diamond purchase
     plus a Fortune-only double-diamond rule.
-11. Drag advanced rule cards to organize them. Open `Stage graph`, filter by category, search with
-    prerequisite ancestry, zoom, fit the complete graph, or drag nodes to save their coordinates.
-    Curved connectors follow at every zoom. Automatic layout puts beginner stages at the bottom,
-    reduces crossings, and places evolutions above them. `Arrange paths upward` clears manual
-    coordinates and restores that branching view.
+11. Drag advanced rule cards to organize them. Open `Player UI layout`, filter by category, search
+    with prerequisite ancestry, zoom, fit the complete graph, or drag nodes to save their in-game
+    coordinates. Curved connectors follow at every zoom. Automatic layout puts beginner stages at
+    the bottom, reduces crossings, and places evolutions above them. `Arrange and save` writes the
+    complete crossing-reduced layout. `Use automatic layout` removes every manual position. The
+    Stage details card also has `Edit player UI position` for exact X and Y values or a one-stage
+    reset. The browser scales cards for editing but stores the compact coordinates Minecraft uses.
 12. Click `Check my work`. Then click `Review and apply`, inspect the file diff, and confirm.
 
 The easy builder writes the same schema that a TOML expert would write. There is no reduced

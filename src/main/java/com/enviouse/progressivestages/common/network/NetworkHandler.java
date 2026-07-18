@@ -8,6 +8,7 @@ import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.enviouse.progressivestages.client.ClientStageCache;
 import com.enviouse.progressivestages.client.ClientLockCache;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -289,11 +290,45 @@ public class NetworkHandler {
         if (cost.xpLevels() > 0) sb.append(cost.xpLevels()).append(" lvl");
         for (var ic : cost.items()) {
             if (sb.length() > 0) sb.append(", ");
-            sb.append(ic.count()).append("x ").append(ic.item().getPath());
+            sb.append(formatItemCost(ic.item(), ic.count()));
         }
         if (sb.length() == 0) sb.append("free");
         if (cost.cooldownSeconds() > 0) sb.append(", ").append(cost.cooldownSeconds()).append("s cooldown");
         return new CostInfo(true, cost.xpLevels(), sb.toString(), canPurchase(player, defOpt.get()));
+    }
+
+    static String formatItemCost(ResourceLocation itemId, int count) {
+        String name = BuiltInRegistries.ITEM.getOptional(itemId)
+            .map(item -> item.getDescription().getString())
+            .filter(value -> !value.isBlank())
+            .orElseGet(() -> titleItemPath(itemId.getPath()));
+        return count + "x " + pluralItemName(name, count);
+    }
+
+    private static String titleItemPath(String path) {
+        String[] words = path.split("_");
+        StringBuilder output = new StringBuilder();
+        for (String word : words) {
+            if (word.isBlank()) continue;
+            if (output.length() > 0) output.append(' ');
+            output.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return output.toString();
+    }
+
+    private static String pluralItemName(String name, int count) {
+        if (count == 1 || name.isBlank()) return name;
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (Set.of("coal", "redstone", "quartz", "lapis lazuli", "glass", "bone meal",
+                "netherite", "gunpowder", "dragon breath", "tnt").contains(lower)) return name;
+        if (lower.endsWith("ss") || lower.endsWith("ch") || lower.endsWith("sh")
+                || lower.endsWith("x") || lower.endsWith("z")) return name + "es";
+        if (lower.endsWith("s")) return name;
+        if (lower.endsWith("y") && lower.length() > 1
+                && "aeiou".indexOf(lower.charAt(lower.length() - 2)) < 0) {
+            return name.substring(0, name.length() - 1) + "ies";
+        }
+        return name + "s";
     }
 
     private static List<WhyLine> whyLines(StageId stage) {

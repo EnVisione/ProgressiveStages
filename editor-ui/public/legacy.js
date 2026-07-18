@@ -59,6 +59,13 @@
     graphZoom: 1
   };
 
+  const GRAPH_LANE_X = 84;
+  const GRAPH_LAYER_Y = 54;
+  const GRAPH_PREVIEW_X = 215 / GRAPH_LANE_X;
+  const GRAPH_PREVIEW_Y = 135 / GRAPH_LAYER_Y;
+  const GRAPH_PREVIEW_LEFT = 35;
+  const GRAPH_PREVIEW_TOP = 45;
+
   const $ = id => document.getElementById(id);
   const q = (selector, root = document) => root.querySelector(selector);
   const qa = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -205,6 +212,12 @@
     const slotGroup = stringValue(readTomlValue(stageText, "stage.slot_group"));
     const slotLimit = Math.max(0, Number(readTomlValue(stageText, "stage.slot_limit") || 0));
     const slotPolicy = stringValue(readTomlValue(stageText, "stage.slot_policy")) || "deny";
+    const mapXText = readTomlValue(stageText, "display.x").trim();
+    const mapYText = readTomlValue(stageText, "display.y").trim();
+    const hasMapPosition = mapXText !== "" && mapYText !== ""
+      && Number.isFinite(Number(mapXText)) && Number.isFinite(Number(mapYText))
+      && Number(mapXText) >= 0 && Number(mapYText) >= 0;
+    const mapPosition = hasMapPosition ? `X ${Number(mapXText)} and Y ${Number(mapYText)}` : "Automatic dependency layout";
     $("formView").innerHTML = `
       <section class="stage-hero"><span class="hero-icon">◆</span><div><h1>${escapeHtml(stage.name)}</h1><p>${escapeHtml(stage.description || "Add a short explanation for players.")}</p></div><span class="stage-id">${escapeHtml(stage.id)}</span></section>
       ${stage.legacy ? `<div class="validation-ok"><strong>Classic stage detected.</strong><p>You can edit its details and normal lock lists here. Create or duplicate it as a three file stage to use temporary rules and the full progression builder.</p></div>` : ""}
@@ -220,6 +233,7 @@
         <label>Vanilla frame<select data-stage-field="display.frame"><option ${frame === "task" ? "selected" : ""}>task</option><option ${frame === "goal" ? "selected" : ""}>goal</option><option ${frame === "challenge" ? "selected" : ""}>challenge</option></select></label>
         <label>Reveal stage<select data-stage-field="display.reveal"><option value="always" ${reveal === "always" ? "selected" : ""}>Always</option><option value="dependencies" ${reveal === "dependencies" ? "selected" : ""}>After prerequisites</option><option value="unlocked" ${reveal === "unlocked" ? "selected" : ""}>Only when unlocked</option></select></label>
         <label class="wide-field">Advancement background<input data-stage-field="display.background" value="${escapeHtml(background)}"></label>
+        <div class="dependency-field"><span>Player progression UI position</span><div class="dependency-summary"><div class="dependency-copy"><strong>${escapeHtml(mapPosition)}</strong><small>Drag this stage in Player UI layout or enter exact map coordinates here.</small></div><button type="button" id="editMapPosition">Edit player UI position</button></div></div>
         <label class="toggle-line"><input type="checkbox" data-stage-field="stage.hidden" data-boolean="true" ${hidden ? "checked" : ""}>Hide this stage from players until it is revealed</label>
       </div></div></article>
       <article class="builder-section"><div class="builder-section-head"><div><h2>Rules</h2><p>${rules.length ? `${rules.length} currently active` : "None currently active"}. Drag cards to organize advanced rules.</p></div><button id="addRule" class="primary" ${stage.archived ? "disabled" : ""}>＋ Add rule</button></div><div class="builder-section-body">${rulesHtml(rules)}</div></article>
@@ -270,6 +284,7 @@
     }));
     $("editDependencies").onclick = openDependencyEditor;
     $("editSlots").onclick = () => openSlotEditor(stage);
+    $("editMapPosition").onclick = () => openMapPositionEditor(stage);
     $("addRule").onclick = () => openRuleEditor(stage, null);
     qa("[data-edit-rule]", $("formView")).forEach(button => button.onclick = () => openRuleEditor(stage, rules[Number(button.dataset.editRule)]));
     qa("[data-delete-rule]", $("formView")).forEach(button => button.onclick = () => deleteRule(stage, rules[Number(button.dataset.deleteRule)]).catch(error => toast(error.message)));
@@ -408,6 +423,42 @@
         } catch (error) { toast(error.message); }
       };
       explain();
+    });
+  }
+
+  function openMapPositionEditor(stage) {
+    const content = state.boot.draft.files[stage.stagePath] || "";
+    const rawX = readTomlValue(content, "display.x").trim();
+    const rawY = readTomlValue(content, "display.y").trim();
+    const hasPosition = rawX !== "" && rawY !== "" && Number.isFinite(Number(rawX))
+      && Number.isFinite(Number(rawY)) && Number(rawX) >= 0 && Number(rawY) >= 0;
+    openModal(`<h2 id="modalTitle">Place ${escapeHtml(stage.name)} in the player UI</h2><p>These coordinates control the icon in Minecraft. X moves left and right. Y moves up and down. You can also drag the stage in Player UI layout.</p><form id="mapPositionForm"><div class="modal-grid">
+      <label>Map X<input id="mapPositionX" type="number" min="0" step="1" value="${hasPosition ? escapeHtml(Number(rawX)) : 0}"></label>
+      <label>Map Y<input id="mapPositionY" type="number" min="0" step="1" value="${hasPosition ? escapeHtml(Number(rawY)) : 0}"></label>
+      <div class="dependency-mode-help">${hasPosition ? `This stage has a custom position at X ${escapeHtml(Number(rawX))} and Y ${escapeHtml(Number(rawY))}.` : "This stage currently follows the automatic dependency layout."}</div>
+    </div><div class="modal-actions"><button type="button" id="automaticMapPosition" class="ghost">Use automatic position</button><button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">Save position</button></div></form>`, () => {
+      $("automaticMapPosition").onclick = async () => {
+        try {
+          let updated = removeTomlValue(content, "display.x");
+          updated = removeTomlValue(updated, "display.y");
+          await mutate(stage.stagePath, updated);
+          closeModal();
+          toast("Automatic player UI position restored");
+        } catch (error) { toast(error.message); }
+      };
+      $("mapPositionForm").onsubmit = async event => {
+        event.preventDefault();
+        const x = Math.round(Number($("mapPositionX").value));
+        const y = Math.round(Number($("mapPositionY").value));
+        if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) return toast("Enter two nonnegative whole map coordinates");
+        try {
+          let updated = upsertToml(content, "display.x", x);
+          updated = upsertToml(updated, "display.y", y);
+          await mutate(stage.stagePath, updated);
+          closeModal();
+          toast("Player UI position saved to the draft");
+        } catch (error) { toast(error.message); }
+      };
     });
   }
 
@@ -1081,7 +1132,8 @@
 
   function renderGraph() {
     if (!state.boot) return;
-    const allStages = stagePackages().filter(stage => !stage.archived);
+    const allStages = stagePackages().filter(stage => !stage.archived
+      && !booleanValue(readTomlValue(state.boot.draft.files[stage.stagePath] || "", "stage.hidden")));
     const categorySelect = $("graphCategory");
     const graphCategories = [...new Set(allStages.map(stage => stringValue(readTomlValue(
       state.boot.draft.files[stage.stagePath] || "", "stage.category")).trim()).filter(Boolean))]
@@ -1170,19 +1222,25 @@
     }
     const widestLane = Math.max(1, ...Object.values(lanes).map(lane => lane.length));
     const viewportWidth = $("graphViewport")?.clientWidth || 0;
-    const autoWidth = Math.max(820, viewportWidth - 8, widestLane * 215 + 80);
-    const autoHeight = Math.max(520, 110 + (maxDepth + 1) * 135);
+    const autoWidth = Math.max(820, viewportWidth - 8,
+      GRAPH_PREVIEW_LEFT * 2 + Math.max(0, widestLane - 1) * GRAPH_LANE_X * GRAPH_PREVIEW_X + 220);
+    const autoHeight = Math.max(520,
+      GRAPH_PREVIEW_TOP * 2 + maxDepth * GRAPH_LAYER_Y * GRAPH_PREVIEW_Y + 130);
     const nodes = base.map(node => {
       const depth = depths[node.stage.id];
       const lane = lanes[depth];
       const index = lane.indexOf(node);
-      const laneWidth = lane.length * 215;
-      const autoX = Math.max(35, (autoWidth - laneWidth) / 2 + index * 215 + 20);
-      const autoY = 45 + (maxDepth - depth) * 135;
+      const autoMapX = Math.round((widestLane - lane.length) * GRAPH_LANE_X / 2 + index * GRAPH_LANE_X);
+      const autoMapY = (maxDepth - depth) * GRAPH_LAYER_Y;
       const manual = node.hasManual && Number.isFinite(node.rawX) && Number.isFinite(node.rawY)
-        && (node.rawX !== 0 || node.rawY !== 0) && node.rawX >= 0 && node.rawY >= 0
-        && node.rawX <= autoWidth * 2 && node.rawY <= autoHeight * 2;
-      return { ...node, x: manual ? node.rawX : autoX, y: manual ? node.rawY : autoY };
+        && node.rawX >= 0 && node.rawY >= 0;
+      const mapX = manual ? node.rawX : autoMapX;
+      const mapY = manual ? node.rawY : autoMapY;
+      return {
+        ...node, mapX, mapY,
+        x: GRAPH_PREVIEW_LEFT + mapX * GRAPH_PREVIEW_X,
+        y: GRAPH_PREVIEW_TOP + mapY * GRAPH_PREVIEW_Y
+      };
     });
     const byId = Object.fromEntries(nodes.map(node => [node.stage.id, node]));
     const maxX = Math.max(autoWidth, ...nodes.map(node => node.x + 220));
@@ -1193,8 +1251,8 @@
     $("graph").style.width = `${maxX}px`;
     $("graph").style.height = `${maxY}px`;
     $("graph").style.zoom = state.graphZoom;
-    $("graph").innerHTML = `<svg class="graph-lines" viewBox="0 0 ${maxX} ${maxY}" preserveAspectRatio="none">${lines}</svg>` + nodes.map(node => `<button class="graph-node" data-graph-stage="${escapeHtml(node.stage.key)}" style="left:${node.x}px;top:${node.y}px" title="Drag to position. Click to edit."><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button>`).join("");
-    if ($("graphStatus")) $("graphStatus").textContent = `${nodes.length} stages shown. ${directIds.size < nodes.length ? `${nodes.length - directIds.size} prerequisite paths included. ` : ""}Invalid saved positions use automatic layout.`;
+    $("graph").innerHTML = `<svg class="graph-lines" viewBox="0 0 ${maxX} ${maxY}" preserveAspectRatio="none">${lines}</svg>` + nodes.map(node => `<button class="graph-node" data-graph-stage="${escapeHtml(node.stage.key)}" data-map-x="${node.mapX}" data-map-y="${node.mapY}" style="left:${node.x}px;top:${node.y}px" title="Drag to change this icon in the Minecraft progression UI. Click to edit the stage."><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button>`).join("");
+    if ($("graphStatus")) $("graphStatus").textContent = `${nodes.length} stages shown. ${directIds.size < nodes.length ? `${nodes.length - directIds.size} prerequisite paths included. ` : ""}Dragging saves player map coordinates. Arrange and save stores every automatic position.`;
     qa("[data-graph-stage]", $("graph")).forEach(node => {
       node.onclick = () => selectStage(node.dataset.graphStage);
       node.onpointerdown = event => dragGraphNode(event, node);
@@ -1251,15 +1309,44 @@
   }
 
   async function autoArrangeGraph() {
+    const selectedCategory = $("graphCategory").value;
+    const search = $("graphSearch").value;
+    $("graphCategory").value = "";
+    $("graphSearch").value = "";
+    renderGraph();
+    const positions = qa("[data-graph-stage]", $("graph")).map(node => ({
+      key: node.dataset.graphStage,
+      x: Number(node.dataset.mapX),
+      y: Number(node.dataset.mapY)
+    }));
+    try {
+      for (const position of positions) {
+        const stage = stagePackages().find(value => value.key === position.key);
+        if (!stage) continue;
+        const content = state.boot.draft.files[stage.stagePath] || "";
+        const updated = upsertToml(upsertToml(content, "display.x", position.x), "display.y", position.y);
+        if (updated !== content) await mutate(stage.stagePath, updated);
+      }
+    } finally {
+      $("graphCategory").value = selectedCategory;
+      $("graphSearch").value = search;
+      renderGraph();
+      fitGraphViewport();
+    }
+    toast("Every player UI position was arranged and saved to the draft");
+  }
+
+  async function resetGraphLayout() {
     const stages = stagePackages().filter(stage => !stage.archived);
     for (const stage of stages) {
-      let content = state.boot.draft.files[stage.stagePath] || "";
-      const updated = upsertToml(upsertToml(content, "display.x", 0), "display.y", 0);
+      const content = state.boot.draft.files[stage.stagePath] || "";
+      let updated = removeTomlValue(content, "display.x");
+      updated = removeTomlValue(updated, "display.y");
       if (updated !== content) await mutate(stage.stagePath, updated);
     }
     renderGraph();
     fitGraphViewport();
-    toast("All paths arranged upward in the draft");
+    toast("Every stage now follows the automatic player UI layout");
   }
 
   function dragGraphNode(event, node) {
@@ -1281,10 +1368,12 @@
       if (Math.abs(move.clientX - startX) < 3 && Math.abs(move.clientY - startY) < 3) return;
       const stage = stagePackages().find(value => value.key === node.dataset.graphStage);
       let content = state.boot.draft.files[stage.stagePath] || "";
-      content = upsertToml(content, "display.x", parseInt(node.style.left));
-      content = upsertToml(content, "display.y", parseInt(node.style.top));
+      const mapX = Math.max(0, Math.round((parseInt(node.style.left) - GRAPH_PREVIEW_LEFT) / GRAPH_PREVIEW_X));
+      const mapY = Math.max(0, Math.round((parseInt(node.style.top) - GRAPH_PREVIEW_TOP) / GRAPH_PREVIEW_Y));
+      content = upsertToml(content, "display.x", mapX);
+      content = upsertToml(content, "display.y", mapY);
       await mutate(stage.stagePath, content);
-      toast("Stage map position saved to the draft");
+      toast(`Player UI position saved at X ${mapX} and Y ${mapY}`);
     };
   }
 
@@ -1756,6 +1845,28 @@
     return lines.join("\n");
   }
 
+  function removeTomlValue(text, path) {
+    const bits = path.split(".");
+    const key = bits.pop();
+    const section = bits.join(".");
+    const lines = text.split(/\r?\n/);
+    let active = "";
+    for (let index = 0; index < lines.length; index++) {
+      const header = lines[index].match(/^\s*\[([^\]]+)\]\s*(?:#.*)?$/);
+      if (header) { active = header[1]; continue; }
+      if (active !== section || !new RegExp(`^\\s*${escapeRegex(key)}\\s*=`).test(lines[index])) continue;
+      let last = index;
+      let balance = tomlBalance(lines[index].slice(lines[index].indexOf("=") + 1));
+      while (balance > 0 && last + 1 < lines.length) {
+        last++;
+        balance = tomlBalance(lines.slice(index, last + 1).join("\n"));
+      }
+      lines.splice(index, last - index + 1);
+      return lines.join("\n");
+    }
+    return text;
+  }
+
   function removeTomlSection(text, section) {
     const lines = text.split(/\r?\n/);
     let start = -1;
@@ -1951,6 +2062,7 @@
   $("deleteStage").onclick = () => deleteStage().catch(error => toast(error.message));
   $("settings").onclick = selectSettings;
   $("autoArrangeGraph").onclick = () => autoArrangeGraph().catch(error => toast(error.message));
+  $("resetGraphLayout").onclick = () => resetGraphLayout().catch(error => toast(error.message));
   $("fitGraph").onclick = fitGraphViewport;
   $("graphZoomOut").onclick = () => changeGraphZoom(-0.1);
   $("graphZoomIn").onclick = () => changeGraphZoom(0.1);

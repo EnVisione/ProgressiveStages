@@ -17,8 +17,9 @@ class PackagedEditorAssetsTest {
         String controller = resource("legacy.js");
         assertTrue(script.contains("Easy builder"));
         assertTrue(script.contains("Create stage"));
-        assertTrue(script.contains("Stage graph"));
-        assertTrue(script.contains("Arrange paths upward"));
+        assertTrue(script.contains("Player UI layout"));
+        assertTrue(script.contains("Arrange and save"));
+        assertTrue(script.contains("Use automatic layout"));
         assertTrue(script.contains("graphCategory"));
         assertTrue(script.contains("graphZoomOut"));
         assertTrue(script.contains("Fit graph"));
@@ -55,6 +56,10 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("Add a targeted mining bonus"));
         assertTrue(controller.contains("Configure stage slots and stacking"));
         assertTrue(controller.contains("replace_lowest_priority"));
+        assertTrue(controller.contains("Edit player UI position"));
+        assertTrue(controller.contains("removeTomlValue"));
+        assertTrue(controller.contains("GRAPH_PREVIEW_X"));
+        assertTrue(controller.contains("resetGraphLayout"));
         assertTrue(controller.contains("updateGraphConnections"));
         assertTrue(controller.contains("fitGraphViewport"));
         assertTrue(css.contains("#e3aa32"));
