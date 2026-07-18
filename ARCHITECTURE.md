@@ -297,7 +297,7 @@ Each class owns one event surface or a tightly related group.
 
 ### `server/commands`
 
-`StageCommand` builds `/stage`, `/stages`, `/ps`, and `/progressivestages`. It owns permissions, arguments, suggestions, authoring actions, progress output, validation output, and GUI requests. It calls the public API or focused services rather than duplicating stage ownership logic.
+`StageCommand` builds `/stage`, `/stages`, `/pstages`, and `/progressivestages`. It owns permissions, arguments, suggestions, authoring actions, progress output, validation output, and GUI requests. It calls the public API or focused services rather than duplicating stage ownership logic.
 
 ### `common/network`
 

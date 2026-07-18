@@ -10,7 +10,7 @@ ProgressiveStages 3.0 is the stable 3.0 release.
 
 ## The 3.0 progression map
 
-Open the map with `/stage`, `/stages`, `/ps`, `/stage gui`, the configurable keybind, or the lock button beside the recipe-book button in the survival inventory.
+Open the map with `/stage`, `/stages`, `/pstages`, `/stage gui`, the configurable keybind, or the lock button beside the recipe-book button in the survival inventory.
 
 - Familiar vanilla advancement style task, goal, and challenge frames.
 - Drag the map from empty space or a node and scroll with the wheel.

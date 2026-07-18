@@ -34,6 +34,33 @@ class DocumentationReferenceTest {
 
         assertTrue(documentation.contains("[`diamond_stage.toml`](examples/reference/diamond_stage.toml)"));
         assertTrue(documentation.contains("[Architecture and Project Structure Guide](ARCHITECTURE.md)"));
+        assertTrue(documentation.contains("[Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md)"));
+    }
+
+    @Test
+    void phaseGuideDocumentsEveryPhaseWithExamplesAndVerification() throws IOException {
+        String guide = Files.readString(PROJECT.resolve("PHASES_1_TO_19.md"));
+
+        for (int phase = 1; phase <= 19; phase++) {
+            String heading = "## Phase " + phase + ".";
+            int start = guide.indexOf(heading);
+            assertTrue(start >= 0, "Missing phase " + phase);
+            int end = phase == 19 ? guide.indexOf("## After phase 19", start)
+                : guide.indexOf("## Phase " + (phase + 1) + ".", start);
+            assertTrue(end > start, "Missing phase boundary " + phase);
+            String section = guide.substring(start, end);
+            assertTrue(section.contains("### Goal"), "Missing goal for phase " + phase);
+            assertTrue(section.contains("### Verification"), "Missing verification for phase " + phase);
+            assertTrue(section.contains("### Common mistakes"), "Missing mistakes for phase " + phase);
+        }
+        assertTrue(guide.contains("```toml"));
+        assertTrue(guide.contains("### Verification"));
+        assertTrue(guide.contains("### Common mistakes"));
+        assertTrue(guide.contains("/pstages"));
+        assertTrue(guide.contains("ProgressiveStages.onGranted"));
+        assertTrue(guide.contains("ProgressiveStagesAPI.grantStage"));
+        assertTrue(guide.contains("./gradlew clean build"));
+        assertTrue(guide.contains("examples/reference/diamond_stage.toml"));
     }
 
     @Test

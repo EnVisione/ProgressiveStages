@@ -7,6 +7,8 @@ three-stage progression, how to test it, and what to do when something does not 
 For every available field and advanced feature, use the
 [complete documentation](DOCUMENTATION.md). For build, server, multiplayer, and compatibility
 verification, use the [testing handbook](TESTING.md).
+For a detailed start-to-release workflow with copy-ready examples for all nineteen phases, use the
+[Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md).
 
 ## 1. What this mod does
 
@@ -325,7 +327,7 @@ Open the map with any of these:
 ```text
 /stage
 /stages
-/ps
+/pstages
 /stage gui
 ```
 

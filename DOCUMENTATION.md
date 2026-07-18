@@ -13,6 +13,10 @@
 > [beginner pack](examples/beginner_pack/README.md), and return here when the beginner guide links
 > to a specific advanced feature. Release maintainers should also follow
 > [TESTING.md](TESTING.md). This file is the exhaustive reference, not the shortest learning path.
+> For a complete pack-building course, follow the
+> [Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md). It starts with an empty installation and
+> ends with migration, dedicated-server testing, artifact inspection, and release evidence. Every
+> phase includes copy-ready configuration, expected behavior, verification, and common mistakes.
 > Maintainers and integration authors should also read the
 > [Architecture and Project Structure Guide](ARCHITECTURE.md), which follows each file from disk,
 > through parsing and validation, into runtime enforcement, networking, UI, and tests.
@@ -87,6 +91,7 @@
 16. [Networking & Client Caches](#16-networking--client-caches)
 17. [Troubleshooting](#17-troubleshooting)
 18. [File, Package, and Runtime Structure](#18-file-package-and-runtime-structure)
+19. [Phase 1 Through Phase 19 Guide](#19-phase-1-through-phase-19-guide)
 
 ---
 
@@ -2196,7 +2201,7 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
 - **Open it** with the **"Open Progression Tree"** keybind (category
   *ProgressiveStages* in Controls). It is **UNBOUND by default** — players
   assign a key in Options → Controls. You can also use `/stage`, `/stages`,
-  `/ps`, `/stage gui`, or the lock button immediately to the right of the
+  `/pstages`, `/stage gui`, or the lock button immediately to the right of the
   recipe-book button in the survival inventory.
 
 **Navigation.** Hold the left mouse button and drag from empty map space or from
@@ -2409,7 +2414,7 @@ permission level 2; authoring/reload/validation operations require level 3.
 | `/stage info <stage>` | Print stage metadata: id, dependencies, description, lock count. |
 | `/stage tree` | ASCII dependency tree of every loaded stage. |
 | `/stage gui` | Open the in-game Stage Tree / Progression viewer for yourself (see §5.6). |
-| `/stage`, `/stages`, `/ps` | Friendly aliases that open the progression map. |
+| `/stage`, `/stages`, `/pstages` | Friendly aliases that open the progression map. |
 | `/stage progress` | Shortcut for `/stage progress next` — what the caller can unlock right now. |
 | `/stage progress next [player]` | Lists every stage the player can currently unlock (deps met, not yet granted) with the full `[[triggers]]` rule/condition breakdown for each one. Player defaults to the caller. |
 | `/stage progress all [player]` | Lists **every** stage the player doesn't yet have — including those still locked behind unmet dependencies — in registration order. Useful for pack-author audits and "show me the whole roadmap" queries. |
@@ -3382,6 +3387,25 @@ specifically `stoneAge()`, `ironAge()`, and `diamondAge()`. The
 `diamondAge()` template is the canonical 3.0 reference file. Read its tracked
 [`diamond_stage.toml`](examples/reference/diamond_stage.toml) copy to see the actual TOML rather
 than a Java text block. The automated documentation test proves that both copies remain identical.
+
+---
+
+## 19. Phase 1 Through Phase 19 Guide
+
+The standalone [Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md) reorganizes this exhaustive
+reference into a practical sequence. It does not replace the schema reference above. It tells a
+pack author what to build first, what file to edit, what to copy, what should happen in game, how to
+verify it, and which mistake usually explains a failure.
+
+The nineteen phases cover installation and generated folders, stage identity, dependency graphs,
+the prefix language, every lock family, ore disguises, every trigger condition, counters and script
+providers, the advancement-style map, costs and rewards, attributes and abilities, regression and
+scope, commands, KubeJS and Java APIs, every optional integration, datapack stages, migration,
+transactional reload, automated tests, multiplayer matrices, JAR inspection, and release evidence.
+
+Start at [Phase 1](PHASES_1_TO_19.md#phase-1-install-the-mod-and-generate-the-correct-folders) even
+if the mod is already installed. The early phases establish paths and ownership rules that every
+later example assumes.
 
 ---
 

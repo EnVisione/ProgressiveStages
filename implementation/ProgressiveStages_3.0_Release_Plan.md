@@ -55,7 +55,7 @@ conditions = [
 
 ### 3. Command and KubeJS authoring surfaces
 
-- `/stage`, `/stages`, and `/ps` open the stage map for ordinary players.
+- `/stage`, `/stages`, and `/pstages` open the stage map for ordinary players.
 - Public inspection commands remain usable without operator permission; mutations and
   authoring commands are permission-gated.
 - `/stage counter get|add|set|reset` manages named trigger counters.

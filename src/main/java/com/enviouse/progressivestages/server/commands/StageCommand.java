@@ -203,10 +203,9 @@ public class StageCommand {
                 .executes(StageCommand::openGui))
         );
 
-        // Friendly public aliases. Bare /stage, /stages, and /ps all open the map; every
-        // subcommand remains reachable through each alias and keeps its own permission rule.
+        // Friendly public command aliases.
         dispatcher.register(Commands.literal("stages").executes(StageCommand::openGui).redirect(stageRoot));
-        dispatcher.register(Commands.literal("ps").executes(StageCommand::openGui).redirect(stageRoot));
+        dispatcher.register(Commands.literal("pstages").executes(StageCommand::openGui).redirect(stageRoot));
 
         // /progressivestages subcommands
         // Most subcommands require permission level 3 (admin); no-creative-popup is open
