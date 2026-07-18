@@ -4,6 +4,7 @@ import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.config.ConfigPaths;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
 import com.enviouse.progressivestages.common.stage.StageOrder;
@@ -98,6 +99,7 @@ public class StageFileLoader {
         StageTagRegistry.clear();
         com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.resetRuntimeState();
         com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(java.util.List.of());
+        com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.rebuild(java.util.List.of());
     }
 
     /** Release all world-specific state when a server stops. Event handlers remain registered once. */
@@ -199,6 +201,7 @@ public class StageFileLoader {
         registerLocksFromStages();
         com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
         com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(loadedStages.values());
+        com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.rebuild(loadedStages.values());
         LOGGER.info("Loaded {} stage definitions", loadedStages.size());
     }
 
@@ -326,6 +329,7 @@ public class StageFileLoader {
         // resolve to a real entity/block/item/effect. Data-driven targets (advancement/dimension/
         // biome/structure/stat) and tags are skipped here since they aren't in the static registries.
         validateTriggerTargets(stage, invalidItems);
+        validateConditionalTargets(stage, invalidItems);
 
         if (!invalidItems.isEmpty()) {
             return new FileValidationResult(
@@ -379,6 +383,53 @@ public class StageFileLoader {
                         invalidItems.add("Trigger(kill_with): unknown held item " + c.with());
                     }
                 }
+            }
+        }
+    }
+
+    private static void validateConditionalTargets(StageDefinition stage,
+                                                   List<String> invalidItems) {
+        var itemReg = net.minecraft.core.registries.BuiltInRegistries.ITEM;
+        var blockReg = net.minecraft.core.registries.BuiltInRegistries.BLOCK;
+        var fluidReg = net.minecraft.core.registries.BuiltInRegistries.FLUID;
+        var entityReg = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE;
+        var effectReg = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT;
+        for (ConditionalRule rule : stage.getConditionalRules()) {
+            for (ConditionalRule.TargetType type : rule.targets().types()) {
+                net.minecraft.core.Registry<?> registry = switch (type) {
+                    case ITEM -> itemReg;
+                    case BLOCK -> blockReg;
+                    case FLUID -> fluidReg;
+                    case ENTITY -> entityReg;
+                    default -> null;
+                };
+                if (registry == null) continue;
+                validateConditionalEntries(rule, type, rule.targets().included(type), registry,
+                    "target", invalidItems);
+                validateConditionalEntries(rule, type, rule.targets().excluded(type), registry,
+                    "exception", invalidItems);
+            }
+            validateConditionalEntries(rule, ConditionalRule.TargetType.ENTITY,
+                rule.triggerEntities(), entityReg, "trigger entity", invalidItems);
+            for (var effect : rule.context().effects()) {
+                if (!effectReg.containsKey(effect)) {
+                    invalidItems.add("ConditionalRule(" + rule.id() + ") effect: " + effect);
+                }
+            }
+        }
+    }
+
+    private static void validateConditionalEntries(ConditionalRule rule,
+                                                    ConditionalRule.TargetType type,
+                                                    List<PrefixEntry> entries,
+                                                    net.minecraft.core.Registry<?> registry,
+                                                    String role,
+                                                    List<String> invalidItems) {
+        for (PrefixEntry entry : entries) {
+            if (entry.kind() != PrefixEntry.Kind.ID || entry.id() == null) continue;
+            if (!registry.containsKey(entry.id())) {
+                invalidItems.add("ConditionalRule(" + rule.id() + ") " + role + " "
+                    + type.name().toLowerCase(java.util.Locale.ROOT) + ": " + entry.raw());
             }
         }
     }

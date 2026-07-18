@@ -242,6 +242,21 @@ public final class PSKubeBindings {
             out.put("durationMillis", def.getDurationMillis());
             out.put("purchasable", def.isPurchasable());
             out.put("hasTriggers", def.hasTriggers());
+            List<Map<String, Object>> conditionalRules = new ArrayList<>();
+            for (var rule : def.getConditionalRules()) {
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("id", rule.id().toString());
+                data.put("effect", rule.effect().name().toLowerCase(java.util.Locale.ROOT));
+                data.put("activation", rule.activation().name().toLowerCase(java.util.Locale.ROOT));
+                data.put("stageState", rule.stageState().name().toLowerCase(java.util.Locale.ROOT));
+                data.put("priority", rule.priority());
+                data.put("trigger", rule.triggerType().name().toLowerCase(java.util.Locale.ROOT));
+                data.put("durationMillis", rule.durationMillis());
+                data.put("targetTypes", rule.targets().types().stream()
+                    .map(type -> type.name().toLowerCase(java.util.Locale.ROOT)).toList());
+                conditionalRules.add(data);
+            }
+            out.put("conditionalRules", conditionalRules);
             return out;
         }).orElseGet(Map::of);
     }
@@ -290,6 +305,90 @@ public final class PSKubeBindings {
 
     public void resetCounter(Player player, String counter) {
         if (player instanceof ServerPlayer sp) ProgressiveStagesAPI.resetCounter(sp, counter);
+    }
+
+    public boolean activateRule(Player player, String rule) {
+        return player instanceof ServerPlayer sp
+            && ProgressiveStagesAPI.activateConditionalRule(sp, rule, 0L);
+    }
+
+    public boolean activateRule(Player player, String rule, long seconds) {
+        return player instanceof ServerPlayer sp && seconds > 0L
+            && seconds <= Long.MAX_VALUE / 1_000L
+            && ProgressiveStagesAPI.activateConditionalRule(sp, rule, seconds * 1_000L);
+    }
+
+    public boolean clearRule(Player player, String rule) {
+        return player instanceof ServerPlayer sp
+            && ProgressiveStagesAPI.clearConditionalRule(sp, rule);
+    }
+
+    public int clearRules(Player player) {
+        return player instanceof ServerPlayer sp
+            ? ProgressiveStagesAPI.clearConditionalRules(sp) : 0;
+    }
+
+    public Map<String, Long> activeRules(Player player) {
+        if (!(player instanceof ServerPlayer sp)) return Map.of();
+        Map<String, Long> out = new LinkedHashMap<>();
+        ProgressiveStagesAPI.getActiveConditionalRules(sp).forEach((id, remainingMillis) ->
+            out.put(id.toString(), (remainingMillis + 999L) / 1_000L));
+        return out;
+    }
+
+    public List<String> ruleIds() {
+        return ProgressiveStagesAPI.getConditionalRuleIds().stream()
+            .map(Object::toString).sorted().toList();
+    }
+
+    public Map<String, Object> ruleInfo(String requested) {
+        return ProgressiveStagesAPI.getConditionalRule(requested).map(rule -> {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("id", rule.id().toString());
+            out.put("ownerStage", rule.ownerStage().toString());
+            out.put("effect", rule.effect().name().toLowerCase(java.util.Locale.ROOT));
+            out.put("activation", rule.activation().name().toLowerCase(java.util.Locale.ROOT));
+            out.put("stageState", rule.stageState().name().toLowerCase(java.util.Locale.ROOT));
+            out.put("priority", rule.priority());
+            out.put("trigger", rule.triggerType().name().toLowerCase(java.util.Locale.ROOT));
+            out.put("triggerEntities", rule.triggerEntities().stream().map(entry -> entry.raw()).toList());
+            out.put("durationMillis", rule.durationMillis());
+            out.put("refreshDuration", rule.refreshDuration());
+
+            Map<String, List<String>> targets = new LinkedHashMap<>();
+            Map<String, List<String>> exceptions = new LinkedHashMap<>();
+            for (var type : rule.targets().types()) {
+                String key = type.name().toLowerCase(java.util.Locale.ROOT);
+                targets.put(key, rule.targets().included(type).stream().map(entry -> entry.raw()).toList());
+                if (!rule.targets().excluded(type).isEmpty()) {
+                    exceptions.put(key, rule.targets().excluded(type).stream().map(entry -> entry.raw()).toList());
+                }
+            }
+            out.put("targets", targets);
+            out.put("exceptions", exceptions);
+
+            var context = rule.context();
+            Map<String, Object> when = new LinkedHashMap<>();
+            when.put("mode", context.mode().name().toLowerCase(java.util.Locale.ROOT));
+            when.put("dimensions", context.dimensions().stream().map(entry -> entry.raw()).toList());
+            when.put("structures", context.structures().stream().map(entry -> entry.raw()).toList());
+            when.put("biomes", context.biomes().stream().map(entry -> entry.raw()).toList());
+            if (context.minY() != null) when.put("minY", context.minY());
+            if (context.maxY() != null) when.put("maxY", context.maxY());
+            if (context.minHealth() != null) when.put("minHealth", context.minHealth());
+            if (context.maxHealth() != null) when.put("maxHealth", context.maxHealth());
+            when.put("stages", context.requiredStages().stream().map(Object::toString).toList());
+            when.put("missingStages", context.missingStages().stream().map(Object::toString).toList());
+            when.put("effects", context.effects().stream().map(Object::toString).toList());
+            if (context.sneaking() != null) when.put("sneaking", context.sneaking());
+            if (context.sprinting() != null) when.put("sprinting", context.sprinting());
+            if (context.swimming() != null) when.put("swimming", context.swimming());
+            if (context.riding() != null) when.put("riding", context.riding());
+            if (context.onGround() != null) when.put("onGround", context.onGround());
+            if (!context.scriptCondition().isEmpty()) when.put("script", context.scriptCondition());
+            out.put("when", when);
+            return out;
+        }).orElseGet(Map::of);
     }
 
     /** Re-run all declarative trigger rules immediately after a script-side state change. */

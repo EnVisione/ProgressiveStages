@@ -84,7 +84,8 @@ The test sources live under `src/test/java`.
 | `StageIdTest` | Namespaces, normalization, locale safety, and traversal rejection. |
 | `DependencyModeTest` | `all`, `any`, and `at_least` requirement counts. |
 | `StageOrderTest` | Converging dependency graphs and cycle handling. |
-| `StageFileParserTest` | Namespaced IDs, malformed data, trigger validation, costs, custom map backgrounds, and generated templates. |
+| `StageFileParserTest` | Namespaced IDs, malformed data, trigger validation, costs, custom map backgrounds, generated templates, and all temporary or triggered rule forms. |
+| `ConditionalLockEngineTest` | Priority ordering, static-gate overrides, safe lock-on-tie behavior, and deterministic same-effect ties. |
 | `StageModelImmutabilityTest` | Defensive copies for rewards, regions, and enforcement maps. |
 | `StagePurchaseDataTest` | Namespaced offline refund persistence. |
 | `ScriptHooksTest` | Normalized script provider identifiers. |
@@ -121,6 +122,9 @@ Validation checks include:
 - Transitively unreachable stages.
 - Invalid exact registry IDs in supported categories.
 - Invalid statically resolvable trigger targets.
+- Invalid exact conditional item, block, fluid, entity, effect, and trigger-entity targets.
+- Duplicate canonical conditional rule IDs across stage files.
+- Missing stage IDs in conditional `when.stages` and `when.missing_stages` contexts.
 
 Do not reload an invalid candidate. After validation succeeds:
 
@@ -157,6 +161,13 @@ Use a disposable world and the tested pack in `examples/beginner_pack`.
 17. Enable Video Settings → Menu Background Blur, reopen the map, and confirm only the world is blurred.
 18. Open the survival inventory and use the lock button beside the recipe book to open the map.
 19. Toggle the recipe book, reopen the inventory, and confirm the lock button remains beside it.
+20. Load the Stronghold and End examples from `TEMPORARY_AND_TRIGGERED_LOCKS.md`.
+21. Confirm the normal Stronghold gate blocks, the priority one hundred End Fight permission allows,
+    and the priority two hundred End restriction wins only inside the End.
+22. Start a manual timer with `/pstages rule activate`, inspect it with `/pstages rule list`, wait for
+    expiry, and repeat with explicit clear.
+23. Test the structure weapon rule just outside and inside the generated structure bounds.
+24. Trigger combat against the configured mob and verify target exception, refresh, and expiry.
 
 Record unexpected chat, logs, missing textures, stale icons, crashes, and visual overlap.
 
@@ -327,6 +338,10 @@ Run these in an integrated server and a dedicated server:
 8. Stop the world and open a different world in the same client process.
 9. Confirm no stages, locks, cooldowns, counters, or integration queues leak between worlds.
 10. Return to the first world and verify its persisted state.
+11. Activate a timed conditional rule, log out, reconnect, and confirm transient timer state cleared.
+12. Activate another timer, stop the server, restart it, and confirm no timer leaked across runtime.
+13. Reload a changed rule set and confirm removed rule timers are discarded while retained rule IDs
+    remain safe.
 
 ## 14. Performance checks
 
@@ -346,6 +361,9 @@ Record:
 
 Pay special attention to screens showing hundreds of recipe-viewer ingredients, large tag or mod
 locks, chunk ore substitution, inventory scanning, structure checks, and mass grant or revoke.
+For conditional rules, record packs with many structure selectors, broad `mod:` or `name:` targets,
+and many online players. Context snapshots are cached once per game tick per player, so investigate
+unexpected repeated structure scans rather than increasing a polling interval.
 
 ## 15. Release evidence template
 
@@ -383,6 +401,8 @@ Copy this into a release issue or local report:
 - [ ] Two-player team test
 - [ ] Server-scope test
 - [ ] UI scale and input matrix
+- [ ] Conditional priority and context matrix
+- [ ] Combat and manual timer lifecycle
 
 ## Integrations
 

@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.compat.visualworkbench.VisualWorkbenchShim;
 import net.minecraft.server.level.ServerPlayer;
@@ -65,25 +66,26 @@ public class BlockEnforcer {
      */
     public static boolean canInteractWithBlock(ServerPlayer player, BlockState state) {
         LockRegistry reg = LockRegistry.getInstance();
-        if (!StageConfig.isBlockBlockInteraction() && !reg.hasEnforcementOverrides()) return true;
+        if (!StageConfig.isBlockBlockInteraction() && !reg.hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.BLOCK)) return true;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
         if (player != null && player.isSpectator()) return true;
         if (state == null) return true;
         if (!isBlockLockedForPlayer(player, state)) return true;
         // v2.3: per-stage override across ALL missing gating stages (most-restrictive wins).
-        java.util.Set<StageId> missing = reg.missingGatingStages(player, blockGatingStages(state));
+        java.util.Set<StageId> missing = blockRestrictions(player, state);
         return missing.isEmpty() || !reg.isCategoryEnforced(missing, EnforcementCategory.BLOCK_INTERACTION);
     }
 
-    /** All stages gating a block state (its own id + the Visual Workbench vanilla equivalent). */
-    private static java.util.Set<StageId> blockGatingStages(BlockState state) {
+    private static java.util.Set<StageId> blockRestrictions(ServerPlayer player, BlockState state) {
         LockRegistry reg = LockRegistry.getInstance();
-        java.util.Set<StageId> gating = new java.util.LinkedHashSet<>(reg.getRequiredStagesForBlock(state.getBlock()));
+        java.util.Set<StageId> restrictions = new java.util.LinkedHashSet<>(
+            reg.missingStagesForBlock(player, state.getBlock()));
         BlockState vanilla = VisualWorkbenchShim.resolveVanillaEquivalent(state);
         if (vanilla != null && vanilla.getBlock() != state.getBlock()) {
-            gating.addAll(reg.getRequiredStagesForBlock(vanilla.getBlock()));
+            restrictions.addAll(reg.missingStagesForBlock(player, vanilla.getBlock()));
         }
-        return gating;
+        return java.util.Set.copyOf(restrictions);
     }
 
     /**
@@ -92,12 +94,13 @@ public class BlockEnforcer {
      */
     public static boolean canPlaceBlock(ServerPlayer player, BlockState state) {
         LockRegistry reg = LockRegistry.getInstance();
-        if (!StageConfig.isBlockBlockPlacement() && !reg.hasEnforcementOverrides()) return true;
+        if (!StageConfig.isBlockBlockPlacement() && !reg.hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.BLOCK)) return true;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
         if (player != null && player.isSpectator()) return true;
         if (state == null) return true;
         if (!isBlockLockedForPlayer(player, state)) return true;
-        java.util.Set<StageId> missing = reg.missingGatingStages(player, blockGatingStages(state));
+        java.util.Set<StageId> missing = blockRestrictions(player, state);
         return missing.isEmpty() || !reg.isCategoryEnforced(missing, EnforcementCategory.BLOCK_PLACEMENT);
     }
 

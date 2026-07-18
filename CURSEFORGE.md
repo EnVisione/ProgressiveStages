@@ -50,10 +50,27 @@ Each category can be enabled globally and customized inside individual stage fil
 - Regions. Gate hand authored three dimensional areas with independent rule flags and debuffs.
 - Curios slots. Gate equipment slots when Curios is installed.
 - Ores and encrypted blocks. Show a configurable substitute until the required stage is owned and guard the original drops.
-- Abilities. Gate elytra flight, sprinting, swimming, and climbing.
+- Abilities. Gate jumping, elytra flight, sprinting, swimming, and climbing.
 - Beacon effects and brewing outputs. Gate individual effects and potions.
 
 The same content may be gated by several stages. The player must own every still applicable stage. Per stage `[unlocks]` carve outs and `[enforcement]` policies remain scoped to the stage that declared them.
+
+---
+
+## Temporary, triggered, and priority based access
+
+Situational rules can lock or permit content only while their context or timer is active.
+
+- Restrict weapons only inside a generated structure.
+- Permit every weapon except bows in an arena.
+- Start a swords only rule while fighting a selected mob.
+- Let an End Fight stage override an earlier Stronghold gate.
+- Block jumping, elytra flight, or a diamond pickaxe only while inside the End.
+- Target items, blocks, fluids, entities, recipes, dimensions, structures, and abilities from one rule.
+- Match dimension, structure, biome, height, health, stage state, effects, movement state, or a KubeJS predicate.
+- Start timers from combat, attack, hurt, kill, `/pstages rule`, KubeJS, or the Java API.
+
+Normal stage gates use priority zero. Conditional rules default to priority one hundred. The highest matching priority wins, and a lock wins an equal priority conflict. Per rule exceptions make broad policies practical without creating a hardcoded weapon list.
 
 ---
 
@@ -144,6 +161,7 @@ Player and inspection tools include:
 - `/stage list`, `/stage check`, `/stage info`, and `/stage tree`.
 - `/stage progress next`, `/stage progress all`, or `/stage progress <stage>`.
 - `/stage simulate` for a dry run of reachable and dependency blocked stages.
+- `/pstages rule info` and `list` for conditional rule inspection.
 
 Administrative and authoring tools include:
 
@@ -158,6 +176,7 @@ Administrative and authoring tools include:
 - `/progressivestages reload` for a validated live reload.
 - `/progressivestages validate` for parse, dependency, registry, and trigger diagnostics.
 - `/progressivestages ftb status` for FTB Quests diagnostics.
+- `/pstages rule activate`, `clear`, and `clearall` for timed conditional rules.
 
 Suggestions are generated from loaded stage IDs, tags, categories, and counter names where applicable.
 
@@ -176,6 +195,10 @@ ProgressiveStages.percent(player, 'diamond_age')
 ProgressiveStages.progress(player, 'diamond_age')
 ProgressiveStages.addCounter(player, 'quest_points', 1)
 ProgressiveStages.openGui(player)
+ProgressiveStages.activateRule(player, 'end_fight/manual_permission', 60)
+ProgressiveStages.clearRule(player, 'end_fight/manual_permission')
+ProgressiveStages.activeRules(player)
+ProgressiveStages.ruleInfo('end_fight/manual_permission')
 ```
 
 The API also includes actual change callbacks, grant and revoke hooks, bulk operations, tag and category queries, dependency and dependent queries, definition snapshots, custom boolean conditions, custom progress providers, immediate trigger evaluation, synchronization, and the first class `player.stages` bridge.
@@ -254,6 +277,7 @@ Use `/progressivestages validate` before shipping a pack and follow the reposito
 
 - Beginner guide: https://github.com/EnVisione/ProgressiveStages/blob/master/GETTING_STARTED.md
 - Complete documentation: https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md
+- Temporary and triggered locks guide: https://github.com/EnVisione/ProgressiveStages/blob/master/TEMPORARY_AND_TRIGGERED_LOCKS.md
 - Fully commented Diamond Stage reference: https://github.com/EnVisione/ProgressiveStages/blob/master/examples/reference/diamond_stage.toml
 - Architecture and project structure: https://github.com/EnVisione/ProgressiveStages/blob/master/ARCHITECTURE.md
 - Testing handbook: https://github.com/EnVisione/ProgressiveStages/blob/master/TESTING.md

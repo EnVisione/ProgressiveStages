@@ -24,6 +24,9 @@
 # COMPLETE DOCUMENTATION
 # https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md
 #
+# TEMPORARY AND TRIGGERED LOCKS GUIDE
+# https://github.com/EnVisione/ProgressiveStages/blob/master/TEMPORARY_AND_TRIGGERED_LOCKS.md
+#
 # BUILD AND RELEASE TESTING GUIDE
 # https://github.com/EnVisione/ProgressiveStages/blob/master/TESTING.md
 #
@@ -112,6 +115,7 @@
 #  24.  [display]            — per-stage tooltip / unknown-item rendering (NEW v2.3)
 #  25.  v2.4 ADDITIONS       — [attribute]/[revoke]/[cost]/[unlock]/[abilities]/scope/duration
 #  25b. v2.5 ADDITIONS       — [professions]/[advancements]/structure padding/new triggers/datapack/KubeJS
+#  25c. CONDITIONAL LOCKS     — live context, event timers, permissions, and priorities
 #  26.  TROUBLESHOOTING      — "why isn't my lock working?"
 #  27.  COMPLETE EXAMPLES    — every trigger type + [rewards]/[cost]/[abilities]/[display]/tags (v3.0)
 # ============================================================================
@@ -1397,7 +1401,7 @@ crafter_check_radius = 32
 # 27.6  [abilities] — gate movement abilities (v2.4 / v3.0)
 # ─────────────────────────────────────────────────────────────────────────
 # [abilities]
-# locked = ["elytra", "sprint", "swim", "climb"]   # any subset
+# locked = ["jump", "elytra", "sprint", "swim", "climb"]   # any subset
 #
 # ─────────────────────────────────────────────────────────────────────────
 # 27.7  [display] — per-stage presentation + encrypted-block visual (v2.3 / v3.0)
@@ -1437,6 +1441,53 @@ crafter_check_radius = 32
 #   tags     = ["tier3", "tech"]   # v3.0: bulk ops — /stage tag grant @a tech
 #   scope    = "server"            # server-wide: first team to earn unlocks it for all
 #   duration = "2d"                # temporary: auto-expires 2 real days after grant
+#
+# ─────────────────────────────────────────────────────────────────────────
+# 27.10 TEMPORARY AND TRIGGERED LOCKS — context, timers, and priority (v3.0.1)
+# ─────────────────────────────────────────────────────────────────────────
+# Normal category locks have priority 0. Conditional rules default to 100.
+# The highest matching priority wins. A lock wins an equal-priority tie.
+# A short id becomes progressivestages:diamond_age/<id> and must be unique.
+#
+# Live example. Block jumping, elytra, and a pickaxe only while in the End.
+# [[temporary_locks]]
+# id = "end_battle_rules"
+# priority = 200
+# stage_state = "owned"             # owned | missing | always
+#   [temporary_locks.when]
+#   dimensions = ["minecraft:the_end"]
+#   [temporary_locks.targets]
+#   items = ["minecraft:diamond_pickaxe"]
+#   abilities = ["jump", "elytra"]
+#
+# Live permission example. Override a normal Stronghold gate while this stage
+# is owned. The normal gate is priority 0, so this priority 100 unlock wins.
+# [[temporary_unlocks]]
+# id = "stronghold_access"
+# priority = 100
+#   [temporary_unlocks.targets]
+#   structures = ["minecraft:stronghold"]
+#
+# Timed combat example. The timer begins or refreshes while fighting a dragon.
+# The pack-provided mypack:weapons item tag should contain every intended weapon.
+# [[triggered_locks]]
+# id = "dragon_swords_only"
+# trigger = "combat"                # manual | combat | attack | hurt | kill
+# trigger_entities = ["minecraft:ender_dragon"]
+# duration = "15s"
+# refresh_duration = true
+#   [triggered_locks.targets]
+#   items = ["tag:mypack:weapons"]
+#   [triggered_locks.except]
+#   items = ["tag:minecraft:swords"]
+#
+# Commands and APIs for a manual triggered rule.
+# /pstages rule info <rule>
+# /pstages rule activate <player> <rule> [seconds]
+# /pstages rule list [player]
+# /pstages rule clear <player> <rule>
+# ProgressiveStages.activateRule(player, 'diamond_age/rule', 60)
+# ProgressiveStages.clearRule(player, 'diamond_age/rule')
 #
 # See section 25 for [attribute] / [revoke] worked examples,
 # and section 23 for the full [[triggers]] schema.

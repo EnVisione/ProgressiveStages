@@ -4,6 +4,7 @@ import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
@@ -43,7 +44,8 @@ public class ItemEnforcer {
     public static boolean canUseItem(ServerPlayer player, ItemStack stack) {
         LockRegistry reg = LockRegistry.getInstance();
         // Fast path: category globally off AND no stage overrides anywhere → never enforced.
-        if (!StageConfig.isBlockItemUse() && !reg.hasEnforcementOverrides()) {
+        if (!StageConfig.isBlockItemUse() && !reg.hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.ITEM)) {
             return true;
         }
 
@@ -74,7 +76,8 @@ public class ItemEnforcer {
      */
     public static boolean canPickupItem(ServerPlayer player, ItemStack stack) {
         LockRegistry reg = LockRegistry.getInstance();
-        if (!StageConfig.isBlockItemPickup() && !reg.hasEnforcementOverrides()) {
+        if (!StageConfig.isBlockItemPickup() && !reg.hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.ITEM)) {
             return true;
         }
 
@@ -104,7 +107,8 @@ public class ItemEnforcer {
      */
     public static boolean canHoldItem(ServerPlayer player, ItemStack stack) {
         LockRegistry reg = LockRegistry.getInstance();
-        if (!StageConfig.isBlockItemInventory() && !reg.hasEnforcementOverrides()) {
+        if (!StageConfig.isBlockItemInventory() && !reg.hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.ITEM)) {
             return true;
         }
 
@@ -151,7 +155,9 @@ public class ItemEnforcer {
         // Send message
         if (StageConfig.isShowLockMessage()) {
             Component message;
-            if (StageDisclosure.mayShowRestrictingStageName(player)) {
+            if (StageManager.getInstance().hasStage(player, stageId)) {
+                message = TextUtil.parseColorCodes(StageConfig.getMsgItemLockedGeneric());
+            } else if (StageDisclosure.mayShowRestrictingStageName(player)) {
                 String displayName = StageOrder.getInstance().getStageDefinition(stageId)
                     .map(StageDefinition::getDisplayName)
                     .orElse(stageId.getPath());
@@ -177,7 +183,11 @@ public class ItemEnforcer {
         // Send message
         if (StageConfig.isShowLockMessage()) {
             Component message;
-            if (StageDisclosure.mayShowRestrictingStageName(player)) {
+            if (StageManager.getInstance().hasStage(player, requiredStage)) {
+                message = TextUtil.parseColorCodes(
+                    StageConfig.getMsgTypeLockedGeneric().replace("{type}", type)
+                );
+            } else if (StageDisclosure.mayShowRestrictingStageName(player)) {
                 String displayName = StageOrder.getInstance().getStageDefinition(requiredStage)
                     .map(StageDefinition::getDisplayName)
                     .orElse(requiredStage.getPath());

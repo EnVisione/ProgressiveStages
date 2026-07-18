@@ -1,6 +1,5 @@
 package com.enviouse.progressivestages.server.enforcement;
 
-import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import net.minecraft.core.BlockPos;
@@ -48,12 +47,11 @@ public final class FluidEnforcer {
         if (fluid == null) return false;
         ResourceLocation fluidId = BuiltInRegistries.FLUID.getKey(fluid);
         if (fluidId == null) return false;
-        java.util.Set<StageId> gating = LockRegistry.getInstance().getRequiredStagesForFluid(fluidId);
-        if (gating.isEmpty()) return false;
-
         double radius = StageConfig.getMobSpawnCheckRadius();
-        return NearestPlayerCheck.nearestPlayerLacksAll(sl, pos.getX(), pos.getY(), pos.getZ(),
-            radius, gating);
+        ServerPlayer nearest = NearestPlayerCheck.findNearest(sl, pos.getX(), pos.getY(), pos.getZ(), radius);
+        if (nearest == null) return false;
+        if (StageConfig.isAllowCreativeBypass() && nearest.isCreative()) return false;
+        return LockRegistry.getInstance().isFluidBlockedFor(nearest, fluidId);
     }
 
     /** @return {@code true} if a bucket-pickup of this fluid is allowed. */

@@ -3,12 +3,10 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
-import com.enviouse.progressivestages.common.stage.StageManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
-
-import java.util.Optional;
 
 /**
  * Handles entity attack/interaction enforcement.
@@ -22,7 +20,8 @@ public class EntityEnforcer {
      */
     public static boolean canAttackEntity(ServerPlayer player, EntityType<?> entityType) {
         LockRegistry reg = LockRegistry.getInstance();
-        if (!StageConfig.isBlockEntityAttack() && !reg.hasEnforcementOverrides()) {
+        if (!StageConfig.isBlockEntityAttack() && !reg.hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.ENTITY)) {
             return true;
         }
 
@@ -36,8 +35,9 @@ public class EntityEnforcer {
         }
 
         // v2.3: per-stage override — enforce if ANY missing gating stage requires it (most-restrictive).
-        java.util.Set<StageId> missing = reg.missingGatingStages(player, reg.getRequiredStagesForEntity(entityType));
-        return missing.isEmpty() || !reg.isCategoryEnforced(missing, EnforcementCategory.ENTITY_ATTACK);
+        java.util.Set<StageId> restrictions = reg.restrictionStagesForEntity(player, entityType);
+        return restrictions.isEmpty() || !reg.isCategoryEnforced(
+            restrictions, EnforcementCategory.ENTITY_ATTACK);
     }
 
     /**
@@ -53,14 +53,8 @@ public class EntityEnforcer {
      * v2.0: shows the primary missing stage.
      */
     public static void notifyLocked(ServerPlayer player, EntityType<?> entityType) {
-        java.util.Set<StageId> gating = LockRegistry.getInstance().getRequiredStagesForEntity(entityType);
-        if (gating.isEmpty()) return;
-        for (StageId s : gating) {
-            if (!StageManager.getInstance().hasStage(player, s)) {
-                ItemEnforcer.notifyLockedWithCooldown(player, s, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelEntity());
-                return;
-            }
-        }
+        LockRegistry.getInstance().primaryRestrictingStageForEntity(player, entityType)
+            .ifPresent(stage -> ItemEnforcer.notifyLockedWithCooldown(player, stage,
+                com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelEntity()));
     }
 }
-

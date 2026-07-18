@@ -436,6 +436,30 @@ ProgressiveStages.openGui(player)
 Mutations must run on the logical server. Invalid IDs or non-server players return safe failure
 values rather than granting anything.
 
+### Temporary restrictions and permissions
+
+Normal stage locks are enough for most packs. Use conditional rules when access must change only
+inside a dimension or structure, during combat, or for a short API-controlled timer.
+
+```toml
+[[temporary_locks]]
+id = "end_no_flight"
+priority = 100
+
+[temporary_locks.when]
+dimensions = ["minecraft:the_end"]
+
+[temporary_locks.targets]
+abilities = ["jump", "elytra"]
+items = ["minecraft:diamond_pickaxe"]
+```
+
+The rule above is active only while the containing stage is owned and the player is in the End.
+Normal gates have priority zero, this rule defaults to one hundred, the highest priority wins, and
+a lock wins an equal-priority tie. Read the copy-ready
+[Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md) before using unlock
+overrides or combat timers.
+
 ## 15. Safe edit cycle
 
 Use this exact loop while authoring:
@@ -449,11 +473,12 @@ Use this exact loop while authoring:
 7. Run `/progressivestages reload`.
 8. Read the server log for warnings.
 9. Run `/stage info <stage>`.
-10. Run `/stage simulate <player>`.
-11. Test the locked action before granting the stage.
-12. Grant or earn the stage.
-13. Test the same action again.
-14. Revoke the stage and confirm enforcement returns.
+10. If conditional rules are present, run `/pstages rule info <rule>`.
+11. Run `/stage simulate <player>`.
+12. Test the locked action before granting the stage.
+13. Grant or earn the stage.
+14. Test the same action again.
+15. Revoke the stage and confirm enforcement returns.
 
 Do not test only the happy path. A gate is not proven until it blocks before the stage, permits
 after the stage, and blocks again after revocation.
@@ -482,6 +507,12 @@ Multi-stage locking requires all applicable stages. Force a client resync with
 Run `/stage progress <stage> <player>`. Confirm dependencies are owned, condition targets are
 valid, counts are correct, and the action actually records the statistic used by that trigger.
 
+### A conditional rule does not activate
+
+Run `/pstages rule info <rule>` and check the canonical id, `stage_state`, current `.when` context,
+priority, target, and exception. Use `/pstages rule list` for timers. Remember that `[[triggers]]`
+grants a stage while `[[triggered_locks]]` starts a temporary access timer.
+
 ### The UI does not show a stage
 
 Check `[stage].hidden`, `[display].reveal`, category filters, search text, and the Owned filter.
@@ -508,6 +539,7 @@ Before calling your pack ready, verify every item:
 - [ ] Server-scoped stages affect every player only when intended.
 - [ ] EMI or JEI updates after grant and revoke when installed.
 - [ ] FTB Quests stage tasks and visibility update when installed.
+- [ ] Every conditional rule is tested inside and outside its context and across timer expiry.
 - [ ] A dedicated server starts without client-only class errors.
 - [ ] The config and world data have a current backup.
 

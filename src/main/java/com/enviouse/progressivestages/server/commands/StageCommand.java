@@ -3,11 +3,13 @@ package com.enviouse.progressivestages.server.commands;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
 import com.enviouse.progressivestages.common.util.TextUtil;
 import com.enviouse.progressivestages.compat.ftbquests.FTBQuestsCompat;
 import com.enviouse.progressivestages.compat.ftbquests.FtbQuestsHooks;
+import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -198,6 +200,36 @@ public class StageCommand {
                         .then(Commands.argument("counter", StringArgumentType.word())
                             .executes(StageCommand::resetCounter)))))
 
+            .then(Commands.literal("rule")
+                .then(Commands.literal("list")
+                    .executes(ctx -> listActiveRules(ctx, null))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .requires(source -> source.hasPermission(2))
+                        .executes(ctx -> listActiveRules(ctx, EntityArgument.getPlayer(ctx, "player")))))
+                .then(Commands.literal("info")
+                    .then(Commands.argument("rule", StringArgumentType.word())
+                        .suggests(StageCommand::suggestConditionalRules)
+                        .executes(StageCommand::conditionalRuleInfo)))
+                .then(Commands.literal("activate")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("rule", StringArgumentType.word())
+                            .suggests(StageCommand::suggestConditionalRules)
+                            .executes(ctx -> activateConditionalRule(ctx, 0L))
+                            .then(Commands.argument("seconds", LongArgumentType.longArg(1L, 31_536_000L))
+                                .executes(ctx -> activateConditionalRule(ctx,
+                                    LongArgumentType.getLong(ctx, "seconds")))))))
+                .then(Commands.literal("clear")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .then(Commands.argument("rule", StringArgumentType.word())
+                            .suggests(StageCommand::suggestConditionalRules)
+                            .executes(StageCommand::clearConditionalRule))))
+                .then(Commands.literal("clearall")
+                    .requires(source -> source.hasPermission(2))
+                    .then(Commands.argument("player", EntityArgument.player())
+                        .executes(StageCommand::clearAllConditionalRules))))
+
             // /stage gui — open the in-game stage-tree viewer for the calling player
             .then(Commands.literal("gui")
                 .executes(StageCommand::openGui))
@@ -300,6 +332,109 @@ public class StageCommand {
         context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
             "&aReset &f" + counter + " &7for &f" + player.getName().getString()), true);
         return 1;
+    }
+
+    private static int listActiveRules(CommandContext<CommandSourceStack> context,
+                                       ServerPlayer target) throws CommandSyntaxException {
+        ServerPlayer player = target != null ? target : context.getSource().getPlayerOrException();
+        Map<net.minecraft.resources.ResourceLocation, Long> active = ConditionalLockEngine.activeRules(player);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&6Active conditional rules for &f" + player.getName().getString() + "&6."), false);
+        if (active.isEmpty()) {
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes("&7No timed rules are active."), false);
+            return 1;
+        }
+        long now = System.currentTimeMillis();
+        for (Map.Entry<net.minecraft.resources.ResourceLocation, Long> entry : active.entrySet()) {
+            long seconds = Math.max(0L, (entry.getValue() - now + 999L) / 1_000L);
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                "&f" + entry.getKey() + " &7expires in &a" + seconds + " seconds&7."), false);
+        }
+        return active.size();
+    }
+
+    private static int conditionalRuleInfo(CommandContext<CommandSourceStack> context) {
+        String requested = StringArgumentType.getString(context, "rule");
+        Optional<ConditionalRule> found = ConditionalLockEngine.findRule(requested);
+        if (found.isEmpty()) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cConditional rule not found or ambiguous. &f" + requested));
+            return 0;
+        }
+        ConditionalRule rule = found.get();
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes("&6Conditional rule &f" + rule.id()), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&7Owner &f" + rule.ownerStage() + "&7. Effect &f" + rule.effect().name().toLowerCase(java.util.Locale.ROOT)
+                + "&7. Activation &f" + rule.activation().name().toLowerCase(java.util.Locale.ROOT)
+                + "&7. Priority &f" + rule.priority() + "&7."), false);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&7Stage state &f" + rule.stageState().name().toLowerCase(java.util.Locale.ROOT)
+                + (rule.isTriggered() ? "&7. Trigger &f" + rule.triggerType().name().toLowerCase(java.util.Locale.ROOT)
+                    + "&7. Duration &f" + Math.max(1L, rule.durationMillis() / 1_000L) + " seconds&7." : "&7.")), false);
+        for (ConditionalRule.TargetType type : rule.targets().types()) {
+            String included = rule.targets().included(type).stream().map(entry -> entry.raw()).collect(java.util.stream.Collectors.joining(", "));
+            String excluded = rule.targets().excluded(type).stream().map(entry -> entry.raw()).collect(java.util.stream.Collectors.joining(", "));
+            context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+                "&7" + type.name().toLowerCase(java.util.Locale.ROOT) + " targets. &f" + included
+                    + (excluded.isEmpty() ? "" : " &7except &f" + excluded)), false);
+        }
+        return 1;
+    }
+
+    private static int activateConditionalRule(CommandContext<CommandSourceStack> context,
+                                               long seconds) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
+        String requested = StringArgumentType.getString(context, "rule");
+        Optional<ConditionalRule> found = ConditionalLockEngine.findRule(requested);
+        if (found.isEmpty()) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cConditional rule not found or ambiguous. &f" + requested));
+            return 0;
+        }
+        if (!found.get().isTriggered()) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cOnly triggered rules can be activated manually."));
+            return 0;
+        }
+        boolean activated = ConditionalLockEngine.activate(player, found.get().id(), seconds > 0L ? seconds * 1_000L : 0L);
+        if (!activated) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes(
+                "&cThe rule could not activate. Check its stage state, context, and refresh setting."));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&aActivated &f" + found.get().id() + " &afor &f" + player.getName().getString() + "&a."), true);
+        return 1;
+    }
+
+    private static int clearConditionalRule(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
+        String requested = StringArgumentType.getString(context, "rule");
+        if (!ConditionalLockEngine.clear(player, requested)) {
+            context.getSource().sendFailure(TextUtil.parseColorCodes("&cThat rule is not active or its id is ambiguous."));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&aCleared &f" + requested + " &afor &f" + player.getName().getString() + "&a."), true);
+        return 1;
+    }
+
+    private static int clearAllConditionalRules(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
+        int cleared = ConditionalLockEngine.clearAll(player);
+        context.getSource().sendSuccess(() -> TextUtil.parseColorCodes(
+            "&aCleared &f" + cleared + " &atimed rules for &f" + player.getName().getString() + "&a."), true);
+        return cleared;
+    }
+
+    private static CompletableFuture<Suggestions> suggestConditionalRules(
+            CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
+        String remaining = builder.getRemaining().toLowerCase(java.util.Locale.ROOT);
+        for (net.minecraft.resources.ResourceLocation id : ConditionalLockEngine.ruleIds()) {
+            String full = id.toString();
+            if (full.startsWith(remaining) || id.getPath().startsWith(remaining)
+                    || id.getPath().substring(id.getPath().lastIndexOf('/') + 1).startsWith(remaining)) {
+                builder.suggest(full);
+            }
+        }
+        return builder.buildFuture();
     }
 
     private static int toggleCreativePopup(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {

@@ -2,8 +2,10 @@ package com.enviouse.progressivestages.common.api;
 
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.config.StageConfig;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
+import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.enviouse.progressivestages.server.loader.StageFileLoader;
 import com.enviouse.progressivestages.server.triggers.StageCounterData;
 import com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator;
@@ -11,6 +13,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -235,6 +238,39 @@ public final class ProgressiveStagesAPI {
         com.enviouse.progressivestages.common.network.NetworkHandler.sendStageSync(player, getStages(player));
         com.enviouse.progressivestages.common.network.NetworkHandler.sendCreativeBypass(player,
             StageConfig.isAllowCreativeBypass() && player.isCreative());
+    }
+
+    public static boolean activateConditionalRule(ServerPlayer player, String ruleId, long durationMillis) {
+        return ConditionalLockEngine.activate(player, ruleId, durationMillis);
+    }
+
+    public static boolean activateConditionalRule(ServerPlayer player, String ruleId) {
+        return activateConditionalRule(player, ruleId, 0L);
+    }
+
+    public static Optional<ConditionalRule> getConditionalRule(String ruleId) {
+        return ConditionalLockEngine.findRule(ruleId);
+    }
+
+    public static boolean clearConditionalRule(ServerPlayer player, String ruleId) {
+        return ConditionalLockEngine.clear(player, ruleId);
+    }
+
+    public static int clearConditionalRules(ServerPlayer player) {
+        return ConditionalLockEngine.clearAll(player);
+    }
+
+    public static Map<net.minecraft.resources.ResourceLocation, Long> getActiveConditionalRules(
+            ServerPlayer player) {
+        long now = System.currentTimeMillis();
+        Map<net.minecraft.resources.ResourceLocation, Long> remaining = new java.util.LinkedHashMap<>();
+        ConditionalLockEngine.activeRules(player).forEach((id, expiry) ->
+            remaining.put(id, Math.max(0L, expiry - now)));
+        return java.util.Collections.unmodifiableMap(remaining);
+    }
+
+    public static Set<net.minecraft.resources.ResourceLocation> getConditionalRuleIds() {
+        return Set.copyOf(ConditionalLockEngine.ruleIds());
     }
 
     // ========== Named counters (commands/KubeJS/custom integrations) ==========

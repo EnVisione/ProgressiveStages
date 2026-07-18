@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.common.lock;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -951,32 +952,35 @@ public final class LockRegistry {
      * Returns true if blocked (gating non-empty AND not all gating stages are owned).
      */
     public boolean isItemBlockedFor(net.minecraft.server.level.ServerPlayer player, Item item) {
-        if (player == null || item == null) return false;
-        Set<StageId> gating = getRequiredStages(item);
-        if (gating.isEmpty()) return false;
-        Set<StageId> access = computeAccessStagesForItem(player, item);
-        return blockedByMissing(gating, access);
+        return !missingStagesForItem(player, item).isEmpty();
     }
 
     public Optional<StageId> primaryRestrictingStage(net.minecraft.server.level.ServerPlayer player, Item item) {
         if (player == null || item == null) return Optional.empty();
         Set<StageId> gating = getRequiredStages(item);
-        if (gating.isEmpty()) return Optional.empty();
         Set<StageId> access = computeAccessStagesForItem(player, item);
-        for (StageId s : gating) {
-            if (!access.contains(s)) return Optional.of(s);
-        }
-        return Optional.empty();
+        Set<StageId> missing = new java.util.LinkedHashSet<>();
+        for (StageId stage : gating) if (!access.contains(stage)) missing.add(stage);
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.ITEM, id, BuiltInRegistries.ITEM.wrapAsHolder(item), !missing.isEmpty());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Optional.empty();
+        if (decision.ownerStage() != null) return Optional.of(decision.ownerStage());
+        return missing.stream().findFirst();
     }
 
     /** Lists all gating stages the player is missing for the given item. */
     public Set<StageId> missingStagesForItem(net.minecraft.server.level.ServerPlayer player, Item item) {
         if (player == null || item == null) return Set.of();
         Set<StageId> gating = getRequiredStages(item);
-        if (gating.isEmpty()) return Set.of();
         Set<StageId> access = computeAccessStagesForItem(player, item);
         Set<StageId> missing = new java.util.LinkedHashSet<>();
         for (StageId s : gating) if (!access.contains(s)) missing.add(s);
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.ITEM, id, BuiltInRegistries.ITEM.wrapAsHolder(item), !missing.isEmpty());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Set.of();
+        if (decision.ownerStage() != null) return Set.of(decision.ownerStage());
         return Collections.unmodifiableSet(missing);
     }
 
@@ -1005,43 +1009,77 @@ public final class LockRegistry {
     public boolean isFluidBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation fluidId) {
         if (player == null || fluidId == null) return false;
         Set<StageId> gating = getRequiredStagesForFluid(fluidId);
-        if (gating.isEmpty()) return false;
         Set<StageId> access = "minecraft".equals(fluidId.getNamespace())
             ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
             : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
-        return blockedByMissing(gating, access);
+        boolean staticBlocked = blockedByMissing(gating, access);
+        Fluid fluid = BuiltInRegistries.FLUID.get(fluidId);
+        Holder<Fluid> holder = fluid != null ? BuiltInRegistries.FLUID.wrapAsHolder(fluid) : null;
+        return ConditionalLockEngine.isBlocked(player, ConditionalRule.TargetType.FLUID,
+            fluidId, holder, staticBlocked);
     }
 
     public boolean isDimensionBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation dimId) {
-        if (player == null || dimId == null) return false;
-        Set<StageId> gating = getRequiredStagesForDimension(dimId);
-        if (gating.isEmpty()) return false;
-        return !playerHasAllStages(player, gating);
+        return !restrictionStagesForDimension(player, dimId).isEmpty();
     }
 
     public boolean isEntityBlockedFor(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
-        if (player == null || type == null) return false;
-        Set<StageId> gating = getRequiredStagesForEntity(type);
-        if (gating.isEmpty()) return false;
-        return !playerHasAllStages(player, gating);
+        return !restrictionStagesForEntity(player, type).isEmpty();
+    }
+
+    public Set<StageId> restrictionStagesForDimension(
+            net.minecraft.server.level.ServerPlayer player, ResourceLocation dimId) {
+        if (player == null || dimId == null) return Set.of();
+        Set<StageId> missing = missingGatingStages(player, getRequiredStagesForDimension(dimId));
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.DIMENSION, dimId, null, !missing.isEmpty());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Set.of();
+        return decision.ownerStage() != null ? Set.of(decision.ownerStage()) : missing;
+    }
+
+    public Set<StageId> restrictionStagesForEntity(
+            net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        if (player == null || type == null) return Set.of();
+        Set<StageId> missing = missingGatingStages(player, getRequiredStagesForEntity(type));
+        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.ENTITY, id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type),
+            !missing.isEmpty());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Set.of();
+        return decision.ownerStage() != null ? Set.of(decision.ownerStage()) : missing;
     }
 
     public boolean isBlockBlockedFor(net.minecraft.server.level.ServerPlayer player, Block block) {
-        if (player == null || block == null) return false;
+        return !missingStagesForBlock(player, block).isEmpty();
+    }
+
+    public Set<StageId> missingStagesForBlock(net.minecraft.server.level.ServerPlayer player, Block block) {
+        if (player == null || block == null) return Set.of();
+        Set<StageId> missing = staticMissingStagesForBlock(player, block);
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.BLOCK, id, BuiltInRegistries.BLOCK.wrapAsHolder(block), !missing.isEmpty());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Set.of();
+        if (decision.ownerStage() != null) return Set.of(decision.ownerStage());
+        return Collections.unmodifiableSet(missing);
+    }
+
+    private Set<StageId> staticMissingStagesForBlock(net.minecraft.server.level.ServerPlayer player, Block block) {
         Set<StageId> gating = getRequiredStagesForBlock(block);
-        if (gating.isEmpty()) return false;
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
         Set<StageId> access = (id != null && "minecraft".equals(id.getNamespace()))
             ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
             : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
-        return blockedByMissing(gating, access);
+        Set<StageId> missing = new java.util.LinkedHashSet<>();
+        for (StageId stage : gating) if (!access.contains(stage)) missing.add(stage);
+        return missing;
     }
 
     public boolean isRecipeBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation recipeId) {
         if (player == null || recipeId == null) return false;
         Set<StageId> gating = getRequiredStagesForRecipe(recipeId);
-        if (gating.isEmpty()) return false;
-        return !playerHasAllStages(player, gating);
+        return ConditionalLockEngine.isBlocked(player, ConditionalRule.TargetType.RECIPE,
+            recipeId, null, !playerHasAllStages(player, gating));
     }
 
     public boolean isRecipeOutputBlockedFor(net.minecraft.server.level.ServerPlayer player, Item outputItem) {
@@ -1053,7 +1091,12 @@ public final class LockRegistry {
 
     public Optional<StageId> primaryRestrictingStageForRecipe(net.minecraft.server.level.ServerPlayer player, ResourceLocation recipeId) {
         if (player == null || recipeId == null) return Optional.empty();
-        return firstMissing(player, getRequiredStagesForRecipe(recipeId));
+        Set<StageId> gating = getRequiredStagesForRecipe(recipeId);
+        Optional<StageId> missing = firstMissing(player, gating);
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.RECIPE, recipeId, null, missing.isPresent());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Optional.empty();
+        return decision.ownerStage() != null ? Optional.of(decision.ownerStage()) : missing;
     }
 
     public Optional<StageId> primaryRestrictingStageForRecipeOutput(net.minecraft.server.level.ServerPlayer player, Item outputItem) {
@@ -1351,33 +1394,36 @@ public final class LockRegistry {
 
     public Optional<StageId> primaryRestrictingStageForBlock(net.minecraft.server.level.ServerPlayer player, Block block) {
         if (player == null || block == null) return Optional.empty();
-        Set<StageId> gating = getRequiredStagesForBlock(block);
-        if (gating.isEmpty()) return Optional.empty();
+        Set<StageId> missing = staticMissingStagesForBlock(player, block);
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
-        Set<StageId> access = (id != null && "minecraft".equals(id.getNamespace()))
-            ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
-            : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
-        for (StageId s : gating) if (!access.contains(s)) return Optional.of(s);
-        return Optional.empty();
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.BLOCK, id, BuiltInRegistries.BLOCK.wrapAsHolder(block), !missing.isEmpty());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Optional.empty();
+        if (decision.ownerStage() != null) return Optional.of(decision.ownerStage());
+        return missing.stream().findFirst();
     }
 
     public Optional<StageId> primaryRestrictingStageForFluid(net.minecraft.server.level.ServerPlayer player, ResourceLocation fluidId) {
         if (player == null || fluidId == null) return Optional.empty();
         Set<StageId> gating = getRequiredStagesForFluid(fluidId);
-        if (gating.isEmpty()) return Optional.empty();
         Set<StageId> access = "minecraft".equals(fluidId.getNamespace())
             ? effectiveLockStagesForVanillaNamespace(com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player))
             : com.enviouse.progressivestages.common.stage.StageManager.getInstance().getStages(player);
-        for (StageId s : gating) if (!access.contains(s)) return Optional.of(s);
-        return Optional.empty();
+        Optional<StageId> missing = gating.stream().filter(stage -> !access.contains(stage)).findFirst();
+        Fluid fluid = BuiltInRegistries.FLUID.get(fluidId);
+        Holder<Fluid> holder = fluid != null ? BuiltInRegistries.FLUID.wrapAsHolder(fluid) : null;
+        ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+            ConditionalRule.TargetType.FLUID, fluidId, holder, missing.isPresent());
+        if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Optional.empty();
+        return decision.ownerStage() != null ? Optional.of(decision.ownerStage()) : missing;
     }
 
     public Optional<StageId> primaryRestrictingStageForDimension(net.minecraft.server.level.ServerPlayer player, ResourceLocation dimId) {
-        return firstMissing(player, getRequiredStagesForDimension(dimId));
+        return restrictionStagesForDimension(player, dimId).stream().findFirst();
     }
 
     public Optional<StageId> primaryRestrictingStageForEntity(net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
-        return firstMissing(player, getRequiredStagesForEntity(type));
+        return restrictionStagesForEntity(player, type).stream().findFirst();
     }
 
     /** Returns the first stage in {@code gating} the player is missing, or empty if none. */

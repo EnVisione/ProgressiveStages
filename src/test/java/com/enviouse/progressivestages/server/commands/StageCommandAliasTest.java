@@ -20,5 +20,7 @@ class StageCommandAliasTest {
 
         assertTrue(source.contains("Commands.literal(\"pstages\")"));
         assertFalse(source.contains("Commands.literal(\"ps\")"));
+        assertTrue(source.contains("Commands.literal(\"rule\")"));
+        assertTrue(source.contains("activateConditionalRule"));
     }
 }

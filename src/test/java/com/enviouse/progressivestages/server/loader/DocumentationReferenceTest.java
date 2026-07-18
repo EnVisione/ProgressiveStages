@@ -22,6 +22,9 @@ class DocumentationReferenceTest {
         assertTrue(reference.contains("READ THIS FIRST. A SAFE FIVE MINUTE EDIT"));
         assertTrue(reference.contains("TABLE OF CONTENTS"));
         assertTrue(reference.contains("TROUBLESHOOTING"));
+        assertTrue(reference.contains("TEMPORARY AND TRIGGERED LOCKS GUIDE"));
+        assertTrue(reference.contains("[[temporary_locks]]"));
+        assertTrue(reference.contains("[[triggered_locks]]"));
 
         StageFileParser.ParseResult result = StageFileParser.parseWithErrors(DIAMOND_REFERENCE);
         assertTrue(result.isSuccess(), result::getErrorMessage);
@@ -35,6 +38,8 @@ class DocumentationReferenceTest {
         assertTrue(documentation.contains("[`diamond_stage.toml`](examples/reference/diamond_stage.toml)"));
         assertTrue(documentation.contains("[Architecture and Project Structure Guide](ARCHITECTURE.md)"));
         assertTrue(documentation.contains("[Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md)"));
+        assertTrue(documentation.contains("[Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md)"));
+        assertTrue(documentation.contains("### 4.34 Temporary, triggered, and priority-based lock rules"));
     }
 
     @Test
@@ -61,6 +66,8 @@ class DocumentationReferenceTest {
         assertTrue(guide.contains("ProgressiveStagesAPI.grantStage"));
         assertTrue(guide.contains("./gradlew clean build"));
         assertTrue(guide.contains("examples/reference/diamond_stage.toml"));
+        assertTrue(guide.contains("[[temporary_unlocks]]"));
+        assertTrue(guide.contains("/pstages rule activate"));
     }
 
     @Test

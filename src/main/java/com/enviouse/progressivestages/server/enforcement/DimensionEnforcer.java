@@ -3,8 +3,8 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
-import com.enviouse.progressivestages.common.stage.StageManager;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -15,7 +15,6 @@ import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
 
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -67,7 +66,8 @@ public class DimensionEnforcer {
             return true;
         }
 
-        if (!StageConfig.isBlockDimensionTravel() && !LockRegistry.getInstance().hasEnforcementOverrides()) {
+        if (!StageConfig.isBlockDimensionTravel() && !LockRegistry.getInstance().hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.DIMENSION)) {
             return true;
         }
 
@@ -106,7 +106,8 @@ public class DimensionEnforcer {
      * @param to     the dimension the player arrived in
      */
     public static void handlePostTravelSafetyNet(ServerPlayer player, ResourceKey<Level> from, ResourceKey<Level> to) {
-        if (!StageConfig.isBlockDimensionTravel() && !LockRegistry.getInstance().hasEnforcementOverrides()) {
+        if (!StageConfig.isBlockDimensionTravel() && !LockRegistry.getInstance().hasEnforcementOverrides()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.DIMENSION)) {
             cleanupPlayer(player.getUUID());
             return;
         }
@@ -130,14 +131,15 @@ public class DimensionEnforcer {
         LOGGER.warn("[ProgressiveStages] Player {} arrived in locked dimension {} (bypassed pre-travel event). Bouncing back to {}.",
                 player.getName().getString(), to.location(), from.location());
 
-        bounceBack(player, from);
+        bounceBack(player, from, to.location());
     }
 
     /**
      * Teleport the player back to the source dimension.
      * Uses the saved position if available, otherwise falls back to the world spawn.
      */
-    private static void bounceBack(ServerPlayer player, ResourceKey<Level> fromDimension) {
+    private static void bounceBack(ServerPlayer player, ResourceKey<Level> fromDimension,
+                                   ResourceLocation blockedDimension) {
         UUID playerId = player.getUUID();
         BOUNCING_BACK.add(playerId);
 
@@ -172,7 +174,7 @@ public class DimensionEnforcer {
             }
 
             player.teleportTo(targetLevel, x, y, z, Set.of(), yRot, xRot);
-            notifyLocked(player, player.level().dimension().location());
+            notifyLocked(player, blockedDimension);
         } catch (Exception e) {
             LOGGER.error("[ProgressiveStages] Failed to bounce player {} back from locked dimension: {}",
                     player.getName().getString(), e.getMessage());
@@ -190,10 +192,10 @@ public class DimensionEnforcer {
      */
     public static boolean isDimensionLockedForPlayer(ServerPlayer player, ResourceLocation dimensionId) {
         LockRegistry reg = LockRegistry.getInstance();
-        Optional<StageId> gate = reg.primaryRestrictingStageForDimension(player, dimensionId);
+        Set<StageId> gates = reg.restrictionStagesForDimension(player, dimensionId);
         // v2.3: per-stage override — a dimension is "locked for travel" only if its gating stage
         // enforces DIMENSION_TRAVEL (per-stage override, else the global default).
-        return gate.isPresent() && reg.isCategoryEnforced(gate.get(), EnforcementCategory.DIMENSION_TRAVEL);
+        return !gates.isEmpty() && reg.isCategoryEnforced(gates, EnforcementCategory.DIMENSION_TRAVEL);
     }
 
     /**
@@ -201,14 +203,9 @@ public class DimensionEnforcer {
      * v2.0: shows the primary missing stage.
      */
     public static void notifyLocked(ServerPlayer player, ResourceLocation dimensionId) {
-        java.util.Set<StageId> gating = LockRegistry.getInstance().getRequiredStagesForDimension(dimensionId);
-        if (gating.isEmpty()) return;
-        for (StageId s : gating) {
-            if (!StageManager.getInstance().hasStage(player, s)) {
-                ItemEnforcer.notifyLocked(player, s, com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelDimension());
-                return;
-            }
-        }
+        LockRegistry.getInstance().primaryRestrictingStageForDimension(player, dimensionId)
+            .ifPresent(stage -> ItemEnforcer.notifyLocked(player, stage,
+                com.enviouse.progressivestages.common.config.StageConfig.getMsgTypeLabelDimension()));
     }
 
     // ==================== Cleanup ====================

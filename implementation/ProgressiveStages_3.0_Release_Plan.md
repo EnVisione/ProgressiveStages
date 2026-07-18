@@ -89,6 +89,23 @@ conditions = [
 - Biome-time counters accumulate exact ticks at arbitrary polling intervals.
 - Inventory override categories operate independently.
 
+### 4.1 Conditional access rules
+
+- Live `[[temporary_locks]]` and `[[temporary_unlocks]]` evaluate only when an affected enforcement
+  surface asks for a decision.
+- Timed `[[triggered_locks]]` and `[[triggered_unlocks]]` activate from combat, attack, hurt, kill,
+  command, KubeJS, or Java API calls.
+- One rule may target items, blocks, fluids, entities, recipes, dimensions, structures, and jump,
+  elytra, sprint, swim, or climb abilities, with prefix selectors and per-rule exceptions.
+- Context supports dimensions, generated structures, biomes, height, health, owned or missing
+  stages, effects, movement state, and registered KubeJS predicates.
+- Normal gates enter as priority zero. The highest conditional priority wins and a lock wins an
+  equal-priority conflict.
+- Candidate validation rejects duplicate canonical rule ids and missing context stages. File
+  validation checks exact registry-backed conditional targets.
+- `/pstages rule`, the KubeJS global object, and `ProgressiveStagesAPI` expose timer inspection and
+  mutation without reserving `/ps`.
+
 ### 5. Dedicated-client parity
 
 - Item, block, fluid, recipe, recipe-output, entity, and whole-mod locks synchronize to

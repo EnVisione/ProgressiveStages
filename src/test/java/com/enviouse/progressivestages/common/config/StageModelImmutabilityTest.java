@@ -1,6 +1,8 @@
 package com.enviouse.progressivestages.common.config;
 
+import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
@@ -52,5 +54,24 @@ class StageModelImmutabilityTest {
 
         assertThrows(UnsupportedOperationException.class, () ->
             definition.enforcementOverrides().put(EnforcementCategory.ITEM_USE, false));
+    }
+
+    @Test
+    void stageCopiesConditionalRuleCollections() {
+        ConditionalRule rule = new ConditionalRule(
+            ResourceLocation.fromNamespaceAndPath("test", "rule"), StageId.of("owner"),
+            ConditionalRule.Effect.LOCK, ConditionalRule.Activation.LIVE,
+            ConditionalRule.StageState.OWNED, 100, ConditionalRule.Context.EMPTY,
+            ConditionalRule.Targets.EMPTY, ConditionalRule.TriggerType.MANUAL,
+            List.of(), -1L, true);
+        List<ConditionalRule> callerOwned = new ArrayList<>(List.of(rule));
+
+        StageDefinition definition = StageDefinition.builder(StageId.of("owner"))
+            .conditionalRules(callerOwned).build();
+        callerOwned.clear();
+
+        assertEquals(List.of(rule), definition.getConditionalRules());
+        assertThrows(UnsupportedOperationException.class,
+            () -> definition.getConditionalRules().clear());
     }
 }

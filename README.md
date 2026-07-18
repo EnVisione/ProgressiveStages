@@ -20,6 +20,8 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
   [Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md).
 - **Need every field, command, integration, and API:** use the
   [Complete Documentation](DOCUMENTATION.md).
+- **Building location, combat, timer, or priority-based access rules:** copy the
+  [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
 - **Building or approving a release:** follow the
   [Testing Handbook](TESTING.md).
 - **Learning how the files and runtime fit together:** read the
@@ -36,6 +38,7 @@ pack author who discovers the file without this README can still find the curren
 
 ## What's new in 3.0
 
+- **Temporary and triggered lock rules** — `[[temporary_locks]]`, `[[temporary_unlocks]]`, `[[triggered_locks]]`, and `[[triggered_unlocks]]` apply priority-based locks or permissions by dimension, structure, biome, height, health, stage state, effect, movement state, KubeJS predicate, combat, attack, hurt, kill, command, or API timer. A single rule can target items, blocks, fluids, entities, recipes, dimensions, structures, and `jump`/`elytra`/`sprint`/`swim`/`climb`, with per-rule exceptions. Static gates are priority `0`, conditional rules default to `100`, the highest priority wins, and a lock safely wins an equal-priority tie.
 - **Vanilla advancement-style stage map** — `/stage`, `/stages`, `/pstages`, `/stage gui`, the keybind, or the lock button beside the inventory recipe-book button opens a draggable and wheel-scrollable progression graph using vanilla task/goal/challenge frames, dependency connectors, tiled backgrounds, hover cards, search, owned-stage filtering, click-to-pin details, trigger progress, unlock previews, and server-validated purchases.
 - **Author-controlled map layout** — each stage's `[display]` can set `x`, `y`, `frame`, `background`, `reveal`, and `sort_order`; omit `x` + `y` for automatic dependency-graph layout. Reveal can be `always`, `dependencies`, or `unlocked`.
 - **Named trigger counters** — `type = "custom_counter", counter = "quest_points", count = 10` bridges stage TOML to `/stage counter get|add|set|reset ...` and `ProgressiveStages.counter/addCounter/setCounter/resetCounter(...)` in KubeJS.
@@ -371,6 +374,11 @@ All integrations are reflection-loaded; absent mods are silently skipped. Each c
 | `/stage tree` | Player | Print the stage dependency tree |
 | `/stage progress [next\|all\|<stage>] [player]` | Player | Show live `[[triggers]]` rule/condition progress toward stages |
 | `/stage counter get\|add\|set\|reset ...` | OP | Read or mutate named counters used by `custom_counter` triggers |
+| `/pstages rule info <rule>` | Player | Inspect a conditional rule, its owner, effect, activation, priority, trigger, duration, targets, and exceptions |
+| `/pstages rule list [player]` | Player or OP for another player | List active timed rules and their remaining seconds |
+| `/pstages rule activate <player> <rule> [seconds]` | OP | Start a triggered rule with its configured duration or an explicit duration |
+| `/pstages rule clear <player> <rule>` | OP | Stop one active triggered rule |
+| `/pstages rule clearall <player>` | OP | Stop every active triggered rule for the player |
 | `/stage tag grant\|revoke <players> <tag>` | OP | **New in 3.0.** Grant/revoke every stage tagged `<tag>` (from `[stage].tags`) to the selected players. Grant bypasses dependencies and skips already-owned stages |
 | `/stage tag list <tag>` | OP | **New in 3.0.** List every stage that declares `<tag>` |
 | `/stage category grant\|revoke <players> <category>` | OP | Bulk-change every stage in a GUI category (quote names containing spaces) |
@@ -472,6 +480,7 @@ compat/
 ## Changelog
 
 ### v3.0.1
+- **Conditional access engine** — live location/state rules and event-driven timers can lock or unlock eight target families with explicit priority, safe tie behavior, per-rule exceptions, stage ownership modes, combat entity filters, `/pstages rule` operations, KubeJS bindings, Java APIs, validation, and worked Stronghold/Wither/End examples.
 - **Conflict-free map command** — `/pstages` is the dedicated player-facing map command, leaving the previously used short command available to other mods.
 - **Nineteen-phase pack-building guide** — a copy-ready path now covers installation, every lock and trigger family, the vanilla-style map, commands, KubeJS, Java integration, optional mods, migration, testing, and release evidence.
 - **Progression-map polish** — menu blur stays below the interface, map node icons no longer overlap the pinned inspector, trigger routes are labeled clearly, dragging may begin on nodes or empty space, and a lock button beside the survival inventory recipe-book button opens the map.
@@ -571,6 +580,7 @@ compat/
 
 - Beginner walkthrough: [GETTING_STARTED.md](GETTING_STARTED.md).
 - Complete schema and feature reference: [DOCUMENTATION.md](DOCUMENTATION.md).
+- Temporary, triggered, context, timer, and priority rules: [TEMPORARY_AND_TRIGGERED_LOCKS.md](TEMPORARY_AND_TRIGGERED_LOCKS.md).
 - Architecture, folder structure, data flow, and extension guide: [ARCHITECTURE.md](ARCHITECTURE.md).
 - Build, smoke-test, multiplayer, and integration matrix: [TESTING.md](TESTING.md).
 - Copy-ready tested tutorial stages: [examples/beginner_pack](examples/beginner_pack/README.md).

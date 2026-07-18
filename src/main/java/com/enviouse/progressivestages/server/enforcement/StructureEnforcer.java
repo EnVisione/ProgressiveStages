@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
@@ -57,20 +58,26 @@ public final class StructureEnforcer {
 
         ServerLevel level = (ServerLevel) player.level();
         LockRegistry.StructureRulesAggregate agg = LockRegistry.getInstance().getStructures();
-        if (agg.lockedEntry.isEmpty()) return;
+        if (agg.lockedEntry.isEmpty()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.STRUCTURE)) return;
 
         BlockPos pos = player.blockPosition();
         Registry<Structure> structureRegistry =
             level.registryAccess().registryOrThrow(Registries.STRUCTURE);
 
-        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
-            Structure structure = structureRegistry.get(entry.getKey());
+        for (ResourceLocation structureId : candidateStructures(structureRegistry, agg)) {
+            Structure structure = structureRegistry.get(structureId);
             if (structure == null) continue;
             StructureStart start = level.structureManager().getStructureAt(pos, structure);
             if (start == StructureStart.INVALID_START) continue;
             if (!start.getBoundingBox().isInside(pos)) continue;
-            java.util.Optional<StageId> missing = firstMissing(player, entry.getValue());
-            if (missing.isEmpty()) continue;
+            java.util.Optional<StageId> missing = firstMissing(player,
+                agg.lockedEntry.getOrDefault(structureId, java.util.Set.of()));
+            ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+                ConditionalRule.TargetType.STRUCTURE, structureId, null, missing.isPresent());
+            if (decision == null || decision.effect() != ConditionalRule.Effect.LOCK) continue;
+            StageId source = decision.ownerStage() != null ? decision.ownerStage() : missing.orElse(null);
+            if (source == null) continue;
 
             // Apply mining fatigue while inside a locked structure that sets prevent_block_break.
             // This is the §2.12 "Indestructibility" signal — block breaks are already cancelled
@@ -81,7 +88,7 @@ public final class StructureEnforcer {
             }
 
             repel(player, start.getBoundingBox(), agg.entryPadding);
-            ItemEnforcer.notifyLockedWithCooldown(player, missing.get(), "This structure");
+            ItemEnforcer.notifyLockedWithCooldown(player, source, "This structure");
             return;
         }
 
@@ -142,15 +149,24 @@ public final class StructureEnforcer {
     public static java.util.Optional<StageId> getLockedEntryStageAt(ServerLevel level, BlockPos pos,
                                                                     ServerPlayer player) {
         LockRegistry.StructureRulesAggregate agg = LockRegistry.getInstance().getStructures();
-        if (agg.lockedEntry.isEmpty()) return java.util.Optional.empty();
+        if (agg.lockedEntry.isEmpty()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.STRUCTURE)) {
+            return java.util.Optional.empty();
+        }
         Registry<Structure> structureRegistry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
-            Structure structure = structureRegistry.get(entry.getKey());
+        for (ResourceLocation structureId : candidateStructures(structureRegistry, agg)) {
+            Structure structure = structureRegistry.get(structureId);
             if (structure == null) continue;
             StructureStart start = level.structureManager().getStructureAt(pos, structure);
             if (start != StructureStart.INVALID_START && start.getBoundingBox().isInside(pos)) {
-                java.util.Optional<StageId> missing = firstMissing(player, entry.getValue());
-                if (missing.isPresent()) return missing;
+                java.util.Optional<StageId> missing = firstMissing(player,
+                    agg.lockedEntry.getOrDefault(structureId, java.util.Set.of()));
+                ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
+                    ConditionalRule.TargetType.STRUCTURE, structureId, null, missing.isPresent());
+                if (decision != null && decision.effect() == ConditionalRule.Effect.LOCK) {
+                    if (decision.ownerStage() != null) return java.util.Optional.of(decision.ownerStage());
+                    if (missing.isPresent()) return missing;
+                }
             }
         }
         return java.util.Optional.empty();
@@ -208,21 +224,32 @@ public final class StructureEnforcer {
             case BREAK -> agg.preventBlockBreak;
             case PLACE -> agg.preventBlockPlace;
         };
-        if (!flagOn || agg.lockedEntry.isEmpty()) return true;
+        if (!flagOn || (agg.lockedEntry.isEmpty()
+                && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.STRUCTURE))) return true;
 
         ServerLevel level = (ServerLevel) player.level();
         Registry<Structure> structureRegistry =
             level.registryAccess().registryOrThrow(Registries.STRUCTURE);
 
-        for (Map.Entry<ResourceLocation, java.util.Set<StageId>> entry : agg.lockedEntry.entrySet()) {
-            Structure structure = structureRegistry.get(entry.getKey());
+        for (ResourceLocation structureId : candidateStructures(structureRegistry, agg)) {
+            Structure structure = structureRegistry.get(structureId);
             if (structure == null) continue;
             StructureStart start = level.structureManager().getStructureAt(pos, structure);
             if (start == StructureStart.INVALID_START) continue;
             if (!start.getBoundingBox().isInside(pos)) continue;
-            if (firstMissing(player, entry.getValue()).isPresent()) return false;
+            boolean staticBlocked = firstMissing(player,
+                agg.lockedEntry.getOrDefault(structureId, java.util.Set.of())).isPresent();
+            if (ConditionalLockEngine.isBlocked(player, ConditionalRule.TargetType.STRUCTURE,
+                    structureId, null, staticBlocked)) return false;
         }
         return true;
+    }
+
+    private static java.util.Set<ResourceLocation> candidateStructures(
+            Registry<Structure> registry, LockRegistry.StructureRulesAggregate aggregate) {
+        java.util.Set<ResourceLocation> ids = new java.util.LinkedHashSet<>(aggregate.lockedEntry.keySet());
+        ids.addAll(ConditionalLockEngine.structureTargetIds(registry));
+        return ids;
     }
 
     private static java.util.Optional<StageId> firstMissing(ServerPlayer player,

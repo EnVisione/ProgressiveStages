@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages.common.config;
 
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
 import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.trigger.TriggerRule;
@@ -73,6 +74,7 @@ public class StageDefinition {
     private final UnlockEffects unlock;
     private final StageRewards rewards; // v3.0: items/effects/commands/teleport/xp granted on unlock
     private final java.util.Set<String> lockedAbilities; // e.g. "elytra" — blocked until this stage is owned
+    private final List<ConditionalRule> conditionalRules;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -131,6 +133,8 @@ public class StageDefinition {
         this.rewards = builder.rewards != null ? builder.rewards : StageRewards.NONE;
         this.lockedAbilities = builder.lockedAbilities != null
             ? java.util.Set.copyOf(builder.lockedAbilities) : java.util.Set.of();
+        this.conditionalRules = builder.conditionalRules != null
+            ? Collections.unmodifiableList(new ArrayList<>(builder.conditionalRules)) : Collections.emptyList();
     }
 
     public StageId getId() {
@@ -345,6 +349,9 @@ public class StageDefinition {
     /** Abilities this stage gates (blocked until owned), e.g. {@code "elytra"}. Lower-case. */
     public java.util.Set<String> getLockedAbilities() { return lockedAbilities; }
 
+    /** Priority based temporary and triggered lock rules owned by this stage. */
+    public List<ConditionalRule> getConditionalRules() { return conditionalRules; }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -397,6 +404,7 @@ public class StageDefinition {
         private UnlockEffects unlock = UnlockEffects.NONE;
         private StageRewards rewards = StageRewards.NONE;
         private java.util.Set<String> lockedAbilities = java.util.Set.of();
+        private List<ConditionalRule> conditionalRules = new ArrayList<>();
 
         private Builder(StageId id) {
             this.id = id;
@@ -555,6 +563,7 @@ public class StageDefinition {
         public Builder unlock(UnlockEffects v) { this.unlock = v != null ? v : UnlockEffects.NONE; return this; }
         public Builder rewards(StageRewards v) { this.rewards = v != null ? v : StageRewards.NONE; return this; }
         public Builder lockedAbilities(java.util.Set<String> v) { this.lockedAbilities = v != null ? v : java.util.Set.of(); return this; }
+        public Builder conditionalRules(List<ConditionalRule> v) { this.conditionalRules = v != null ? v : new ArrayList<>(); return this; }
 
         public StageDefinition build() {
             return new StageDefinition(this);

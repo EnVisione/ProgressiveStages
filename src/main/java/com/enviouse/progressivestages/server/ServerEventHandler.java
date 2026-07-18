@@ -81,6 +81,7 @@ public class ServerEventHandler {
             NeoForge.EVENT_BUS.register(StageTriggerEvaluator.class);
             NeoForge.EVENT_BUS.register(StageRegressionHandler.class);
             NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.class);
+            NeoForge.EVENT_BUS.register(com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.class);
             coreHandlersRegistered = true;
         }
 
@@ -121,6 +122,7 @@ public class ServerEventHandler {
         IngredientGateHelper.clearAllCooldowns();
         DimensionEnforcer.resetRuntimeState();
         StructureEnforcer.resetRuntimeState();
+        ConditionalLockEngine.resetRuntimeState();
         com.enviouse.progressivestages.common.compat.ScriptHooks.reset();
         OreSpoofManager.get().resetRuntimeState();
         StageFileLoader.getInstance().shutdown();
@@ -313,7 +315,9 @@ public class ServerEventHandler {
         // ── Tick-based dimension enforcement (safety net for mods that bypass both events) ──
         // v2.3: also run when a stage opts in via a per-stage override (global may be off).
         if (StageConfig.isBlockDimensionTravel()
-                || com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().hasEnforcementOverrides()) {
+                || com.enviouse.progressivestages.common.lock.LockRegistry.getInstance().hasEnforcementOverrides()
+                || ConditionalLockEngine.hasRules(
+                    com.enviouse.progressivestages.common.lock.ConditionalRule.TargetType.DIMENSION)) {
             Long lastDimCheck = lastDimensionCheck.get(playerId);
             if (lastDimCheck == null || currentTime - lastDimCheck >= 20) { // Check every 20 ticks (1 second)
                 lastDimensionCheck.put(playerId, currentTime);

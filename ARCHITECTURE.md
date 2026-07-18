@@ -122,6 +122,8 @@ A stage file is a collection of optional sections around one required identity t
 | `[unlocks]` | Exceptions scoped to this stage's broad locks. |
 | `[enforcement]` | Per-stage exemptions and overrides of global enforcement defaults. |
 | `[[triggers]]` | One automatic route to grant the stage. Several blocks are alternative routes. |
+| `[[temporary_locks]]` and `[[temporary_unlocks]]` | Live context rules that temporarily restrict or permit several target categories. |
+| `[[triggered_locks]]` and `[[triggered_unlocks]]` | Combat, event, command, or API timers with priority-based access effects. |
 | `[attribute]` | Attribute changes held while the stage is owned. |
 | `[revoke]` | Conditions that remove the stage. |
 | `[cost]` | Purchase requirements, cooldown, bypass policy, and refund. |
@@ -162,6 +164,11 @@ The flow is:
 When two stages lock the same structure, owning only one is not enough. This is the same all-gating-stages rule used by items, blocks, recipes, and the other lock categories.
 
 The exhaustive field and behavior reference is [section 4.16 of DOCUMENTATION.md](DOCUMENTATION.md#416-structures--entry-rules-chest-locking).
+
+Conditional structure permissions pass through the same exact-bounds lookup. A normal structure
+gate enters priority resolution as a lock at zero. `ConditionalLockEngine` evaluates matching live
+or timed structure rules, and `StructureEnforcer` applies the highest result. Conditional structure
+ids are included in the candidate scan even when no normal stage gate names them.
 
 ## 6. Repository structure
 
@@ -226,6 +233,8 @@ Integrations should prefer this package over reaching into `StageManager` intern
 - `LockDefinition` groups the lock declarations belonging to one stage.
 - `LockRegistry` compiles all loaded definitions into fast category indexes that retain every gating stage.
 - `EnforcementCategory` names policy surfaces shared by global and per-stage settings.
+- `ConditionalRule` is the immutable model for live and timed lock or unlock rules, contexts,
+  targets, exceptions, stage state, triggers, durations, and priorities.
 
 This package answers “which stages gate this thing.” It does not decide how an event is cancelled.
 
@@ -287,7 +296,8 @@ Each class owns one event surface or a tightly related group.
 | `AdvancementHider` | Resends advancement data after ownership changes. |
 | `RegionEnforcer` | Hand-authored box entry and rule flags. |
 | `StructureEnforcer` | Generated structure entry, containers, and rule flags. |
-| `AbilityEnforcer` | Elytra, sprint, swim, and climb rules. |
+| `ConditionalLockEngine` | Context snapshots, event-driven timers, target matching, and deterministic priority resolution. |
+| `AbilityEnforcer` | Jump, elytra, sprint, swim, and climb rules. |
 | `StageAttributeApplier` | Adds and removes stage-owned attributes. |
 | `StageRewardApplier` | Applies grant rewards once per real grant. |
 | `UnlockEffectsApplier` | Sends configured unlock presentation. |
@@ -364,7 +374,8 @@ Mixin configuration is split into core, EMI, JEI, and FTB Quests JSON files. Opt
 6. Datapack stages are merged, with config IDs taking precedence.
 7. `StageOrder.validateDefinitions` checks the complete graph.
 8. If there are any errors, no candidate stages are activated.
-9. If valid, the loader replaces the runtime snapshot and rebuilds lock, dependency, tag, trigger, and ability indexes.
+9. If valid, the loader replaces the runtime snapshot and rebuilds lock, conditional rule,
+   dependency, tag, trigger, and ability indexes.
 
 ### Live reload
 
@@ -406,9 +417,11 @@ Most server-side checks follow the same pattern.
 4. `LockRegistry` returns every stage gating the target.
 5. Per-stage carve-outs and enforcement policy are evaluated for their owning stage.
 6. `StageManager` checks authoritative ownership.
-7. The strictest still-missing applicable gate wins.
-8. The event is cancelled, result removed, output filtered, player moved, or action allowed.
-9. Feedback is throttled to prevent chat and sound spam.
+7. A normal remaining gate enters as a lock at priority zero. `ConditionalLockEngine` adds live or
+   active timed rules whose stage state, context, target, and exception match.
+8. The highest priority wins. A lock wins an equal-priority lock and unlock conflict.
+9. The event is cancelled, result removed, output filtered, player moved, or action allowed.
+10. Feedback is throttled to prevent chat and sound spam.
 
 Automation surfaces that do not have a meaningful acting player use documented nearest-player or guarded-output behavior. The mod does not pretend shared world generation can safely become different for every player.
 
@@ -428,6 +441,13 @@ When a relevant event occurs:
 
 The poll interval is a safety net for state conditions such as location, held items, weather, and effects. Named custom counters and KubeJS progress providers use the same progress model shown by commands and the GUI.
 
+Conditional triggered locks use a separate event-indexed flow. Damage and death events select only
+rules registered for `combat`, `attack`, `hurt`, or `kill`, optionally match the opponent selector,
+and start or refresh one player timer. Manual rules start through `/pstages rule`, KubeJS, or the
+Java API. Timers are runtime state and clear on logout or server stop. Live temporary rules do not
+poll globally. They are evaluated only when an affected enforcement surface asks for a decision,
+with player location context cached for one game tick.
+
 ## 11. Test structure
 
 Unit tests live under `src/test/java/com/enviouse/progressivestages/` and mirror the source packages.
@@ -436,6 +456,8 @@ Unit tests live under `src/test/java/com/enviouse/progressivestages/` and mirror
 - Config tests protect immutable model behavior.
 - Stage tests cover dependency modes and graph ordering.
 - Trigger tests cover condition naming and purchase persistence.
+- Conditional rule tests cover TOML shapes, durations, target exceptions, priority ordering, and
+  safe tie behavior.
 - Client cache tests cover multi-stage lock state.
 - Compatibility tests cover optional mixin gating and script hook reset behavior.
 - Loader tests parse stage files, validate the beginner pack, and prove the Diamond Stage reference matches the generated default.
@@ -475,6 +497,7 @@ The repository root contains the maintained release surfaces:
 | `README.md` | Fast project overview and changelog. |
 | `GETTING_STARTED.md` | First-time pack authors. |
 | `DOCUMENTATION.md` | Exhaustive user-facing reference. |
+| `TEMPORARY_AND_TRIGGERED_LOCKS.md` | Focused conditional rules tutorial and copy-ready scenarios. |
 | `ARCHITECTURE.md` | Maintainers and integration authors. |
 | `TESTING.md` | Testers and release approvers. |
 | `CURSEFORGE.md` | Copy-ready public project description. |

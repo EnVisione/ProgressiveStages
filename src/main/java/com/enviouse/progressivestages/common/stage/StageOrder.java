@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.common.stage;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
@@ -308,7 +309,31 @@ public class StageOrder {
     public static List<String> validateDefinitions(Collection<StageDefinition> definitions) {
         StageOrder candidate = new StageOrder();
         for (StageDefinition definition : definitions) candidate.registerStage(definition);
-        return candidate.validateDependencies();
+        List<String> errors = new ArrayList<>(candidate.validateDependencies());
+        Set<StageId> stageIds = definitions.stream().map(StageDefinition::getId).collect(java.util.stream.Collectors.toSet());
+        Map<net.minecraft.resources.ResourceLocation, StageId> ruleOwners = new LinkedHashMap<>();
+        for (StageDefinition definition : definitions) {
+            for (ConditionalRule rule : definition.getConditionalRules()) {
+                StageId previous = ruleOwners.putIfAbsent(rule.id(), definition.getId());
+                if (previous != null) {
+                    errors.add("Conditional rule '" + rule.id() + "' is defined by both '"
+                        + previous + "' and '" + definition.getId() + "'");
+                }
+                for (StageId required : rule.context().requiredStages()) {
+                    if (!stageIds.contains(required)) {
+                        errors.add("Conditional rule '" + rule.id() + "' references missing stage '"
+                            + required + "' in its required stages");
+                    }
+                }
+                for (StageId missing : rule.context().missingStages()) {
+                    if (!stageIds.contains(missing)) {
+                        errors.add("Conditional rule '" + rule.id() + "' references missing stage '"
+                            + missing + "' in its missing stages");
+                    }
+                }
+            }
+        }
+        return errors;
     }
 
     private boolean canEverResolve(StageId id, Set<StageId> cycleMembers,

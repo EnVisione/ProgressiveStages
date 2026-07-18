@@ -772,6 +772,53 @@ their most recent safe position outside the structure. `entry_padding` begins re
 before the exact boundary. Loot-container access inside a locked structure is gated even if the
 optional destructive rules are false.
 
+### Conditional structure permissions and End battle rules
+
+Normal structure and dimension gates have priority zero. A later stage can override them with a
+higher-priority live permission, then apply stricter rules only in the destination.
+
+In `mage.toml`:
+
+```toml
+[structures]
+locked_entry = ["minecraft:stronghold"]
+
+[dimensions]
+locked = ["minecraft:the_end"]
+```
+
+In `end_fight.toml`:
+
+```toml
+[[triggers]]
+type = "kill"
+target = "minecraft:wither"
+
+[[temporary_unlocks]]
+id = "end_access"
+priority = 100
+
+[temporary_unlocks.targets]
+structures = ["minecraft:stronghold"]
+dimensions = ["minecraft:the_end"]
+
+[[temporary_locks]]
+id = "end_battle_rules"
+priority = 200
+
+[temporary_locks.when]
+dimensions = ["minecraft:the_end"]
+
+[temporary_locks.targets]
+items = ["minecraft:diamond_pickaxe"]
+abilities = ["jump", "elytra"]
+```
+
+`[[triggers]]` permanently grants End Fight. The temporary unlock is a live permission while that
+stage is owned. The End battle rule is live only in the End. See
+[TEMPORARY_AND_TRIGGERED_LOCKS.md](TEMPORARY_AND_TRIGGERED_LOCKS.md) for every context, target,
+priority rule, structure weapon example, and combat timer.
+
 ### Region behavior
 
 Regions are explicit three-dimensional boxes. They are best for protected laboratories, arena
@@ -798,6 +845,9 @@ equipped stacks are ejected. To gate a particular Curio item everywhere, also li
 4. Roll chest, mob, block, fishing, archeology, and Lootr loot used by the pack.
 5. Open the advancement screen before and after granting the stage.
 6. Equip an item in every gated Curios slot, then revoke the stage and confirm safe ejection.
+7. Test every conditional location rule one block outside, on the boundary, and inside its target.
+8. Confirm the priority one hundred permission defeats the normal gate and priority two hundred
+   restriction defeats that permission only where intended.
 
 ### Common mistakes
 
@@ -1177,6 +1227,30 @@ Call `ProgressiveStages.evaluate(player)` after changing script-owned state that
 observe automatically. Provider registrations and lifecycle callbacks are cleared and rebuilt on
 server-script reload, preventing duplicate handlers.
 
+### API-started timed rule
+
+Declare a manual timer in a stage file:
+
+```toml
+[[triggered_locks]]
+id = "factory_emergency"
+trigger = "manual"
+duration = "30s"
+
+[triggered_locks.targets]
+items = ["tag:mypack:factory_tools"]
+```
+
+Start it from a server script only when the real event occurs:
+
+```javascript
+ProgressiveStages.activateRule(player, 'factory_stage/factory_emergency')
+```
+
+This event-driven call avoids evaluating arbitrary expressions every tick. Inspect it with
+`/pstages rule list <player>` and stop it with `ProgressiveStages.clearRule` when the external event
+ends early.
+
 ### Verification
 
 1. Add one point with `/stage counter add` and confirm `/stage counter get` changes immediately.
@@ -1185,6 +1259,7 @@ server-script reload, preventing duplicate handlers.
 4. Change the boolean and numeric provider state, call `ProgressiveStages.evaluate(player)`, and
    inspect `/stage progress <stage> @s`.
 5. Restart the server and confirm named counters persist while script callbacks register once.
+6. Activate a manual timed rule, verify its remaining seconds, let it expire, and test explicit clear.
 
 ### Common mistakes
 
@@ -1399,7 +1474,7 @@ briefly move the camera or eye height.
 
 ### Ability behavior
 
-The listed ability remains gated until this stage is owned. `elytra`, `sprint`, `swim`, and `climb`
+The listed ability remains gated until this stage is owned. `jump`, `elytra`, `sprint`, `swim`, and `climb`
 are recognized. This is independent from locking the equipment item itself.
 
 ### Verification
@@ -1446,6 +1521,11 @@ on_death = true
 xp_below = 15
 cascade = true
 ```
+
+Do not confuse a temporary stage with a temporary lock rule. `[stage].duration` persists an expiry
+timestamp and removes stage ownership when time expires. `[[temporary_locks]]` is a live context
+rule with no timer. `[[triggered_locks]]` is a transient runtime timer and clears on logout or server
+stop. Use stage duration for progression ownership and conditional rules for situational access.
 
 The stage expires two real hours after grant, including offline time. It is also revoked on death
 or when the maintained total-XP threshold falls below 15 points. `cascade = true` allows
@@ -1583,6 +1663,20 @@ dependents, trigger descriptions, and purchase state.
 The trigger reset command clears persisted one-shot visit progress for the selected stage. It is not
 a general ownership revoke.
 
+### Conditional rule commands
+
+```text
+/pstages rule info progressivestages:end_fight/end_battle_rules
+/pstages rule list @s
+/pstages rule activate @s progressivestages:end_fight/manual_permission
+/pstages rule activate @s progressivestages:end_fight/manual_permission 60
+/pstages rule clear @s progressivestages:end_fight/manual_permission
+/pstages rule clearall @s
+```
+
+`info` and self `list` are player-facing. Another player's list and every mutation require operator
+permission. ProgressiveStages intentionally does not register `/ps`.
+
 ### Integration and preference commands
 
 ```text
@@ -1614,6 +1708,7 @@ calling player's warning preference.
 5. Intentionally add one invalid file and confirm validation explains it without replacing live
    state.
 6. Run the FTB status command with the integration absent and present.
+7. Inspect, activate, list, expire, clear, and clear all conditional timers.
 
 ### Common mistakes
 
@@ -1684,12 +1779,17 @@ ProgressiveStages.addCounter(player, 'factory_quests', 1)
 ProgressiveStages.evaluate(player)
 ProgressiveStages.sync(player)
 ProgressiveStages.openGui(player)
+ProgressiveStages.activateRule(player, 'end_fight/manual_permission', 60)
+ProgressiveStages.clearRule(player, 'end_fight/manual_permission')
+ProgressiveStages.clearRules(player)
 ```
 
 Queries include `exists`, `has`, `hasAll`, `hasAny`, `owned`, `all`, `locked`,
 `availableStages`, `dependencies`, `missingDependencies`, `allDependencies`, `dependents`,
 `allDependents`, `withTag`, `withCategory`, `categories`, `info`, `progress`, `percent`, and
 `counter`.
+Conditional rule discovery and timer queries use `ruleIds()`, `ruleInfo(id)`, and
+`activeRules(player)`.
 
 KubeJS also receives `player.stages.has`, `player.stages.add`, and `player.stages.remove`. The
 dedicated `ProgressiveStages` object is preferable for rich queries, causes, counters, and callbacks.
@@ -1713,6 +1813,9 @@ if (exists && !owned && ProgressiveStagesAPI.isAvailable(player, ironAge)) {
 var missing = ProgressiveStagesAPI.getMissingDependencies(player, ironAge);
 var progress = ProgressiveStagesAPI.getTriggerProgress(player, ironAge);
 long factoryProgress = ProgressiveStagesAPI.addCounter(player, "factory_quests", 1);
+boolean started = ProgressiveStagesAPI.activateConditionalRule(player,
+    "progressivestages:end_fight/manual_permission", 60_000L);
+var timedRules = ProgressiveStagesAPI.getActiveConditionalRules(player);
 ```
 
 Mutations must run on the logical server thread. Use an accurate `StageCause` so listeners know why
@@ -1749,6 +1852,7 @@ public static void onStageChanged(StageChangeEvent event) {
 5. Compile the Java integration against the public API and run it on the logical server thread.
 6. Confirm the Java event receives the same stage, change type, cause, player, and effective owner
    observed by the script callback.
+7. Start and clear a conditional timer through both KubeJS and Java and compare remaining time.
 
 ### Common mistakes
 
@@ -1922,7 +2026,8 @@ defaults while keeping local server overrides possible.
 2. Edit or add stage files.
 3. Run `/progressivestages validate`.
 4. Fix every syntax error, duplicate ID, dependency cycle, unreachable stage, invalid exact trigger
-   target, and invalid profession ID.
+   target, invalid profession ID, duplicate conditional rule ID, invalid exact conditional target,
+   and missing conditional context stage.
 5. Run `/progressivestages reload`.
 6. Confirm the reload report and server log.
 7. Run `/stage simulate` for representative players.
@@ -1973,6 +2078,9 @@ Confirm at minimum:
 8. Pinned detail inspector with icons and trigger routes.
 9. Purchase success and every purchase failure mode.
 10. Stage grant and game-mode change while standing over masked ore, with no camera dip.
+11. Normal priority-zero gate, priority-one-hundred permission, and priority-two-hundred restriction.
+12. Structure and dimension context entry and exit.
+13. Combat activation, timer refresh, expiry, manual activation, clear, logout, and reconnect.
 
 ### Manual dedicated-server matrix
 
@@ -1986,6 +2094,8 @@ Confirm at minimum:
 8. Per-player Lootr results.
 9. Ore presentation for two players in the same chunk.
 10. Creative bypass entering and leaving creative mode.
+11. Conditional timer isolation between two players.
+12. Conditional timer cleanup on disconnect and server restart.
 
 ### Optional integration matrix
 

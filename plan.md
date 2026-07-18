@@ -22,6 +22,14 @@ initialization without a ProgressiveStages error. Manual in-world UI interaction
 multiplayer, and the installed optional-mod combination matrix remain the final Phase A release
 gates.
 
+The 3.0.1 extension now includes a focused conditional access engine. Stage files can declare live
+temporary locks and permissions or event-driven timed locks and permissions across items, blocks,
+fluids, entities, recipes, dimensions, structures, and abilities. Rules have reusable contexts,
+target exceptions, ownership modes, combat filters, and deterministic priority resolution, with
+command, KubeJS, Java, validation, documentation, and regression-test surfaces. This is a shipped
+compatibility feature and foundation, not a claim that the broader registry-backed universal AST
+in feature group one is complete.
+
 Phases B through F are the approved development roadmap. Their registry kernel, universal
 condition tree, transaction engine, policy and action registries, advanced progression modes,
 Author Studio, pack tooling, journal, and performance framework are not marked complete until

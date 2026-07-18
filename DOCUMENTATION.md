@@ -25,6 +25,8 @@
 > [`diamond_stage.toml`](examples/reference/diamond_stage.toml). It is the directly browsable,
 > fully commented copy of the generated `diamond_age.toml` reference. Start with its numbered
 > safe five minute edit, then use its table of contents to find every lock category and feature.
+> Conditional access authors can also use the focused
+> [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
 
 ---
 
@@ -71,6 +73,7 @@
    - [4.31 `[rewards]` — items / effects / commands / teleport / xp on grant](#431-rewards--items--effects--commands--teleport--xp-on-grant) — **New in 3.0**
    - [4.32 `[display].encrypt_blocks` — encrypted-block visual](#432-displayencrypt_blocks--encrypted-block-visual) — **New in 3.0**
    - [4.33 `[enchants].max_levels`, `[beacon]`, `[brewing]` — finer-grained gates](#433-enchantsmax_levels-beacon-brewing--finer-grained-gates) — **New in 3.0**
+   - [4.34 Temporary, triggered, and priority-based lock rules](#434-temporary-triggered-and-priority-based-lock-rules) — **New in 3.0.1**
 5. [Triggers — The Per-Stage `[[triggers]]` System](#5-triggers--the-per-stage-triggers-system)
    - [5.1 Rules, conditions, and modes](#51-rules-conditions-and-modes)
    - [5.2 Condition types](#52-condition-types)
@@ -1829,6 +1832,278 @@ player unlocks it, at which point they can pull it normally.
 
 ---
 
+### 4.34 Temporary, triggered, and priority-based lock rules
+
+Conditional rules change access without replacing the normal stage lock schema. They are designed
+for rules such as swords only inside a Stronghold, no elytra during the End fight, a temporary bow
+ban after combat starts, or a later stage that overrides an earlier structure gate.
+
+For a single-purpose tutorial with all requested examples, see
+[TEMPORARY_AND_TRIGGERED_LOCKS.md](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+
+#### Do not confuse stage triggers and triggered locks
+
+- `[[triggers]]` grants the stage containing it. Its result is normal persisted stage ownership.
+- `[[triggered_locks]]` and `[[triggered_unlocks]]` start a temporary runtime timer.
+- `[[temporary_locks]]` and `[[temporary_unlocks]]` continuously evaluate their live `.when`
+  context and do not use a timer.
+
+The friendly rule forms are:
+
+| Block | Effect | Activation |
+|---|---|---|
+| `[[temporary_locks]]` | lock | live context |
+| `[[temporary_unlocks]]` | unlock | live context |
+| `[[triggered_locks]]` | lock | event, command, or API timer |
+| `[[triggered_unlocks]]` | unlock | event, command, or API timer |
+
+The generic `[[conditional_rules]]` form accepts `effect = "lock"` or `"unlock"` and
+`activation = "live"` or `"triggered"`.
+
+#### Priority resolution
+
+Normal lock categories behave as a lock at priority `0`. Conditional rules default to priority
+`100`. The highest matching priority wins. When a lock and unlock tie at the highest priority, the
+lock wins. When effect and priority both match, the first loaded rule remains the winner.
+
+This makes a deliberate three-layer policy possible:
+
+```text
+Priority 0. Mage stage normally gates the Stronghold.
+Priority 100. End Fight ownership permits the Stronghold.
+Priority 200. An emergency event can lock it again.
+```
+
+Accepted priority values are `-1000000` through `1000000`. A negative rule cannot defeat a normal
+priority-zero gate. An `[except]` target only removes content from that one rule and is not a global
+whitelist.
+
+#### Rule fields
+
+```toml
+[[triggered_locks]]
+id = "dragon_swords_only"       # required and unique
+priority = 200                  # default 100
+stage_state = "owned"           # owned, missing, or always
+trigger = "combat"              # manual, combat, attack, hurt, or kill
+trigger_entities = ["minecraft:ender_dragon"]
+duration = "15s"                # or duration_seconds = 15
+refresh_duration = true
+
+[triggered_locks.targets]
+items = ["tag:mypack:weapons"]
+
+[triggered_locks.except]
+items = ["tag:minecraft:swords"]
+```
+
+Short rule ids are canonicalized beneath the containing stage. A rule named `dragon_swords_only` in
+`end_fight.toml` becomes `progressivestages:end_fight/dragon_swords_only`. A fully namespaced rule id
+is retained as written. Rule ids must be globally unique after canonicalization.
+
+`stage_state = "owned"` requires ownership of the containing stage. `missing` requires the stage to
+be unowned. `always` ignores ownership. `active_when` is an alias for `stage_state`.
+
+`refresh_duration = true` restarts a currently active timer whenever its trigger matches again.
+When false, another trigger cannot replace an unexpired timer. Command and API calls can override the
+configured duration but still respect `stage_state`, `.when`, and refresh policy.
+
+Timed state is deliberately transient. It clears on logout and server stop. Use `[[triggers]]` to
+grant a stage if the result must persist across sessions.
+
+#### Targets and exceptions
+
+Each rule requires a `.targets` table with at least one non-empty list. `.except` is optional.
+
+```toml
+[temporary_locks.targets]
+items = []
+blocks = []
+fluids = []
+entities = []
+recipes = []
+dimensions = []
+structures = []
+abilities = []
+```
+
+Items, blocks, fluids, and entities accept `id:`, implicit exact ids, `mod:`, `tag:` or `#`, and
+`name:`. Recipes, dimensions, structures, and abilities accept exact ids, `id:`, `mod:`, and
+`name:` but not tags. Ability ids enforced by the built-in engine are `jump`, `elytra`, `sprint`,
+`swim`, and `climb`.
+
+Conditional item and block decisions continue through the normal global toggles and the containing
+stage's `[enforcement]` overrides. For example, a weapons policy can set `block_item_use = true`,
+`block_item_pickup = false`, and `block_item_inventory = false` to deny attacks or use without
+ejecting carried weapons. Per-stage overrides apply to every matching rule owned by that stage.
+
+A rule may target several categories. This is valid:
+
+```toml
+[temporary_locks.targets]
+items = ["minecraft:diamond_pickaxe"]
+blocks = ["minecraft:diamond_ore"]
+fluids = ["minecraft:lava"]
+abilities = ["jump", "elytra"]
+```
+
+#### Live `.when` context
+
+All fields are optional. Omitted fields impose no requirement.
+
+```toml
+[temporary_locks.when]
+mode = "all_of"                 # all_of or any_of. all and any are aliases
+dimensions = ["minecraft:the_end"]
+structures = ["minecraft:stronghold"]
+biomes = ["#minecraft:is_forest"]
+min_y = 0
+max_y = 100
+min_health = 1.0
+max_health = 20.0
+stages = ["end_fight"]          # all listed stages must be owned
+missing_stages = ["escaped_end"]
+effects = ["minecraft:darkness"]
+sneaking = false
+sprinting = false
+swimming = false
+riding = false
+on_ground = true
+script = "pack_condition"
+```
+
+`mode = "all_of"` requires each supplied context group. `any_of` requires at least one supplied
+group. Structure context uses the generated structure bounding box rather than the complete chunk.
+Context is cached for one game tick per player.
+
+The `script` value invokes the predicate registered through
+`ProgressiveStages.condition('pack_condition', player => boolean)`.
+
+#### Mage, Wither, Stronghold, and End example
+
+`mage.toml` establishes ordinary priority-zero gates:
+
+```toml
+[stage]
+id = "mage"
+display_name = "Mage"
+
+[structures]
+locked_entry = ["minecraft:stronghold"]
+
+[dimensions]
+locked = ["minecraft:the_end"]
+```
+
+`end_fight.toml` earns a stage through the Wither kill, uses that stage to override Mage's
+Stronghold and End gates at priority `100`, and installs stronger priority `200` battle rules while
+inside the End:
+
+```toml
+[stage]
+id = "end_fight"
+display_name = "End Fight"
+
+[[triggers]]
+type = "kill"
+target = "minecraft:wither"
+count = 1
+
+[[temporary_unlocks]]
+id = "end_access"
+priority = 100
+
+[temporary_unlocks.targets]
+structures = ["minecraft:stronghold"]
+dimensions = ["minecraft:the_end"]
+
+[[temporary_locks]]
+id = "end_battle_rules"
+priority = 200
+
+[temporary_locks.when]
+dimensions = ["minecraft:the_end"]
+
+[temporary_locks.targets]
+items = ["minecraft:diamond_pickaxe"]
+abilities = ["jump", "elytra"]
+```
+
+#### Structure weapon examples
+
+Lock all weapons except swords while inside a Stronghold:
+
+```toml
+[[temporary_locks]]
+id = "stronghold_swords_only"
+
+[temporary_locks.when]
+structures = ["minecraft:stronghold"]
+
+[temporary_locks.targets]
+items = ["tag:mypack:weapons"]
+
+[temporary_locks.except]
+items = ["tag:minecraft:swords"]
+```
+
+If a normal stage already gates all weapons, temporarily permit them except bows inside an arena:
+
+```toml
+[[temporary_unlocks]]
+id = "arena_weapon_permission"
+
+[temporary_unlocks.when]
+structures = ["mypack:trial_arena"]
+
+[temporary_unlocks.targets]
+items = ["tag:mypack:weapons"]
+
+[temporary_unlocks.except]
+items = ["minecraft:bow", "minecraft:crossbow"]
+```
+
+If weapons are normally permitted, use a temporary lock targeting bow and crossbow instead. A broad
+weapon tag should be supplied by the pack because vanilla cannot identify every modded weapon.
+
+#### Commands, KubeJS, and Java
+
+The command root is `/pstages`. The mod does not reserve `/ps`.
+
+```text
+/pstages rule info <rule>
+/pstages rule list [player]
+/pstages rule activate <player> <rule> [seconds]
+/pstages rule clear <player> <rule>
+/pstages rule clearall <player>
+```
+
+```javascript
+ProgressiveStages.activateRule(player, 'end_fight/manual_permission')
+ProgressiveStages.activateRule(player, 'end_fight/manual_permission', 60)
+ProgressiveStages.clearRule(player, 'end_fight/manual_permission')
+ProgressiveStages.clearRules(player)
+let secondsRemaining = ProgressiveStages.activeRules(player)
+let ids = ProgressiveStages.ruleIds()
+let definition = ProgressiveStages.ruleInfo('end_fight/manual_permission')
+```
+
+```java
+ProgressiveStagesAPI.activateConditionalRule(player, ruleId, 60_000L);
+ProgressiveStagesAPI.clearConditionalRule(player, ruleId);
+ProgressiveStagesAPI.clearConditionalRules(player);
+Map<ResourceLocation, Long> remainingMillis =
+    ProgressiveStagesAPI.getActiveConditionalRules(player);
+Set<ResourceLocation> ruleIds = ProgressiveStagesAPI.getConditionalRuleIds();
+Optional<ConditionalRule> definition = ProgressiveStagesAPI.getConditionalRule(ruleId);
+```
+
+`/progressivestages validate` checks exact registry ids in conditional item, block, fluid, entity,
+effect, and trigger-entity selectors. Candidate activation also rejects cross-file duplicate rule ids
+and nonexistent stage ids in `.when.stages` or `.when.missing_stages`.
+
+---
+
 ## 5. Triggers — The Per-Stage `[[triggers]]` System
 
 Triggers are declared **per stage**, inside that stage's own TOML, in one or
@@ -2433,6 +2708,11 @@ permission level 2; authoring/reload/validation operations require level 3.
 | `/stage counter add <player> <counter> <amount>` | Add to a counter and immediately re-evaluate triggers (permission 2). |
 | `/stage counter set <player> <counter> <value>` | Set a counter and immediately re-evaluate triggers (permission 2). |
 | `/stage counter reset <player> <counter>` | Clear a named counter (permission 2). |
+| `/pstages rule info <rule>` | Inspect a conditional rule's canonical id, owner stage, effect, activation, priority, stage state, trigger, duration, targets, and exceptions. |
+| `/pstages rule list [player]` | List active timed rules and remaining seconds. Querying another player requires permission 2. |
+| `/pstages rule activate <player> <rule> [seconds]` | Start a triggered rule. Omit seconds to use its TOML duration. Requires permission 2. |
+| `/pstages rule clear <player> <rule>` | Stop one active triggered rule. Requires permission 2. |
+| `/pstages rule clearall <player>` | Stop all active triggered rules. Requires permission 2. |
 
 > **Using `/stage progress`.** Three views, one rendering:
 >
@@ -2501,6 +2781,9 @@ and self-loop / dead-dependency checks, `validate` now also reports:
   raw stat) are intentionally skipped (they aren't in the built-in registries).
 - **Profession ids** — `[professions].locked` exact ids are validated against the
   villager-profession registry.
+- **Conditional rules** — exact item, block, fluid, entity, effect, and trigger-entity ids,
+  cross-file duplicate rule ids, and nonexistent context stage ids are rejected before the live
+  snapshot changes.
 
 (Cycle / unreachable detection lives in
 [`StageOrder.validateDependencies`](src/main/java/com/enviouse/progressivestages/common/stage/StageOrder.java);
@@ -2779,6 +3062,12 @@ ProgressiveStages.progressCondition('reputation', player => getReputation(player
 | `ProgressiveStages.evaluate(player)` | void | Immediately evaluate declarative triggers |
 | `ProgressiveStages.sync(player)` | void | Force a complete authoritative client-cache refresh |
 | `ProgressiveStages.openGui(player)` | void | Open/refresh the player's stage map |
+| `ProgressiveStages.activateRule(player, 'rule'[, seconds])` | boolean | Start a triggered conditional rule with configured or explicit duration |
+| `ProgressiveStages.clearRule(player, 'rule')` | boolean | Stop one active triggered rule |
+| `ProgressiveStages.clearRules(player)` | int | Stop all active triggered rules and return the count |
+| `ProgressiveStages.activeRules(player)` | object | Rule ids mapped to whole seconds remaining |
+| `ProgressiveStages.ruleIds()` | string[] | Every loaded canonical conditional rule id |
+| `ProgressiveStages.ruleInfo('rule')` | object | Complete rule metadata, targets, exceptions, and context, or an empty object |
 
 ```javascript
 ServerEvents.tick(e => e.server.players.forEach(p => {
@@ -2960,6 +3249,16 @@ ProgressiveStagesAPI.grantStageBypass(player, id, StageCause.API);
 Optional<StageDefinition> def = ProgressiveStagesAPI.getDefinition("iron_age");
 Collection<StageDefinition> defs = ProgressiveStagesAPI.getAllDefinitions();
 List<StageTriggerEvaluator.RuleProgress> progress = ProgressiveStagesAPI.getTriggerProgress(player, id);
+
+// Conditional rule timers
+boolean started = ProgressiveStagesAPI.activateConditionalRule(player,
+    "progressivestages:end_fight/manual_permission", 60_000L);
+boolean stopped = ProgressiveStagesAPI.clearConditionalRule(player,
+    "progressivestages:end_fight/manual_permission");
+Map<ResourceLocation, Long> remaining = ProgressiveStagesAPI.getActiveConditionalRules(player);
+Set<ResourceLocation> conditionalIds = ProgressiveStagesAPI.getConditionalRuleIds();
+Optional<ConditionalRule> conditionalDefinition =
+    ProgressiveStagesAPI.getConditionalRule("progressivestages:end_fight/manual_permission");
 ```
 
 ### 15.2 StageId

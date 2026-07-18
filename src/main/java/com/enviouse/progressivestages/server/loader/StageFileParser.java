@@ -11,6 +11,7 @@ import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.config.StageRewards;
 import com.enviouse.progressivestages.common.config.UnlockEffects;
 import com.enviouse.progressivestages.common.lock.CategoryLocks;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.EnforcementCategory;
 import com.enviouse.progressivestages.common.lock.LockDefinition;
 import com.enviouse.progressivestages.common.lock.PrefixEntry;
@@ -196,6 +197,7 @@ public final class StageFileParser {
         builder.unlock(parseUnlock(config));
         builder.rewards(parseRewards(config));
         builder.lockedAbilities(parseAbilities(config));
+        builder.conditionalRules(parseConditionalRules(config, stageId));
 
         return ParseResult.success(builder.build());
     }
@@ -316,6 +318,242 @@ public final class StageFileParser {
             if (s != null && !s.trim().isEmpty()) out.add(s.trim().toLowerCase(java.util.Locale.ROOT));
         }
         return out;
+    }
+
+    private static List<ConditionalRule> parseConditionalRules(Config config, StageId ownerStage) {
+        List<ConditionalRule> out = new ArrayList<>();
+        java.util.Set<ResourceLocation> ids = new java.util.LinkedHashSet<>();
+        parseConditionalRuleGroup(config, "temporary_locks", ownerStage,
+            ConditionalRule.Effect.LOCK, ConditionalRule.Activation.LIVE, out, ids);
+        parseConditionalRuleGroup(config, "temporary_unlocks", ownerStage,
+            ConditionalRule.Effect.UNLOCK, ConditionalRule.Activation.LIVE, out, ids);
+        parseConditionalRuleGroup(config, "triggered_locks", ownerStage,
+            ConditionalRule.Effect.LOCK, ConditionalRule.Activation.TRIGGERED, out, ids);
+        parseConditionalRuleGroup(config, "triggered_unlocks", ownerStage,
+            ConditionalRule.Effect.UNLOCK, ConditionalRule.Activation.TRIGGERED, out, ids);
+        parseConditionalRuleGroup(config, "conditional_rules", ownerStage, null, null, out, ids);
+        return out;
+    }
+
+    private static void parseConditionalRuleGroup(Config config, String key, StageId ownerStage,
+                                                   ConditionalRule.Effect fixedEffect,
+                                                   ConditionalRule.Activation fixedActivation,
+                                                   List<ConditionalRule> out,
+                                                   java.util.Set<ResourceLocation> ids) {
+        Object raw = config.get(key);
+        if (raw == null) return;
+        List<Config> entries = new ArrayList<>();
+        if (raw instanceof Config entry) entries.add(entry);
+        else if (raw instanceof List<?> list) {
+            for (Object value : list) {
+                if (!(value instanceof Config entry)) {
+                    throw new IllegalArgumentException("A conditional rule must be a table");
+                }
+                entries.add(entry);
+            }
+        } else {
+            throw new IllegalArgumentException("A conditional rule group must contain tables");
+        }
+
+        for (int index = 0; index < entries.size(); index++) {
+            Config entry = entries.get(index);
+            String rawId = entry.get("id");
+            if (rawId == null || rawId.isBlank()) {
+                throw new IllegalArgumentException("A conditional rule is missing its id");
+            }
+            ResourceLocation id = conditionalRuleId(ownerStage, rawId);
+            if (!ids.add(id)) throw new IllegalArgumentException("Duplicate conditional rule id. " + id);
+
+            ConditionalRule.Effect effect = fixedEffect != null ? fixedEffect
+                : parseRuleEffect(entry.getOrElse("effect", "lock"));
+            ConditionalRule.Activation activation = fixedActivation != null ? fixedActivation
+                : parseRuleActivation(entry.getOrElse("activation", "live"));
+            ConditionalRule.StageState stageState = parseRuleStageState(
+                entry.getOrElse("stage_state", entry.getOrElse("active_when", "owned")));
+            int priority = (int) readLong(entry, "priority", 100L);
+            if (priority < -1_000_000 || priority > 1_000_000) {
+                throw new IllegalArgumentException("Conditional rule priority is outside the supported range. " + id);
+            }
+
+            Config targetsConfig = entry.get("targets");
+            if (targetsConfig == null) throw new IllegalArgumentException("Conditional rule has no targets. " + id);
+            Config exceptConfig = entry.get("except");
+            ConditionalRule.Targets targets = parseConditionalTargets(targetsConfig, exceptConfig, id);
+            ConditionalRule.Context context = parseConditionalContext(entry.get("when"));
+
+            ConditionalRule.TriggerType triggerType = ConditionalRule.TriggerType.MANUAL;
+            List<PrefixEntry> triggerEntities = List.of();
+            long durationMillis = -1L;
+            boolean refresh = true;
+            if (activation == ConditionalRule.Activation.TRIGGERED) {
+                triggerType = parseRuleTrigger(entry.getOrElse("trigger", "manual"));
+                triggerEntities = parsePrefixEntries(entry, "trigger_entities", true);
+                Object duration = entry.get("duration");
+                durationMillis = duration != null ? parseDuration(duration)
+                    : Math.max(1L, readLong(entry, "duration_seconds", 10L)) * 1_000L;
+                if (durationMillis <= 0L) durationMillis = 10_000L;
+                Boolean refreshValue = readOptionalBool(entry, "refresh_duration");
+                refresh = refreshValue == null || refreshValue;
+            }
+
+            out.add(new ConditionalRule(id, ownerStage, effect, activation, stageState, priority,
+                context, targets, triggerType, triggerEntities, durationMillis, refresh));
+        }
+    }
+
+    private static ResourceLocation conditionalRuleId(StageId ownerStage, String raw) {
+        String value = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        ResourceLocation id = value.contains(":")
+            ? ResourceLocation.tryParse(value)
+            : ResourceLocation.tryParse(ownerStage.getNamespace() + ":" + ownerStage.getPath() + "/" + value);
+        if (id == null) throw new IllegalArgumentException("Invalid conditional rule id. " + raw);
+        return id;
+    }
+
+    private static ConditionalRule.Effect parseRuleEffect(String raw) {
+        return switch (raw.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "lock", "deny", "block" -> ConditionalRule.Effect.LOCK;
+            case "unlock", "allow", "permit" -> ConditionalRule.Effect.UNLOCK;
+            default -> throw new IllegalArgumentException("Invalid conditional rule effect. " + raw);
+        };
+    }
+
+    private static ConditionalRule.Activation parseRuleActivation(String raw) {
+        return switch (raw.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "live", "temporary", "context" -> ConditionalRule.Activation.LIVE;
+            case "triggered", "timed" -> ConditionalRule.Activation.TRIGGERED;
+            default -> throw new IllegalArgumentException("Invalid conditional rule activation. " + raw);
+        };
+    }
+
+    private static ConditionalRule.StageState parseRuleStageState(String raw) {
+        return switch (raw.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "owned", "has" -> ConditionalRule.StageState.OWNED;
+            case "missing", "lacks" -> ConditionalRule.StageState.MISSING;
+            case "always", "any" -> ConditionalRule.StageState.ALWAYS;
+            default -> throw new IllegalArgumentException("Invalid conditional rule stage state. " + raw);
+        };
+    }
+
+    private static ConditionalRule.TriggerType parseRuleTrigger(String raw) {
+        return switch (raw.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "manual", "api", "command" -> ConditionalRule.TriggerType.MANUAL;
+            case "combat", "fight" -> ConditionalRule.TriggerType.COMBAT;
+            case "attack", "dealt_damage" -> ConditionalRule.TriggerType.ATTACK;
+            case "hurt", "take_damage", "damaged" -> ConditionalRule.TriggerType.HURT;
+            case "kill", "killed" -> ConditionalRule.TriggerType.KILL;
+            default -> throw new IllegalArgumentException("Invalid conditional rule trigger. " + raw);
+        };
+    }
+
+    private static ConditionalRule.Targets parseConditionalTargets(Config included, Config excluded,
+                                                                   ResourceLocation ruleId) {
+        java.util.EnumMap<ConditionalRule.TargetType, List<PrefixEntry>> includeMap =
+            new java.util.EnumMap<>(ConditionalRule.TargetType.class);
+        java.util.EnumMap<ConditionalRule.TargetType, List<PrefixEntry>> excludeMap =
+            new java.util.EnumMap<>(ConditionalRule.TargetType.class);
+        for (ConditionalRule.TargetType type : ConditionalRule.TargetType.values()) {
+            String key = targetKey(type);
+            List<PrefixEntry> include = parsePrefixEntries(included, key, typeAllowsTags(type));
+            if (!include.isEmpty()) includeMap.put(type, include);
+            List<PrefixEntry> exclude = parsePrefixEntries(excluded, key, typeAllowsTags(type));
+            if (!exclude.isEmpty()) excludeMap.put(type, exclude);
+        }
+        ConditionalRule.Targets targets = new ConditionalRule.Targets(includeMap, excludeMap);
+        if (targets.isEmpty()) throw new IllegalArgumentException("Conditional rule has empty targets. " + ruleId);
+        return targets;
+    }
+
+    private static String targetKey(ConditionalRule.TargetType type) {
+        return switch (type) {
+            case ITEM -> "items";
+            case BLOCK -> "blocks";
+            case FLUID -> "fluids";
+            case ENTITY -> "entities";
+            case RECIPE -> "recipes";
+            case DIMENSION -> "dimensions";
+            case STRUCTURE -> "structures";
+            case ABILITY -> "abilities";
+        };
+    }
+
+    private static boolean typeAllowsTags(ConditionalRule.TargetType type) {
+        return type == ConditionalRule.TargetType.ITEM || type == ConditionalRule.TargetType.BLOCK
+            || type == ConditionalRule.TargetType.FLUID || type == ConditionalRule.TargetType.ENTITY;
+    }
+
+    private static List<PrefixEntry> parsePrefixEntries(Config config, String key, boolean allowTags) {
+        if (config == null) return List.of();
+        List<PrefixEntry> out = new ArrayList<>();
+        for (String raw : stringList(config, key)) {
+            PrefixEntry entry = PrefixEntry.parse(raw);
+            if (entry == null) throw new IllegalArgumentException("Invalid conditional selector. " + raw);
+            if (!allowTags && entry.kind() == PrefixEntry.Kind.TAG) {
+                throw new IllegalArgumentException("Tags are not supported for this conditional selector. " + raw);
+            }
+            out.add(entry);
+        }
+        return List.copyOf(out);
+    }
+
+    private static ConditionalRule.Context parseConditionalContext(Config when) {
+        if (when == null) return ConditionalRule.Context.EMPTY;
+        String modeValue = when.getOrElse("mode", "all_of");
+        ConditionalRule.ContextMode mode = switch (modeValue.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "all", "all_of" -> ConditionalRule.ContextMode.ALL;
+            case "any", "any_of" -> ConditionalRule.ContextMode.ANY;
+            default -> throw new IllegalArgumentException("Invalid conditional context mode. " + modeValue);
+        };
+        List<PrefixEntry> dimensions = parsePrefixEntries(when, "dimensions", false);
+        List<PrefixEntry> structures = parsePrefixEntries(when, "structures", false);
+        List<PrefixEntry> biomes = parsePrefixEntries(when, "biomes", true);
+        Integer minY = readOptionalInt(when, "min_y");
+        Integer maxY = readOptionalInt(when, "max_y");
+        if (minY != null && maxY != null && minY > maxY) {
+            throw new IllegalArgumentException("Conditional min y cannot exceed max y");
+        }
+        Double minHealth = readOptionalDouble(when, "min_health", "health_above");
+        Double maxHealth = readOptionalDouble(when, "max_health", "health_below");
+        if (minHealth != null && maxHealth != null && minHealth > maxHealth) {
+            throw new IllegalArgumentException("Conditional minimum health cannot exceed maximum health");
+        }
+        java.util.Set<StageId> requiredStages = parseStageIdSet(when, "stages");
+        java.util.Set<StageId> missingStages = parseStageIdSet(when, "missing_stages");
+        java.util.Set<ResourceLocation> effects = parseResourceSet(when, "effects");
+        String script = when.getOrElse("script", "");
+        return new ConditionalRule.Context(mode, dimensions, structures, biomes, minY, maxY,
+            minHealth, maxHealth, requiredStages, missingStages, effects,
+            readOptionalBool(when, "sneaking"), readOptionalBool(when, "sprinting"),
+            readOptionalBool(when, "swimming"), readOptionalBool(when, "riding"),
+            readOptionalBool(when, "on_ground"), script == null ? "" : script.trim());
+    }
+
+    private static Double readOptionalDouble(Config config, String... keys) {
+        if (config == null) return null;
+        for (String key : keys) {
+            Object raw = config.get(key);
+            if (raw instanceof Number number) return number.doubleValue();
+            if (raw instanceof String value) {
+                try { return Double.parseDouble(value.trim()); } catch (NumberFormatException ignored) {}
+            }
+        }
+        return null;
+    }
+
+    private static java.util.Set<StageId> parseStageIdSet(Config config, String key) {
+        java.util.Set<StageId> out = new java.util.LinkedHashSet<>();
+        for (String raw : stringList(config, key)) out.add(StageId.parse(raw));
+        return java.util.Set.copyOf(out);
+    }
+
+    private static java.util.Set<ResourceLocation> parseResourceSet(Config config, String key) {
+        java.util.Set<ResourceLocation> out = new java.util.LinkedHashSet<>();
+        for (String raw : stringList(config, key)) {
+            ResourceLocation id = ResourceLocation.tryParse(raw);
+            if (id == null) throw new IllegalArgumentException("Invalid conditional resource id. " + raw);
+            out.add(id);
+        }
+        return java.util.Set.copyOf(out);
     }
 
     private static StageRewards parseRewards(Config config) {

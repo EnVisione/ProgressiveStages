@@ -3,11 +3,14 @@ package com.enviouse.progressivestages.server.enforcement;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.stage.StageManager;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.entity.living.LivingEvent;
 
 import java.util.Collection;
 import java.util.Map;
@@ -50,7 +53,7 @@ public final class AbilityEnforcer {
 
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
-        if (GATERS.isEmpty()) return;
+        if (GATERS.isEmpty() && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.ABILITY)) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return;
 
@@ -65,6 +68,15 @@ public final class AbilityEnforcer {
         }
     }
 
+    @SubscribeEvent
+    public static void onLivingJump(LivingEvent.LivingJumpEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return;
+        if (!lacks("jump", player)) return;
+        Vec3 movement = player.getDeltaMovement();
+        if (movement.y > 0.0D) player.setDeltaMovement(movement.x, 0.0D, movement.z);
+    }
+
     private static void cancelIfLacking(String ability, ServerPlayer player, BooleanSupplier active, Runnable cancel) {
         if (active.getAsBoolean() && lacks(ability, player)) cancel.run();
     }
@@ -72,10 +84,18 @@ public final class AbilityEnforcer {
     /** True if the player is missing at least one stage that gates {@code ability}. */
     private static boolean lacks(String ability, ServerPlayer player) {
         Set<StageId> set = GATERS.get(ability);
-        if (set == null || set.isEmpty()) return false;
-        for (StageId s : set) {
-            if (!StageManager.getInstance().hasStage(player, s)) return true;
+        boolean staticBlocked = false;
+        if (set != null) {
+            for (StageId stage : set) {
+                if (!StageManager.getInstance().hasStage(player, stage)) {
+                    staticBlocked = true;
+                    break;
+                }
+            }
         }
-        return false;
+        ResourceLocation id = ResourceLocation.tryParse(ability);
+        if (id == null) id = ResourceLocation.withDefaultNamespace(ability);
+        return ConditionalLockEngine.isBlocked(player, ConditionalRule.TargetType.ABILITY,
+            id, null, staticBlocked);
     }
 }
