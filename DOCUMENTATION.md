@@ -364,6 +364,10 @@ To create a stage without knowing TOML:
 4. Confirm the preview, such as `pack:iron_age`, and click `Create stage`.
 5. Fill out the stage name, description, icon, required stages, team or server ownership, map
    category, color, frame, reveal policy, and advancement background.
+   `Required stages` is a visual branch builder. It lists existing stages as selectable cards,
+   explains each card's parents, prevents dependency cycles, and previews selected paths flowing
+   upward into the stage being edited. Choose all selected paths for a hybrid class, any one path
+   for alternatives, or an exact minimum for a quorum.
 6. Click `Add rule`. Choose a category. The action menu changes to the actions supported by that
    category, and the search catalog changes to the matching registry. Entity rules cannot
    accidentally choose an item, block rules cannot accidentally choose a fluid, and a mod filter
@@ -378,13 +382,31 @@ To create a stage without knowing TOML:
    items, effects, commands, teleportation, XP, purchase price, refund, and cooldown.
 10. Drag advanced rule cards to organize them. Open `Stage graph` and drag stage nodes to save
     their map coordinates. The graph stays inside its own scrollable canvas even when a node is
-    moved far from the origin.
+    moved far from the origin. Automatic layout puts beginner stages at the bottom and evolutions
+    above them. `Arrange paths upward` clears manual coordinates and restores that branching view.
 11. Click `Check my work`. Then click `Review and apply`, inspect the file diff, and confirm.
 
 The easy builder writes the same schema that a TOML expert would write. There is no reduced
 runtime, separate simple-rule engine, or client-only shortcut. Priority, exclusions, temporary
 conditions, registry prefixes, viewer policy, server validation, transaction backup, reload, and
 client synchronization all use the normal authoritative implementation.
+
+For example, make Mage, Warrior, Paladin, and Healer with no required stages. Edit Wizard and
+Warlock and select only Mage. Edit Knight and select only Warrior. Edit Wizard Knight, select both
+Wizard and Knight, and leave the path rule on `Require every selected path`. The resulting TOML is
+equivalent to:
+
+```toml
+[stage]
+id = "pack:wizard_knight"
+dependencies = ["pack:wizard", "pack:knight"]
+dependency_mode = "all"
+dependency_count = 2
+```
+
+Use `dependency_mode = "any"` when either selected path is sufficient. Use `at_least` with
+`dependency_count = 2` when two of three or more selected paths are required. The same choices are
+available in the visual builder without typing these fields.
 
 The source and Inspector tabs remain available. Source mode has one tab for each file in the
 selected stage package and preserves unknown extension fields. The Inspector lists Java and KubeJS

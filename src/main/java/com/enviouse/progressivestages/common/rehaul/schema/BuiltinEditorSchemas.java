@@ -27,6 +27,10 @@ final class BuiltinEditorSchemas {
             SchemaValueType.RESOURCE_ID, "minecraft:stone", false, catalog("items"), Set.of(), List.of());
         add(sink, "stage.dependencies", "stage.toml", "stage.dependencies", "Dependencies", "Stages required before this stage.",
             SchemaValueType.LIST, List.of(), false, catalog("stages"), Set.of(), List.of());
+        add(sink, "stage.dependency_mode", "stage.toml", "stage.dependency_mode", "Dependency rule", "Require every selected stage, any selected stage, or a chosen minimum.",
+            SchemaValueType.ENUM, "all", false, null, Set.of(), List.of("all", "any", "at_least"));
+        add(sink, "stage.dependency_count", "stage.toml", "stage.dependency_count", "Dependency minimum", "The number of selected stages required when dependency rule is at least.",
+            SchemaValueType.INTEGER, 1, false, null, Set.of(), List.of());
         add(sink, "stage.priority", "stage.toml", "stage.priority", "Priority", "The inherited decision priority.",
             SchemaValueType.INTEGER, 0, false, null, Set.of(), List.of());
         add(sink, "stage.scope", "stage.toml", "stage.scope", "Scope", "The ownership scope.",

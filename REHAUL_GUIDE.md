@@ -47,7 +47,10 @@ This workflow works in an integrated single-player world and on a dedicated serv
    `More stage features`. It never makes the three backing files part of the normal workflow.
 8. Fill in the name, description, icon, required stages, ownership scope, map category, color,
    frame, reveal policy, and advancement background. Use `Browse` to choose an icon from the live
-   item registry.
+   item registry. `Required stages` opens a visual path builder rather than a text field. Select
+   parent stage cards, then choose `Require every selected path`, `Require any one selected path`,
+   or `Require a minimum number`. The preview places the new evolution above its parents and shows
+   where each parent came from. Invalid selections that would create a dependency loop are disabled.
 9. Click `Add rule`. Choose Items, Blocks, Fluids, Entities, Abilities, or any other supported
    category. The next menu contains only actions valid for that category. Choose exact ID, whole
    mod, tag, or name matching. Search results contain only the selected registry type, and `Only
@@ -62,6 +65,9 @@ This workflow works in an integrated single-player world and on a dedicated serv
     own guided forms.
 12. Use `Stage graph` to drag nodes around the same dependency map players see. The graph is
     contained in a scrollable canvas and grows with distant nodes instead of overflowing the page.
+    Automatic layout puts independent beginner paths at the bottom, their evolutions above them,
+    and hybrid stages above every branch they join. `Arrange paths upward` restores that automatic
+    layout after manual dragging.
 13. Use `TOML source` only when you want direct control. `stage.toml`, `rules.toml`, and
     `progression.toml` remain available as separate advanced tabs, and unknown extension fields are
     preserved.

@@ -16,6 +16,9 @@ class EditorSchemaRegistryTest {
         List<String> required = List.of(
             "stage.toml:stage.id",
             "stage.toml:stage.display_name",
+            "stage.toml:stage.dependencies",
+            "stage.toml:stage.dependency_mode",
+            "stage.toml:stage.dependency_count",
             "stage.toml:display.background",
             "rules.toml:items.locked",
             "rules.toml:blocks.locked",

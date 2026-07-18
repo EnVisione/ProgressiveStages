@@ -26,7 +26,9 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
   single-player worlds and on dedicated servers. Its gold stage-first easy builder creates a stage
   from a normal name, searches the live modpack registries by category and mod, builds lock,
   allowance, priority, exception, temporary-condition, progression, reward, and cost cards, and
-  keeps the three TOML files in an optional advanced source view.
+  keeps the three TOML files in an optional advanced source view. Required stages use a visual
+  branching builder with all, any, and minimum path policies, ancestry previews, cycle prevention,
+  and an upward class-tree layout for independent, evolved, and hybrid paths.
 - **Building location, combat, timer, or priority-based access rules:** copy the
   [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
 - **Building or approving a release:** follow the

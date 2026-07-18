@@ -26,6 +26,13 @@ registry entries. Progression, rewards, costs, stage appearance, and dependency 
 controls too. Rule cards and graph nodes are draggable. Direct TOML and the inspector remain
 available for advanced work without becoming required for normal stage creation.
 
+Required stages are also visual. Create independent Mage, Warrior, Paladin, and Healer roots, make
+Wizard and Warlock evolve from Mage, make Knight evolve from Warrior, then make Wizard Knight join
+both Wizard and Knight. Stage cards support every selected path, any selected path, or an exact
+minimum. The preview draws the evolution upward, includes each parent's ancestry, prevents cycles,
+and can automatically arrange the complete graph with beginner paths at the bottom and hybrids at
+the top.
+
 Complete schema 4 instructions and tested packages are available in the
 [3.0.1 Schema 4 and Editor Guide](https://github.com/EnVisione/ProgressiveStages/blob/master/REHAUL_GUIDE.md).
 

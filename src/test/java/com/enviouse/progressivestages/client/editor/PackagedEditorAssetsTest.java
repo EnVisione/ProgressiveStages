@@ -18,6 +18,7 @@ class PackagedEditorAssetsTest {
         assertTrue(script.contains("Easy builder"));
         assertTrue(script.contains("Create stage"));
         assertTrue(script.contains("Stage graph"));
+        assertTrue(script.contains("Arrange paths upward"));
         assertTrue(script.contains("Registry"));
         assertTrue(script.contains("Review and apply"));
         assertTrue(html.contains("app.js"));
@@ -42,7 +43,12 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("Stage rewards"));
         assertTrue(controller.contains("entities: { label: \"Mobs and entities\", catalog: \"entities\""));
         assertTrue(controller.contains("dragRule"));
+        assertTrue(controller.contains("Build the path into"));
+        assertTrue(controller.contains("Require every selected path"));
+        assertTrue(controller.contains("creates a loop"));
         assertTrue(css.contains("#e3aa32"));
+        assertTrue(css.contains("#101114"));
+        assertTrue(css.contains("dependency-visualizer"));
         assertTrue(css.contains("graph-viewport"));
         assertTrue(css.contains("modal-backdrop"));
         assertFalse(controller.contains("prompt("));

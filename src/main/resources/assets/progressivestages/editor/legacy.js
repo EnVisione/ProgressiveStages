@@ -187,6 +187,8 @@
     if (!stage) return renderEmptyWorkspace();
     const stageText = state.boot.draft.files[stage.stagePath] || "";
     const dependencies = dependenciesFor(stageText, stage.legacy);
+    const dependencyMode = stringValue(readTomlValue(stageText, "stage.dependency_mode")) || "all";
+    const dependencyCount = Math.max(1, Number(readTomlValue(stageText, "stage.dependency_count") || 1));
     const rules = ruleModels(state.boot.draft.files[stage.rulesPath] || "");
     const progression = progressionModels(state.boot.draft.files[stage.progressionPath] || "");
     const hidden = booleanValue(readTomlValue(stageText, "stage.hidden"));
@@ -203,7 +205,7 @@
         <label>Player facing name<input data-stage-field="stage.display_name" value="${escapeHtml(stage.name)}"></label>
         <label>Icon item<div class="input-with-button"><input data-stage-field="stage.icon" value="${escapeHtml(stage.icon)}"><button type="button" data-browse-field="stage.icon" data-catalog="items">Browse</button></div></label>
         <label class="wide-field">Description<textarea rows="2" data-stage-field="stage.description">${escapeHtml(stage.description)}</textarea></label>
-        <label>Required stages<input data-stage-field="${stage.legacy ? "stage.dependency" : "stage.dependencies"}" data-list="true" value="${escapeHtml(dependencies.join(", "))}" placeholder="None"></label>
+        <div class="dependency-field"><span>Required stages</span><div class="dependency-summary"><div class="dependency-copy"><strong>${escapeHtml(dependencySummary(dependencies, dependencyMode, dependencyCount))}</strong><small>${dependencies.length ? "These branches flow upward into this stage." : "This is a beginner or root stage."}</small><div class="dependency-chips">${dependencies.map(id => `<span class="dependency-chip">${escapeHtml(stageName(id))}</span>`).join("")}</div></div><button type="button" id="editDependencies">Choose stages and paths</button></div></div>
         <label>Ownership<select data-stage-field="stage.scope"><option value="team" ${scope === "team" ? "selected" : ""}>Team shares it</option><option value="server" ${scope === "server" ? "selected" : ""}>Whole server shares it</option></select></label>
         <label>Map category<input data-stage-field="stage.category" value="${escapeHtml(category)}" placeholder="Main progression"></label>
         <label>Map color<input data-stage-field="stage.color" value="${escapeHtml(color)}" placeholder="#e3aa32"></label>
@@ -253,6 +255,7 @@
       title: "Choose an icon item", catalog: button.dataset.catalog, mode: "id", selected: q(`[data-stage-field="${button.dataset.browseField}"]`).value,
       onPick: value => { const input = q(`[data-stage-field="${button.dataset.browseField}"]`); input.value = stripSelectorPrefix(value); input.dispatchEvent(new Event("change")); }
     }));
+    $("editDependencies").onclick = openDependencyEditor;
     $("addRule").onclick = () => openRuleEditor(stage, null);
     qa("[data-edit-rule]", $("formView")).forEach(button => button.onclick = () => openRuleEditor(stage, rules[Number(button.dataset.editRule)]));
     qa("[data-delete-rule]", $("formView")).forEach(button => button.onclick = () => deleteRule(stage, rules[Number(button.dataset.deleteRule)]).catch(error => toast(error.message)));
@@ -272,6 +275,117 @@
     const content = upsertToml(state.boot.draft.files[stage.stagePath] || "", input.dataset.stageField, value);
     await mutate(stage.stagePath, content);
     toast("Stage details saved to the draft");
+  }
+
+  function openDependencyEditor() {
+    const stage = selectedStage();
+    if (!stage) return;
+    const content = state.boot.draft.files[stage.stagePath] || "";
+    const selected = new Set(dependenciesFor(content, stage.legacy));
+    const policy = {
+      mode: stringValue(readTomlValue(content, "stage.dependency_mode")) || "all",
+      count: Math.max(1, Number(readTomlValue(content, "stage.dependency_count") || 1))
+    };
+    const available = stagePackages().filter(candidate => !candidate.archived && candidate.id !== stage.id);
+    openModal(`<h2 id="modalTitle">Build the path into ${escapeHtml(stage.name)}</h2><p>Select earlier stages and choose how their paths join. Beginner stages should have nothing selected.</p><form id="dependencyForm"><div class="modal-grid">
+      <label>How paths join<select id="dependencyMode"><option value="all">Require every selected path</option><option value="any">Require any one selected path</option><option value="at_least">Require a minimum number</option></select></label>
+      <label id="dependencyCountLabel">Minimum paths<input id="dependencyCount" type="number" min="1" value="${policy.count}"></label>
+      <div id="dependencyModeHelp" class="dependency-mode-help"></div>
+      <label class="wide-field">Find a stage<input id="dependencySearch" placeholder="Mage, Wizard, Knight"></label>
+      <div id="dependencyOptions" class="dependency-options wide-field"></div>
+      <section class="modal-section"><h3>Evolution preview</h3><div id="dependencyPreview" class="dependency-visualizer"></div></section>
+    </div><div class="modal-actions"><button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">Save required stages</button></div></form>`, () => {
+      $("dependencyMode").value = policy.mode;
+      const renderOptions = () => {
+        const search = $("dependencySearch").value.trim().toLowerCase();
+        const shown = available.filter(candidate => !search || `${candidate.name} ${candidate.id}`.toLowerCase().includes(search));
+        $("dependencyOptions").innerHTML = shown.map(candidate => {
+          const cycle = stageDependsOn(candidate.id, stage.id);
+          const blocked = cycle && !selected.has(candidate.id);
+          const parents = stageParents(candidate);
+          const explanation = blocked ? "Cannot select because it creates a loop" : cycle ? "Remove this selection because it creates a loop" : parents.length ? `Evolves from ${escapeHtml(parents.map(stageName).join(" and "))}` : "Beginner path";
+          return `<label class="dependency-option"><input type="checkbox" data-dependency-id="${escapeHtml(candidate.id)}" ${selected.has(candidate.id) ? "checked" : ""} ${blocked ? "disabled" : ""}><span><strong>${escapeHtml(candidate.name)}</strong><small>${explanation}</small></span></label>`;
+        }).join("") || `<div class="empty-state"><span>No matching stages.</span></div>`;
+        qa("[data-dependency-id]", $("dependencyOptions")).forEach(input => input.onchange = () => {
+          if (input.checked) selected.add(input.dataset.dependencyId);
+          else selected.delete(input.dataset.dependencyId);
+          normalizeDependencyCount(selected, policy);
+          renderPolicy();
+        });
+      };
+      const renderPolicy = () => {
+        policy.mode = $("dependencyMode").value;
+        policy.count = Math.max(1, Number($("dependencyCount").value || 1));
+        normalizeDependencyCount(selected, policy);
+        $("dependencyCount").value = policy.count;
+        $("dependencyCountLabel").classList.toggle("hidden", policy.mode !== "at_least");
+        $("dependencyModeHelp").textContent = dependencyPolicyHelp(selected.size, policy.mode, policy.count);
+        $("dependencyPreview").innerHTML = dependencyPreviewHtml(stage, [...selected], policy.mode, policy.count);
+      };
+      $("dependencySearch").oninput = renderOptions;
+      $("dependencyMode").onchange = renderPolicy;
+      $("dependencyCount").oninput = renderPolicy;
+      $("dependencyForm").onsubmit = async event => {
+        event.preventDefault();
+        const dependencies = [...selected];
+        normalizeDependencyCount(selected, policy);
+        let updated = state.boot.draft.files[stage.stagePath] || "";
+        updated = upsertToml(updated, stage.legacy ? "stage.dependency" : "stage.dependencies", dependencies);
+        updated = upsertToml(updated, "stage.dependency_mode", dependencies.length ? policy.mode : "all");
+        updated = upsertToml(updated, "stage.dependency_count", dependencies.length ? policy.count : 1);
+        try { await mutate(stage.stagePath, updated); closeModal(); toast("Required stage paths saved to the draft"); }
+        catch (error) { toast(error.message); }
+      };
+      renderOptions();
+      renderPolicy();
+    });
+  }
+
+  function dependencyPreviewHtml(stage, dependencyIds, mode, count) {
+    if (!dependencyIds.length) return `<div class="empty-state"><span><strong>${escapeHtml(stage.name)} is a beginner stage.</strong><br>It starts its own independent path.</span></div>`;
+    const dependencies = dependencyIds.map(id => stagePackages().find(value => value.id === id)).filter(Boolean);
+    const width = Math.max(520, dependencies.length * 190);
+    const targetX = width / 2;
+    const positions = dependencies.map((dependency, index) => ({ dependency, x: width * (index + 1) / (dependencies.length + 1) }));
+    const paths = positions.map(position => `<path d="M ${position.x} 205 C ${position.x} 145, ${targetX} 130, ${targetX} 68"/>`).join("");
+    return `<div class="lineage-canvas" style="width:${width}px"><svg class="lineage-lines" viewBox="0 0 ${width} 250" preserveAspectRatio="none">${paths}</svg><div class="lineage-target" style="left:${targetX - 90}px"><strong>${escapeHtml(stage.name)}</strong><small>${escapeHtml(dependencySummary(dependencyIds, mode, count))}</small></div>${positions.map(position => `<div class="lineage-source" style="left:${position.x - 85}px"><strong>${escapeHtml(position.dependency.name)}</strong><small>${escapeHtml(stageParents(position.dependency).length ? `from ${stageParents(position.dependency).map(stageName).join(" and ")}` : "beginner path")}</small></div>`).join("")}</div>`;
+  }
+
+  function normalizeDependencyCount(selected, policy) {
+    const maximum = Math.max(1, selected.size);
+    policy.count = Math.min(maximum, Math.max(1, Number(policy.count || 1)));
+  }
+
+  function dependencyPolicyHelp(total, mode, count) {
+    if (!total) return "No prerequisite is selected. This stage begins an independent play style.";
+    if (mode === "any") return `Players need any one of the ${total} selected paths.`;
+    if (mode === "at_least") return `Players need at least ${Math.min(total, count)} of the ${total} selected paths.`;
+    return `Players need all ${total} selected paths. Use this for combinations such as Wizard Knight.`;
+  }
+
+  function dependencySummary(dependencies, mode, count) {
+    if (!dependencies.length) return "No required stages";
+    const names = dependencies.map(stageName);
+    if (mode === "any") return `Any one of ${names.join(", ")}`;
+    if (mode === "at_least") return `${Math.min(names.length, Math.max(1, count))} of ${names.join(", ")}`;
+    return names.length === 1 ? `Requires ${names[0]}` : `Requires ${names.join(" and ")}`;
+  }
+
+  function stageName(id) {
+    return stagePackages().find(stage => stage.id === id)?.name || title(String(id).split(":").pop());
+  }
+
+  function stageParents(stage) {
+    return dependenciesFor(state.boot.draft.files[stage.stagePath] || "", stage.legacy);
+  }
+
+  function stageDependsOn(startId, targetId, visited = new Set()) {
+    if (startId === targetId) return true;
+    if (visited.has(startId)) return false;
+    visited.add(startId);
+    const stage = stagePackages().find(value => value.id === startId);
+    if (!stage) return false;
+    return stageParents(stage).some(parent => stageDependsOn(parent, targetId, visited));
   }
 
   function showFieldHelp(path) {
@@ -802,23 +916,74 @@
   function renderGraph() {
     if (!state.boot) return;
     const stages = stagePackages().filter(stage => !stage.archived);
-    const nodes = stages.map((stage, index) => {
+    const base = stages.map(stage => {
       const content = state.boot.draft.files[stage.stagePath] || "";
       const rawX = Number(readTomlValue(content, "display.x"));
       const rawY = Number(readTomlValue(content, "display.y"));
-      return { stage, x: Number.isFinite(rawX) && rawX !== 0 ? rawX : 60 + (index % 4) * 205, y: Number.isFinite(rawY) && rawY !== 0 ? rawY : 55 + Math.floor(index / 4) * 125, dependencies: dependenciesFor(content, stage.legacy) };
+      return {
+        stage, rawX, rawY, dependencies: dependenciesFor(content, stage.legacy),
+        mode: stringValue(readTomlValue(content, "stage.dependency_mode")) || "all",
+        count: Math.max(1, Number(readTomlValue(content, "stage.dependency_count") || 1))
+      };
+    });
+    const baseById = Object.fromEntries(base.map(node => [node.stage.id, node]));
+    const depths = {};
+    const depthOf = (id, visiting = new Set()) => {
+      if (depths[id] != null) return depths[id];
+      if (visiting.has(id)) return 0;
+      visiting.add(id);
+      const node = baseById[id];
+      const depth = !node?.dependencies.length ? 0 : 1 + Math.max(0, ...node.dependencies.map(parent => depthOf(parent, new Set(visiting))));
+      depths[id] = depth;
+      return depth;
+    };
+    base.forEach(node => depthOf(node.stage.id));
+    const maxDepth = Math.max(0, ...Object.values(depths));
+    const lanes = {};
+    base.forEach(node => (lanes[depths[node.stage.id]] ??= []).push(node));
+    Object.values(lanes).forEach(lane => lane.sort((left, right) => left.stage.name.localeCompare(right.stage.name)));
+    const widestLane = Math.max(1, ...Object.values(lanes).map(lane => lane.length));
+    const autoWidth = Math.max(820, widestLane * 215 + 80);
+    const nodes = base.map(node => {
+      const depth = depths[node.stage.id];
+      const lane = lanes[depth];
+      const index = lane.indexOf(node);
+      const laneWidth = lane.length * 215;
+      const autoX = Math.max(35, (autoWidth - laneWidth) / 2 + index * 215 + 20);
+      const autoY = 45 + (maxDepth - depth) * 135;
+      const manual = Number.isFinite(node.rawX) && Number.isFinite(node.rawY) && (node.rawX !== 0 || node.rawY !== 0);
+      return { ...node, x: manual ? node.rawX : autoX, y: manual ? node.rawY : autoY };
     });
     const byId = Object.fromEntries(nodes.map(node => [node.stage.id, node]));
-    const maxX = Math.max(820, ...nodes.map(node => node.x + 210));
-    const maxY = Math.max(520, ...nodes.map(node => node.y + 130));
+    const maxX = Math.max(autoWidth, ...nodes.map(node => node.x + 220));
+    const maxY = Math.max(520, 110 + (maxDepth + 1) * 135, ...nodes.map(node => node.y + 130));
     const lines = nodes.flatMap(node => node.dependencies.map(id => byId[id] ? { from: byId[id], to: node } : null).filter(Boolean)).map(({ from, to }) => `<line x1="${from.x + 82}" y1="${from.y + 22}" x2="${to.x + 82}" y2="${to.y + 22}"/>`).join("");
     $("graph").style.width = `${maxX}px`;
     $("graph").style.height = `${maxY}px`;
-    $("graph").innerHTML = `<svg class="graph-lines" viewBox="0 0 ${maxX} ${maxY}" preserveAspectRatio="none">${lines}</svg>` + nodes.map(node => `<button class="graph-node" data-graph-stage="${escapeHtml(node.stage.key)}" style="left:${node.x}px;top:${node.y}px" title="Drag to position. Click to edit.">${escapeHtml(node.stage.name)}</button>`).join("");
+    $("graph").innerHTML = `<svg class="graph-lines" viewBox="0 0 ${maxX} ${maxY}" preserveAspectRatio="none">${lines}</svg>` + nodes.map(node => `<button class="graph-node" data-graph-stage="${escapeHtml(node.stage.key)}" style="left:${node.x}px;top:${node.y}px" title="Drag to position. Click to edit."><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button>`).join("");
     qa("[data-graph-stage]", $("graph")).forEach(node => {
       node.onclick = () => selectStage(node.dataset.graphStage);
       node.onpointerdown = event => dragGraphNode(event, node);
     });
+  }
+
+  function graphDependencyLabel(node) {
+    if (!node.dependencies.length) return "Beginner path";
+    if (node.dependencies.length === 1) return `From ${stageName(node.dependencies[0])}`;
+    if (node.mode === "any") return `Any of ${node.dependencies.length} paths`;
+    if (node.mode === "at_least") return `${Math.min(node.count, node.dependencies.length)} of ${node.dependencies.length} paths`;
+    return `Joins all ${node.dependencies.length} paths`;
+  }
+
+  async function autoArrangeGraph() {
+    const stages = stagePackages().filter(stage => !stage.archived);
+    for (const stage of stages) {
+      let content = state.boot.draft.files[stage.stagePath] || "";
+      const updated = upsertToml(upsertToml(content, "display.x", 0), "display.y", 0);
+      if (updated !== content) await mutate(stage.stagePath, updated);
+    }
+    renderGraph();
+    toast("All paths arranged upward in the draft");
   }
 
   function dragGraphNode(event, node) {
@@ -1475,6 +1640,7 @@
   $("importStage").onclick = importStage;
   $("deleteStage").onclick = () => deleteStage().catch(error => toast(error.message));
   $("settings").onclick = selectSettings;
+  $("autoArrangeGraph").onclick = () => autoArrangeGraph().catch(error => toast(error.message));
   $("theme").onclick = () => document.documentElement.classList.toggle("light");
   $("validate").onclick = () => validate().catch(error => toast(error.message));
   $("review").onclick = () => review().catch(error => toast(error.message));
