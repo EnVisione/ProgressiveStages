@@ -11,7 +11,7 @@ affects, what the rule matches, when it applies, what it does, how it competes w
 how it appears in the UI, and how it migrates between schema versions without asking for a new
 hardcoded special case.
 
-This rehaul has six mandatory foundations:
+This rehaul has seven mandatory foundations:
 
 1. A compact stage-package layout that is easy for a beginner and scalable for a large modpack.
 2. A translation layer that keeps every current 3.0.1 monolithic stage working.
@@ -21,6 +21,10 @@ This rehaul has six mandatory foundations:
 5. Contextual item buffs, debuffs, attributes, effects, and ability modifiers.
 6. Thirty numbered feature groups across the progression engine, localhost editor, authoring tools,
    synchronization, and player UI, all designed around author control.
+7. A dedicated-server catalog built from the pack that is actually running, so every editor picker,
+   prefix preview, compatibility option, KubeJS reference, and validation result uses authoritative
+   mod, registry, tag, datapack, recipe, advancement, structure, and integration data instead of a
+   hardcoded list.
 
 The goal is not to create more unrelated switches. The goal is one coherent engine with reusable
 prefix entries, conditions, actions, contexts, policies, and diagnostics.
@@ -35,6 +39,10 @@ prefix entries, conditions, actions, contexts, policies, and diagnostics.
 - Existing category names and plain prefix lists remain the primary manual syntax.
 - `/pstages editor` is the primary beginner experience and can create, edit, duplicate, validate,
   and delete every part of all three files without requiring TOML knowledge.
+- The editor is the complete supported authoring experience. A pack author can configure stages,
+  rules, progression, main defaults, compatibility, viewer presentation, scripts, and migrations
+  without opening a file. TOML remains a portable storage and expert-source format, not a required
+  user workflow.
 - The generic compiled rule model remains an engine implementation detail.
 
 ## 2. Non-negotiable product rules
@@ -45,6 +53,13 @@ prefix entries, conditions, actions, contexts, policies, and diagnostics.
   pack.
 - Built-in behavior is exposed through namespaced registries. Integrations register providers
   through service interfaces instead of adding core dependencies.
+- Autocomplete and validation are generated from the dedicated server's post-registration and
+  post-datapack-reload state. An editor bundle never contains a frozen list of Minecraft or modded
+  content IDs.
+- Loaded-mod metadata and content namespaces are related but different sources. The editor shows
+  loader metadata for installed mods and separately indexes every namespace present in registries,
+  tags, datapacks, recipes, advancements, and extension catalogs. This preserves correct behavior
+  for datapack-only namespaces and mods that register content under another namespace.
 - Defaults exist so a new author can begin quickly, but every gameplay default is overridable in
   the main config, at the stage level, at the category level, at the advanced-rule level, or at the
   individual entry level where relevant.
@@ -53,6 +68,9 @@ prefix entries, conditions, actions, contexts, policies, and diagnostics.
   aggregation policy, and failure action is configurable.
 - KubeJS and the Java API receive the same public concepts as TOML. Scripts must not be a weaker
   second system.
+- Every core target field supports the existing `id:`, unprefixed ID, `mod:`, `tag:`, `#`, and
+  `name:` grammar wherever that matcher is meaningful. The editor chooses and autocompletes those
+  matchers without changing their stored portable text form.
 
 Literal zero hardcoded values is not technically possible. Schema field names, protocol versions,
 registry identifiers, file safety checks, and absolute anti-crash limits must exist in code. The
@@ -87,6 +105,10 @@ that cannot be disabled must be documented, intentionally generous, and visible 
 
 - The normal package uses three predictable files, while the editor presents one unified stage
   workspace and handles file placement automatically.
+- Operators and explicitly authorized pack authors can complete the normal workflow entirely in
+  the editor. Creating a stage, choosing any registered target, defining temporary locks or
+  exceptions, setting priorities, configuring EMI or JEI, wiring KubeJS callbacks, editing global
+  defaults, applying, backing up, and rolling back require no filesystem access.
 - A one-file legacy stage remains a supported compatibility path.
 - Validation errors name the stage, file, section, field, invalid value, and a suggested fix.
 - The player UI follows vanilla advancement screen behavior and accessibility conventions.
@@ -111,6 +133,9 @@ The rehaul must start from the system that exists, not an imagined clean rewrite
 | Exact structures | Structure providers and session leases are available in 3.0.1. | The source is valuable but is not yet a general context and challenge provider for all rule types. |
 | Client synchronization | Ownership, definitions, locks, GUI progress, and ore deltas already travel from server to client through separate payloads. | Replace scattered caches with one revisioned compiled client snapshot and safe deltas. Raw stage files are unnecessary on clients. |
 | Ore masquerading | The server rewrites outgoing chunk data per player and sends spoof updates. | Preserve server authority and add revision-safe refresh after editor apply. Do not move ore rules into client config. |
+| Runtime content discovery | Existing handlers already iterate selected built-in registries for lock sync, and compatibility checks use NeoForge mod loading metadata. | Replace category-specific scans with one revisioned catalog that covers built-in registries, dynamic registries, tags, reload-managed resources, installed integrations, and extension catalogs without confusing mod IDs with namespaces. |
+| Recipe viewers | Existing EMI and JEI integrations hide locked item, fluid, and recipe content and refresh after lock changes. | Generalize presentation into prioritized per-entry policy so an exact item may show, hide, mask, or inherit independently from a broad mod or tag lock. Preserve all registered ingredient variants where the viewer exposes them. |
+| KubeJS discovery | KubeJS can call current stage APIs and provide script-backed trigger values. | Add namespaced metadata registration for editor-visible conditions, actions, rewards, counters, values, event hooks, argument schemas, examples, and capability state. Never execute arbitrary browser-supplied script text. |
 | Reload safety | Candidate definitions validate before activation and rollback to the previous snapshot on failure. | This strength must be retained while adding packages, translation, compilation, and extension registries. |
 | UI | The stage tree already has advancement-style foundations. | It cannot yet inspect priority conflicts, lifecycle conditions, contextual modifiers, challenge budgets, or history. |
 
@@ -385,9 +410,23 @@ All current prefix entries remain valid:
 
 Internally, a matcher registry allows extension mods to add more prefix types without editing a
 central enum. Beginner documentation calls these list entries or prefixes, not selector objects.
-Advanced built-ins may later include component, data-component value, recipe type, rarity,
+Schema 4 advanced built-ins include component, data-component value, recipe type, rarity,
 creative tab, equipment slot, entity tag, block state, fluid property, enchantment, structure tag,
 dimension tag, and a KubeJS predicate.
+
+These forms are universal across every registry-backed category where the operation makes sense,
+including items, blocks, fluids, entities, mobs, enchantments, professions, attributes, effects,
+dimensions, biomes, structures, recipes, advancements, sounds, particles, screens, trades, loot,
+abilities, and registered extension categories. `mod:` intentionally retains its current meaning:
+match the namespace portion of a target ID. The editor describes it as Mod or Namespace and uses
+loader metadata to show the likely owning mod, but it never changes matching based on a display
+name or guesses ownership. `name:` intentionally remains a case-insensitive substring of the full
+canonical ID, not the localized client language string.
+
+The editor presents Exact ID, Mod or Namespace, Tag, Name Pattern, and registered advanced matcher
+choices. It writes the same portable prefix strings shown above. Every picker supports searching,
+keyboard selection, paste, validation, match-count preview, and a sample of expanded results.
+Broad matchers receive a performance and impact preview without being forbidden.
 
 ### 7.2 Simple entry metadata
 
@@ -454,6 +493,75 @@ priority = 200
 
 The mod-wide lock inherits 100. The unlock section normally uses 200. The terminal entry uses 500,
 so it wins for that exact item without changing any other AE2 item.
+
+### 7.6 Locks, local exclusions, and global allows
+
+An exception must say what it is allowed to defeat. The compiled resolver therefore distinguishes
+three effects:
+
+- `lock` or `deny` creates a normal blocking candidate.
+- `exclude` subtracts a match from one referenced parent lock only. It never unlocks a target that
+  another stage or rule also locks.
+- `unlock` or `allow` creates a global competing candidate and may defeat any lower-priority lock
+  in the same action and target context.
+
+Every effect supports an explicit priority and the normal inheritance cascade. A local exclusion
+applies when its effective priority is at least the priority of its referenced parent lock. A
+global allow competes through the normal resolver and tie policy. This makes a broad mod lock with
+one exact carve-out safe while still allowing a deliberate high-priority stage to override locks
+from another stage. The editor uses separate labels, Exclude only from this lock and Allow despite
+other locks, and refuses to save an orphaned local exclusion.
+
+```toml
+[items]
+priority = 100
+locked = ["mod:exampleweapons"]
+excluded = ["id:exampleweapons:training_sword"]
+
+[items.priorities]
+"id:exampleweapons:training_sword" = 150
+
+[[temporary_rules]]
+id = "pack:boss_arena_no_bows"
+effect = "lock"
+targets.items = ["tag:c:ranged_weapons"]
+priority = 300
+while = { condition = "structure", id = "pack:boss_arena" }
+
+[[temporary_rules.exceptions]]
+effect = "allow"
+targets.items = ["id:minecraft:crossbow"]
+priority = 400
+```
+
+An explanation trace includes the matcher, expanded target, effect, effective priority, inherited
+source, parent exclusion link, active condition, losing candidates, tie rule, and final action.
+
+### 7.7 Per-entry recipe-viewer presentation
+
+Every exact or prefix entry may independently control client presentation without weakening server
+enforcement. The generic policy is `inherit`, `show`, `hide`, or `locked_overlay`, with separate
+toggles for ingredient visibility, recipe visibility, output visibility, tooltip, and lock overlay.
+Optional EMI and JEI overrides exist only when their behavior must differ. An exact-item policy can
+override a broad `mod:` or `tag:` policy through the same priority resolver.
+
+```toml
+[items]
+locked = ["mod:ae2", "id:ae2:certus_quartz_crystal"]
+
+[items.presentation."mod:ae2"]
+viewer = "hide"
+priority = 100
+
+[items.presentation."id:ae2:certus_quartz_crystal"]
+viewer = "show"
+show_locked_overlay = true
+priority = 500
+```
+
+The compiled client snapshot sends the effective presentation decisions, not raw authority rules.
+EMI and JEI integrations apply one atomic revision and coalesce refreshes. If a viewer is absent,
+the editor shows the capability as unavailable while preserving the authored policy.
 
 ## 8. One condition language for everything
 
@@ -557,6 +665,29 @@ Opposing grants and revokes can otherwise fight forever. The lifecycle transacti
 6. Reject cycles with a complete trace.
 7. Enforce a configurable transition budget per event with a non-configurable emergency ceiling.
 8. Commit all ownership and progress changes atomically.
+
+### 8.8 Temporary behavior uses every condition
+
+Temporary is a lifetime policy, not a dimension-specific rule type. Any lock, unlock, local
+exclusion, global allow, modifier, ability change, or recipe-viewer presentation rule may activate
+from the complete condition tree. Built-in sources include stage ownership, dimensions, biomes,
+structures, regions, combat or boss sessions, health, damage, death, inventory, held items,
+effects, scoreboard values, custom counters, time, weather, team size, exact structure leases,
+KubeJS values, and every registered extension condition.
+
+Each temporary rule chooses one activation mode:
+
+- `live` exists only while its condition is true.
+- `duration` starts on a matching event and expires after an authored duration.
+- `latched` stays active until a separate reset condition succeeds.
+- `session` follows a named structure, combat, boss, region, or extension session.
+- `schedule` follows configured time windows and offline policy.
+
+All modes support cooldown, debounce, grace, refresh, stacking, pause, disconnect, death, restart,
+and provider-loss policies. Temporary exclusions use the same parent link and priority rules as
+permanent exclusions. A temporary global allow may intentionally beat a permanent lock, and a
+temporary lock may beat a permanent allow, solely through the configured priorities. The engine
+does not contain special branches such as temporary dimension locks.
 
 ## 9. Contextual buffs, debuffs, attributes, and item behavior
 
@@ -776,8 +907,9 @@ position, population, or inventory thresholds and lets authors build daily or se
 ### Feature 9. Public registries and service interfaces
 
 Conditions, selectors, contexts, policies, actions, modifiers, aggregators, structure providers,
-challenge measures, formula functions, UI detail providers, and migration adapters are registered
-by namespaced ID. Java services and KubeJS registration expose codecs, validation, event interests,
+challenge measures, formula functions, editor catalog providers, viewer-presentation providers, UI
+detail providers, and migration adapters are registered by namespaced ID. Java services and KubeJS
+registration expose codecs, validation, event interests, editor schemas, autocomplete sources,
 explanation text, and capability discovery. Missing optional mods never stop core startup unless a
 package explicitly marks that provider as required.
 
@@ -805,16 +937,24 @@ reviewed.
 
 ### Feature 13. Complete feature coverage forms
 
-Every current and new configuration surface has a first-class form. No supported field is relegated
-to raw TOML only. Extension fields receive generated forms from registered schemas, with raw source
-editing retained as an expert fallback.
+Every current and new configuration surface has a first-class form, including the generated main
+config, compatibility settings, provider defaults, every lock category, every lifecycle action,
+temporary rules, temporary exclusions, per-entry viewer policy, Java and KubeJS references, and
+migration. No supported field is relegated to raw TOML only. Extension fields receive generated
+forms from registered schemas, with raw source editing retained as an expert fallback inside the
+browser. Schema coverage is machine checked so a new field cannot ship without a visible control,
+help text, validation, and round-trip test.
 
 ### Feature 14. Registry explorer and smart pickers
 
-Search items, blocks, fluids, entities, recipes, dimensions, structures, biomes, enchantments,
-effects, attributes, sounds, particles, advancements, professions, abilities, tags, mods, and
-extension registries. Pickers show icons, IDs, namespaces, tags, installed-provider status, usage
-counts, and live server results rather than a hardcoded client catalog.
+Search the dedicated server's actual loaded mods, namespaces, built-in registries, dynamic
+registries, tags, recipes, recipe types, loot resources, dimensions, structures, biomes,
+advancements, scoreboard objectives, stages, abilities, KubeJS registrations, integration IDs, and
+extension catalogs. This includes items, blocks, fluids, entity types, enchantments, effects,
+potions, attributes, sounds, particles, professions, villager types, menus, stats, and data
+components where usable. Pickers show icons, IDs, owning-mod metadata when known, namespaces, tags,
+installed-provider status, usage counts, capabilities, match counts, and paged live server results
+rather than a hardcoded client catalog.
 
 ### Feature 15. Visual dependency and stage graph editor
 
@@ -824,17 +964,19 @@ layout data as the in-game advancement-style stage screen.
 
 ### Feature 16. Visual grant and revoke condition builder
 
-Build grants and revokes with identical condition palettes. Nested all, any, not, at-least,
-sequence, comparisons, rolling windows, reset policies, death, healing, damage, structure sessions,
-scripts, and extension conditions are edited as readable cards. The editor always shows a sentence
-preview and example progress.
+Build grants and revokes with identical condition palettes, and reuse the same builder for live,
+duration, latched, session, and scheduled temporary rules. Nested all, any, not, at-least, sequence,
+comparisons, rolling windows, reset policies, death, healing, damage, structure sessions, KubeJS,
+and extension conditions are edited as readable cards. The editor always shows a sentence preview,
+example progress, activation lifetime, reset behavior, and affected lock or exclusion entries.
 
 ### Feature 17. Complete lock and enforcement matrix
 
-Edit every content category from one searchable matrix. Each row exposes locked entries, carve-outs,
-contexts, actions, enforcement toggles, messages, sounds, priority, and conditional activation.
-Bulk selection, multi-edit, copy, paste, tag expansion preview, and mod-wide operations reduce
-repetition.
+Edit every content category from one searchable matrix. Each row exposes the prefix mode, target,
+lock or allow effect, local or global exclusion meaning, contexts, actions, enforcement toggles,
+messages, sounds, inherited or explicit priority, temporary activation, and per-entry EMI or JEI
+presentation. Bulk selection, multi-edit, copy, paste, tag expansion preview, namespace-wide
+operations, exact exceptions, and safe priority suggestions reduce repetition.
 
 ### Feature 18. Buff, debuff, affinity, and modifier designer
 
@@ -851,9 +993,10 @@ Advanced mode.
 
 ### Feature 20. Priority and conflict analyzer
 
-Show the complete priority cascade and every competing lock, unlock, allow, modifier, and policy.
-Conflicts are detected before apply. Authors can inspect hypothetical targets, use automatic safe
-priority suggestions, or deliberately select a documented tie policy.
+Show the complete priority cascade and every competing lock, unlock, local exclusion, global allow,
+temporary rule, viewer decision, modifier, and policy. Conflicts are detected before apply. Authors
+can inspect hypothetical targets, understand why a local exclusion cannot beat another stage's
+lock, use automatic safe priority suggestions, or deliberately select a documented tie policy.
 
 ### Feature 21. Live validation, explain, and simulation
 
@@ -876,16 +1019,20 @@ can roll back to a known-good revision.
 
 ### Feature 24. Multi-operator collaboration and permissions
 
-Multiple authorized operators may view a draft. Configurable exclusive locking or collaborative
-mode controls editing. Presence, field ownership, comments, revision conflicts, approval rules,
-session revocation, and a complete actor audit trail prevent silent overwrites. Every request is
+Multiple authorized operators or explicitly permissioned pack authors may view a draft.
+Configurable exclusive locking or collaborative mode controls editing. Granular permissions cover
+view, create, rule edit, progression edit, simulation, apply, delete, settings, source, and session
+administration. Presence, field ownership, comments, revision conflicts, approval rules, session
+revocation, and a complete actor audit trail prevent silent overwrites. Every request is
 re-authorized by the dedicated server.
 
 ### Feature 25. Templates, migration, import, export, and source mode
 
 Create from beginner, age, class, technology, structure, temporary-stage, boss-trial, and custom
-templates. Import legacy files, export a whole package, copy between servers, generate migration
-reports, edit raw TOML with schema completion, and round-trip unknown extension data without loss.
+templates. Edit global defaults and compatibility from guided screens, import legacy files, export
+a whole package, copy between servers, generate migration reports, edit raw TOML in the browser
+with schema and registry completion, and round-trip unknown extension data without loss. A normal
+authoring workflow never asks the user to locate or edit a server file.
 
 ### Feature 26. Stage rule inspector
 
@@ -965,14 +1112,16 @@ No dedicated-server port is opened.
 2. The dedicated server verifies operator level or the configured editor permission.
 3. The server verifies that the client supports the exact editor protocol.
 4. The server creates a random session ID, a 256-bit secret, an expiry, a base configuration
-   revision, and a draft owned by that player.
+   revision, a base catalog revision, and a draft owned by that player.
 5. The server sends an editor-open payload through the player's authenticated Minecraft connection.
 6. The client starts a loopback-only HTTP listener on a random operating-system-assigned port.
 7. Static HTML, CSS, JavaScript, icons, and schemas are served from the ProgressiveStages JAR.
 8. The client asks the operating system to open the browser. If that fails, Minecraft shows a
    clickable and copyable localhost link.
 9. The browser proves possession of the one-time secret to the local bridge.
-10. Editor requests travel through the Minecraft connection to the server draft service.
+10. The editor loads the schema and catalog manifest, then requests only paged suggestions needed
+    for the visible field. Editor requests travel through the Minecraft connection to the server
+    draft and catalog services.
 11. Closing the editor, logging out, losing permission, changing server, timing out, or manually
     revoking the session disables the bridge and invalidates its secret.
 
@@ -1017,11 +1166,12 @@ operations, generated source view, validation results, autosave time, and expiry
 
 Pressing Save stores a draft. Pressing Apply performs the authoritative transaction:
 
-1. Verify session permission and live base revision.
+1. Verify session permission, live base revision, and referenced catalog revisions.
 2. Materialize stage.toml, rules.toml, and progression.toml in a temporary package tree.
 3. Parse, translate, expand, validate, and compile the complete candidate configuration.
-4. Run reference, dependency, cycle, priority, provider, registry, security, payload-size, and
-   performance-budget checks.
+4. Run reference, dependency, cycle, priority, provider, registry, prefix-expansion, KubeJS,
+   recipe-viewer capability, security, payload-size, and performance-budget checks against one
+   complete current catalog revision.
 5. Produce a semantic diff, affected-stage list, affected-player estimate, and client-sync preview.
 6. Require confirmation for warnings or destructive effects according to server policy.
 7. Create a checksummed backup and sync temporary files to disk where supported.
@@ -1043,8 +1193,8 @@ The client snapshot contains only data required on that client:
 
 - Stage IDs, display names, descriptions, icons, categories, dependency graph, layout, reveal
   policies, backgrounds, frames, and permitted tooltips.
-- Effective item, block, fluid, recipe, entity, advancement, profession, and viewer presentation
-  rules.
+- Effective item, block, fluid, recipe, entity, advancement, profession, and per-entry EMI or JEI
+  presentation rules after prefix, temporary condition, exclusion, and priority resolution.
 - Client-visible temporary decisions and modifier summaries needed for UI feedback.
 - Challenge HUD state and progress.
 - Ore-spoof position deltas and display states where needed. The actual ore decision and chunk
@@ -1076,6 +1226,13 @@ partially activates a revision. It assembles, verifies, then atomically replaces
   snapshot is current.
 - Reconnect always requests the authoritative server revision and clears caches belonging to the
   previous server.
+- A datapack, KubeJS, or integration reload publishes a complete new catalog revision only after all
+  contributing providers finish. Open pickers discard stale cursors and transparently repeat their
+  current query.
+- An apply prepared against an obsolete catalog reruns reference and prefix validation against the
+  current revision and requires renewed confirmation if the semantic match set changed.
+- A server entry with no client asset or translation remains selectable by canonical ID and uses a
+  fallback icon. Client presentation never decides whether the server reference is valid.
 
 ### 12.9 Sleek modern web interface
 
@@ -1134,16 +1291,18 @@ migration and receives a separate destructive review.
 ## 13. Editor coverage matrix
 
 Every row below receives create, edit, duplicate, delete, search, validation, help, source preview,
-and capability-state support. Registry-backed fields receive server registry pickers.
+and capability-state support. Registry-backed fields receive dedicated-server catalog pickers. No
+row depends on the browser knowing which mods are installed, and no core row requires a user to
+touch a file.
 
 | Editor area | Complete coverage |
 |---|---|
-| Prefix entries | Exact IDs, mod, tag, hash-tag, name, priority tables, exclusions, and extension matchers. |
+| Prefix entries | Exact IDs, unprefixed IDs, mod or namespace, tag, hash-tag, name, priority tables, local exclusions, global allows, temporary variants, match previews, and extension matchers. |
 | Stage identity | ID, name, description, icon, dependencies, modes, scope, tags, hidden, color, category, priority, aliases, and deprecation. |
-| Items | Use, pickup, inventory, hotbar, mouse pickup, holding, drop policy, masks, icons, tooltips, and entry priority. |
+| Items | Use, pickup, inventory, hotbar, mouse pickup, holding, drop policy, masks, icons, tooltips, entry priority, and per-entry EMI or JEI show, hide, or overlay policy. |
 | Blocks | Placement, breaking, interaction, encryption, display substitute, and notifications. |
 | Fluids | Bucket pickup, placement, flow, submersion, debuffs, and recipe-viewer behavior. |
-| Recipes | Recipe IDs, output items, recipe types, crafting result behavior, EMI, and JEI presentation. |
+| Recipes | Loaded recipe IDs, output items, recipe types, serializers, crafting result behavior, ingredient and output visibility, and prioritized EMI or JEI presentation. |
 | Crops | Planting, growth, bonemeal, harvest, automation policy, and replacement actions. |
 | Dimensions | Portal, teleport, command travel, entry action, exit action, and fallback destination. |
 | Enchantments | Table, anvil, villager, inventory strip, maximum levels, tags, and viewer filtering. |
@@ -1160,7 +1319,7 @@ and capability-state support. Registry-backed fields receive server registry pic
 | Regions | Dimension, coordinates, shapes, entry, exit, break, place, explosions, spawns, effects, and messages. |
 | Curios | Slot identifiers, equip, retain, eject, modifiers, and missing-mod behavior. |
 | Ores | Display substitute, guarded drops, radius, light handling, refresh, and encrypted blocks. |
-| Unlock carve-outs | Items, blocks, fluids, dimensions, entities, mods, category priority, and exact exceptions. |
+| Unlock carve-outs | Every target category, local parent-linked exclusions, global allows, permanent and temporary behavior, category priority, entry priority, and exact exceptions. |
 | Enforcement | Every global override, allow list, policy, inventory behavior, message, sound, and cooldown. |
 | Display | Map position, frame, background, reveal, tooltip, masks, encryption, and spoiler permissions. |
 | Triggers and grants | Every condition, full trees, modes, counts, progress, persistence, reset, repeat, and actions. |
@@ -1171,18 +1330,282 @@ and capability-state support. Registry-backed fields receive server registry pic
 | Abilities | Elytra, jump, sprint, swim, climb, reach, registered abilities, temporary policies, and reasons. |
 | Rewards | Items, effects, commands, teleport, XP, variables, stages, action chains, failures, and rollback. |
 | Beacon and brewing | Effect gates, level caps, potion results, ingredient rules, and UI filtering. |
-| Temporary and triggered rules | Locks, unlocks, contexts, events, duration, refresh, stage state, priority, exceptions, and timers. |
+| Temporary and triggered rules | Locks, unlocks, local exclusions, global allows, every condition tree, live, duration, latched, session, scheduled activation, refresh, stage state, priority, exceptions, reset, and timers. |
 | Item modifiers | Held, selected, hotbar, inventory, armor, Curios, use, attack, attributes, effects, transforms, affinity, and proficiency. |
 | Challenges | Bosses, sessions, hit, damage, healing, death, time, consumables, steps, success, failure, retry, and HUD. |
 | Variables and formulas | Types, scope, defaults, bounds, persistence, permissions, formulas, dependencies, and preview. |
 | Stage states | Available, active, suspended, completed, failed, expired, custom states, guards, and transitions. |
-| Integrations | FTB Quests, FTB Teams, EMI, JEI, Lootr, Curios, Jade, WTHIT, KubeJS, structures, and extension status. |
+| Integrations | FTB Quests, FTB Teams, EMI, JEI, Lootr, Curios, Jade, WTHIT, KubeJS, structures, capability versions, registered IDs, defaults, diagnostics, and extension status. |
+| KubeJS metadata | Registered condition, value, action, reward, counter, event, selector, context, and callback IDs with generated argument forms, validation, examples, and missing-callback policy. |
+| Main settings | Schema, legacy mode, package policy, priorities, lifecycle defaults, condition budgets, modifiers, history, UI, editor, security, client sync, integration defaults, messages, and restart requirements. |
+| Runtime catalogs | Loaded mods, registry and datapack namespaces, all supported registry entries, tags, recipes, loot resources, advancements, scoreboard objectives, stages, KubeJS IDs, and extension catalogs. |
 | Datapack stages | Read-only inspection plus one-click copy into a config override package. Datapack archives are never modified. |
-| Raw source | Schema-aware TOML, navigation, formatting, validation, diff, and lossless unknown extension fields. |
+| Raw source | In-browser schema-aware TOML, registry completion, navigation, formatting, validation, diff, and lossless unknown extension fields. Filesystem access is not required. |
 
 New registered providers supply a schema, labels, help, defaults, validation, editor control hints,
 and preview data. Until an extension provides a custom panel, the editor generates a complete form
 from that schema rather than hiding the feature.
+
+### 13.1 The dedicated server is the catalog authority
+
+The best autocomplete source is the running dedicated server after mod registration and datapack
+reload have completed. The browser and operator client are presentation and transport layers. They
+must not build an independent list and must not reject a value merely because the client lacks a
+local display asset.
+
+The server builds one immutable `EditorCatalogSnapshot` with its own revision and a reference to the
+active configuration revision. It combines several sources because no single Minecraft API means
+all content:
+
+| Catalog source | Authoritative data | Refresh point |
+|---|---|---|
+| NeoForge loader metadata | `ModList.get().getMods()` metadata for loaded mod ID, display name, version, description, authors, dependencies, and file identity. | Server startup and controlled integration refresh. |
+| Static game registries | Enumerate the completed `BuiltInRegistries.REGISTRY` registry-of-registries so NeoForge custom registries are included, then enumerate items, blocks, fluids, entity types, block entity types, menu types, recipe serializers and types, particles, sound events, potions, mob effects, attributes, villager professions and types, stats, creative tabs, and other registered entries. | After registration finishes. Registry queries during registration are forbidden. |
+| Server `RegistryAccess` | Enumerate `MinecraftServer.registryAccess()` for dynamic and datapack registries such as dimensions, dimension types, biomes, structures, configured or placed features, enchantments, damage types, trim data, worldgen entries, and modded datapack registries. | World load and every successful datapack reload. |
+| Registry tags | Every loaded tag ID and membership set for every registry that exposes tags, including item, block, fluid, entity, enchantment, biome, structure, and damage tags. | After tags finish loading on world load or datapack reload. |
+| Reload-managed server resources | `MinecraftServer.getRecipeManager()` plus server advancement and reloadable-resource managers for loaded recipe IDs and types, advancements, loot tables, predicates, item modifiers, command functions, and other safely enumerable resources. | Every successful datapack reload. |
+| Live server state | Scoreboard objectives, teams, stage IDs, categories, rule IDs, variables, counters, currencies, challenge IDs, templates, aliases, and structure-provider IDs. | On the narrow event that changes that catalog and after a configuration apply. |
+| Integration catalogs | Curios slot IDs, FTB Quest references, recipe-viewer capabilities, exact structure providers, spell or ability IDs, mod-specific ingredients, and other service-owned data. | Integration-defined startup, reload, or invalidation event. |
+| KubeJS metadata | Registered conditions, values, actions, rewards, counters, events, contexts, policies, selectors, callbacks, schemas, and examples. | KubeJS startup and supported script reload boundaries. |
+
+Loader mod IDs and registry namespaces are displayed together when they can be associated, but
+they remain separate searchable concepts. `mod:ae2` continues matching the `ae2` namespace even if
+loader metadata is missing or a datapack supplies the entry. A mod may expose multiple namespaces,
+and a namespace may exist only in a datapack. The editor therefore labels this prefix Mod or
+Namespace and never relies on a localized mod name for runtime matching.
+
+This source split follows the official NeoForge 1.21.1 model. The
+[registry documentation](https://docs.neoforged.net/docs/1.21.1/concepts/registries/) treats
+registries as ID-to-object maps, warns that queries must wait until registration finishes, and
+documents `RegistryAccess` for datapack registries. The
+[tag documentation](https://docs.neoforged.net/docs/1.21.1/resources/server/tags/) confirms that
+tags may belong to any registry. The
+[recipe documentation](https://docs.neoforged.net/docs/1.21.1/resources/server/recipes/) identifies
+the server `RecipeManager` as the loaded-recipe authority. ProgressiveStages uses those live
+sources rather than packaging a guessed content list.
+
+### 13.2 Extensible catalog providers
+
+Core does not maintain one giant switch over all possible mods. It exposes an
+`EditorCatalogProvider` registry. Each provider declares:
+
+- A namespaced catalog ID and semantic version.
+- Its backing registry key, reload manager, live service, or computed source.
+- The entry key and value schema.
+- Which rule categories and fields may consume its values.
+- Supported matcher types, including whether tags, mod or namespace, name, exact ID, or a custom
+  matcher are valid.
+- Search fields, sort keys, labels, descriptions, icons, translations, examples, and deprecation
+  state.
+- Required capability IDs and whether missing data is an error, warning, or preserved optional
+  reference.
+- Its refresh events and cache invalidation key.
+- A safe resolver that can validate an authored reference without mutating gameplay.
+
+Built-in providers cover every ProgressiveStages core field. Java integrations register more
+providers through the public service API. KubeJS can register data-only catalogs and provider
+metadata during startup. A custom registry is automatically discoverable in the generic registry
+explorer when enumeration is safe, but it becomes an actionable lock target only when a provider
+declares the enforcement context and resolver. Enumeration alone cannot magically block a custom
+machine action for which Minecraft or NeoForge exposes no event. The editor clearly marks such a
+registry Reference only instead of offering a fake lock control.
+
+This contract is the boundary that permits nearly unlimited compatibility without hardcoding every
+mod into core. A provider can add a new target type, event, condition, action, catalog, form, and
+explanation while reusing the same priority, temporary-lifetime, prefix, validation, draft, sync,
+and audit systems.
+
+### 13.3 Catalog entries and search protocol
+
+Every result uses a common envelope:
+
+```text
+catalog id
+canonical resource ID or typed key
+registry key and source type
+namespace
+associated loader mod metadata when known
+translation key and server fallback label
+tag memberships when permitted
+capabilities and usable editor fields
+deprecation or experimental flags
+icon token or safe fallback
+catalog revision
+provider-specific typed metadata
+```
+
+The server creates normalized, case-insensitive indexes for exact ID, namespace, path tokens,
+translation key, fallback label, tags, aliases, and provider search fields. Browser requests travel
+through the local client bridge and authenticated NeoForge payloads. A query includes catalog ID,
+field ID, prefix mode, text, filters, sort, page size, continuation cursor, expected catalog
+revision, and permission context. The response is bounded and paged.
+
+Search supports exact, starts-with, token, substring, namespace, tag, and optional bounded fuzzy
+matching. Exact and prefix results rank before fuzzy results. The server returns match count and a
+sample expansion for `mod:`, `tag:`, and `name:` previews. It never sends every object in a large
+pack eagerly. The bridge and browser may cache pages by query plus catalog revision; a revision
+change invalidates them. Virtualized lists keep the interface responsive.
+
+Catalog payload work that reads game state is captured safely on the server thread into immutable
+data. Index building and text search may run away from the game thread after capture. Responses
+obey the NeoForge payload size limits through small pages rather than relying on one oversized
+packet. Expired cursors return a specific stale-catalog result and cause a transparent refresh.
+
+### 13.4 Names, icons, and modded display data
+
+Canonical IDs remain the only stored identity. Display data is optional assistance:
+
+- The server supplies resource IDs, translation keys, mod metadata, and a plain fallback label.
+- The operator client resolves local language strings and renders item or block icons on the
+  Minecraft render thread into a bounded session cache that the loopback bridge can serve.
+- Fluid icons use safe client texture metadata when available.
+- Entity results prefer a spawn egg or provider icon. A live entity is never constructed merely to
+  make a browser thumbnail.
+- Unknown or server-only content uses a registry-specific fallback icon and still remains editable.
+- Icon tokens are content-addressed, bounded, rate-limited, and invalidated with resources. Raw
+  filesystem paths and arbitrary remote URLs never cross the protocol.
+
+This produces useful Minecraft-looking pickers without making client assets a validation
+requirement or permitting a malicious catalog entry to make the browser fetch external content.
+
+### 13.5 Prefix-aware authoring for every lock category
+
+Any target field that accepts a prefix entry uses the same five beginner modes and registered
+advanced modes. The field tells the catalog service which registry or semantic catalog to search.
+Changing from Exact ID to Mod or Namespace changes suggestions from entries to namespaces. Tag mode
+shows only tags from the correct registry and previews their members. Name Pattern mode previews
+the canonical IDs it would currently match and warns that future datapack or mod updates can expand
+the match.
+
+The editor never expands a broad prefix into thousands of stored exact IDs. It stores the prefix so
+new matching content is covered automatically. Preview expansion is informational and tied to a
+catalog revision. Validation distinguishes invalid syntax, unknown exact ID, empty current match,
+missing optional provider, reference-only catalog, and valid broad match. Authors may choose
+warning or error policies for unknown and empty matches.
+
+### 13.6 Entry cards, priorities, and exceptions
+
+Every lockable row is an entry card with these common controls:
+
+- Action context, such as use, pickup, break, place, enter, attack, trade, equip, brew, enchant, or
+  a registered context.
+- Prefix mode and target.
+- Effect: lock, unlock, exclude from this parent lock, modify, replace, or presentation-only where
+  the category supports it.
+- Inherited or explicit priority and tie policy.
+- Permanent or temporary lifetime.
+- Condition tree, duration, reset, cooldown, debounce, grace, refresh, and offline behavior.
+- Local exclusions and global allows with clear different wording.
+- Enforcement outcome, fallback action, message, sound, toast, tooltip, and operator explanation.
+- Per-entry EMI and JEI presentation.
+- Provider requirements and missing-provider policy.
+
+The conflict analyzer expands a selected hypothetical target and shows every candidate in sorted
+resolution order. It also shows scope and action context, because a high-priority item-use allow
+must not accidentally permit item pickup or structure entry. A suggested Fix priority button may
+choose the smallest unambiguous priority change, but it never edits a draft without confirmation.
+
+### 13.7 Temporary locks and exceptions from any trigger
+
+The condition builder is embedded directly in an entry card. The author can choose simple presets
+such as While in dimension, While inside structure, During boss fight, For ten minutes after kill,
+While holding item, While health is below half, or While stage is owned. Advanced mode exposes the
+entire condition tree, registered KubeJS conditions, sequences, windows, and custom sessions.
+
+This applies equally to locks, global allows, local exclusions, attributes, effects, abilities,
+replacements, and viewer presentation. Examples that the UI and tests must support include:
+
+- Lock all weapons except swords while inside any structure matching a structure tag.
+- Allow all weapons except bows during a named boss session.
+- Temporarily exclude one diamond pickaxe from an End-wide tool lock after a KubeJS event.
+- Disable jump and elytra while an End challenge is active, then restore both on exit or failure.
+- Reveal one locked item in JEI for five minutes after an advancement while server enforcement
+  remains locked.
+- Apply a higher-priority temporary allow when a team counter reaches a threshold, regardless of
+  dimension.
+
+The editor sentence preview states who, what, action, effect, activation, lifetime, priority, and
+exception meaning before the author can apply it.
+
+### 13.8 Per-entry EMI and JEI controls
+
+Every item, fluid, and recipe entry exposes a Recipe viewer panel. The shared controls are Inherit,
+Show, Hide, and Show with locked overlay. Advanced controls separately cover ingredient index,
+input ingredient, output, recipe category, recipe by ID, tooltip, and lock overlay. Optional EMI
+and JEI columns override the shared value when the pack author intentionally wants different
+behavior.
+
+Presentation candidates use the same prefix, condition, lifetime, priority, and explain engine as
+gameplay candidates. This allows a broad `mod:ae2` hide with one exact item shown, or a temporary
+JEI reveal triggered by any condition. The editor previews which installed viewers support each
+capability. Unsupported behavior is preserved and warned, not silently discarded. Server
+enforcement never depends on a recipe viewer honoring a presentation rule.
+
+### 13.9 KubeJS metadata and safe forms
+
+KubeJS registrations used by the editor must declare structured metadata in addition to an ID:
+
+```javascript
+ProgressiveStages.registerAction("pack:grant_reputation", {
+  title: "Grant reputation",
+  description: "Adds reputation through the pack script",
+  arguments: {
+    faction: { type: "string", required: true },
+    amount: { type: "integer", default: 1, minimum: 1 }
+  },
+  example: { faction: "mages", amount: 5 }
+}, context => {
+  // Existing server script implementation.
+})
+```
+
+Equivalent registration exists for conditions, numeric and string value providers, actions,
+rewards, counters, event IDs, selector matchers, contexts, policies, challenge measures, and
+display providers. Metadata includes title, description, argument schema, defaults, examples,
+icon, capability requirements, allowed scopes, event interests, sync visibility, and whether the
+callback is required or optional.
+
+After KubeJS startup or supported reload, the server catalog exposes those IDs. The editor
+autocompletes them and generates typed forms. Legacy metadata-free callbacks still appear by ID
+with a raw typed-argument object and a warning. Apply validates that required callbacks exist. The
+browser may reference only a pre-registered ID and validated arguments; it cannot submit or execute
+arbitrary JavaScript. Script failures retain configured timeout, isolation, circuit-breaker, and
+rollback behavior.
+
+### 13.10 Main settings and compatibility workspace
+
+The editor has a Settings workspace for `progressivestages.toml` and integration defaults. It
+covers schema and migration policy, starting stages, subject scope, teams, enforcement defaults,
+messages, sounds, priorities, tie policy, lifecycle timing, counters, modifier stacking, history,
+performance budgets, client synchronization, player UI, editor sessions, security, backup,
+permissions, and every installed integration.
+
+The Compatibility page reports loaded mod version, provider version, capability IDs, active or
+inactive state, registered catalogs, warnings, and diagnostics. FTB Quests, FTB Teams, EMI, JEI,
+Lootr, Curios, Jade, WTHIT, KubeJS, and structure integrations receive first-class panels when
+installed. Generic extensions receive schema-generated panels. Each setting is marked Live apply,
+Datapack reload, Player reconnect, Server restart, or Client restart. Settings changes participate
+in the same draft, semantic diff, validation, backup, atomic apply, audit, and rollback transaction
+as stage changes.
+
+### 13.11 No-file authoring guarantee
+
+The supported workflow is editor-first:
+
+1. Run `/pstages editor` as an operator or explicitly authorized pack author.
+2. Create or select a stage.
+3. Search the running pack's catalogs and choose targets through prefix-aware pickers.
+4. Configure identity, display, locks, allows, exclusions, priorities, temporary activation,
+   progression, rewards, KubeJS, compatibility, and viewer behavior through forms.
+5. Validate and simulate.
+6. Review semantic and generated-source diffs.
+7. Apply, synchronize clients, and retain a rollback point.
+
+All create, edit, rename, duplicate, delete, migrate, settings, compatibility, template, import,
+export, backup, rollback, and source operations are available in the browser. Raw TOML remains an
+in-browser expert view and portable storage format. Automated schema-coverage tests compare every
+codec field and registered extension field against editor control metadata. A missing control,
+help entry, validation path, or round-trip fixture fails the release gate.
 
 ## 14. UI and network contract
 
@@ -1209,10 +1632,23 @@ The server sends immutable, permission-filtered DTOs:
 - Active challenge budgets and timers.
 - Decision explanation payloads.
 - History pages using cursors.
-- Registry display metadata needed by extensions.
+- Catalog manifest, search request, paged results, stale-revision response, and safe icon tokens for
+  authenticated editor sessions.
+- Registry display metadata and capability schemas needed by extensions.
 
 Payloads are versioned, size-limited, compressed where useful, and split safely. A client with an
 older compatible protocol sees only supported fields.
+
+Editor catalog searches are request and response messages, not part of the normal player's full
+snapshot. Requests are deliberately tiny enough for the serverbound payload ceiling. Result pages
+are kept comfortably below the clientbound ceiling, and oversized provider metadata is paged or
+omitted with an explicit truncation flag. The server validates the session, permission, catalog,
+field, page size, filters, and expected revision for every request.
+
+The packet design follows NeoForge's
+[registered payload and stream-codec model](https://docs.neoforged.net/docs/1.21.1/networking/payload/)
+and its documented asymmetric payload ceilings. ProgressiveStages sets stricter internal page and
+request limits instead of treating the transport maximum as a target size.
 
 ### 14.3 Visibility and spoilers
 
@@ -1255,6 +1691,36 @@ maximum_request_bytes = 1048576
 maximum_draft_bytes = 16777216
 allow_remote_assets = false
 allow_telemetry = false
+
+[editor.permissions]
+view = "operator"
+create = "operator"
+edit_rules = "operator"
+edit_progression = "operator"
+simulate = "operator"
+apply = "operator_level_4"
+delete = "operator_level_4"
+settings = "operator_level_4"
+source = "operator_level_4"
+administer_sessions = "operator_level_4"
+
+[catalog]
+source = "dedicated_server"
+page_size = 100
+maximum_page_size = 250
+fuzzy_search = true
+include_reference_only_registries = true
+unknown_exact_id_policy = "warn"
+empty_prefix_match_policy = "warn"
+cache_pages_per_session = 256
+render_browser_icons = true
+
+[viewer]
+default_item_policy = "inherit"
+default_fluid_policy = "inherit"
+default_recipe_policy = "inherit"
+missing_integration_policy = "preserve_and_warn"
+coalesce_refresh = true
 
 [client_sync]
 automatic = true
@@ -1308,6 +1774,13 @@ show_priority_to_players = false
 show_priority_to_operators = true
 show_challenge_hud = true
 show_history = true
+
+[integrations]
+configure_from_editor = true
+required_provider_policy = "error"
+optional_provider_policy = "preserve_and_warn"
+kubejs_missing_required_callback = "error"
+kubejs_missing_optional_callback = "warn_and_disable"
 ```
 
 All defaults must be documented in the generated config. Package, stage, category, advanced-rule,
@@ -1435,7 +1908,8 @@ nodes, player visibility, console use, and audit logging are configurable.
 Public interfaces include:
 
 - Package and compiled snapshot inspection.
-- Registry registration and capability lookup.
+- Registry registration, runtime catalog providers, paged catalog search, invalidation, and
+  capability lookup.
 - Selector parsing and matching.
 - Condition compilation, progress, and explanation.
 - Rule decisions and complete decision traces.
@@ -1456,16 +1930,24 @@ and semantic capability versions. Callers never mutate internal collections.
 KubeJS must be able to:
 
 - Register conditions, numeric providers, actions, selector matchers, contexts, policies,
-  modifiers, challenge measures, and display metadata.
+  modifiers, challenge measures, catalog providers, recipe-viewer presentation providers, and
+  display metadata.
+- Attach editor metadata to every registration: title, description, icon, typed argument schema,
+  defaults, examples, scopes, event interests, capabilities, and missing-callback policy.
 - Build and submit grant, revoke, state, counter, variable, challenge, and rollback transactions.
 - Query effective rules and decision traces.
+- Query the authoritative catalog and prefix expansion using the same permission-filtered APIs as
+  the editor.
 - Add package fragments during startup.
 - Receive preflight, progress, transition, challenge, and reload events.
 - Return structured results with error codes and explanations.
 - Discover whether optional capabilities are available before using them.
 
 Script callbacks declare their event interests. State callbacks are cached until an associated
-dirty key changes. Time budgets, failure policy, and debug timing are configurable.
+dirty key changes. Metadata is frozen into one KubeJS catalog revision after script startup and is
+rebuilt only at supported reload boundaries. The editor stores a callback ID and validated
+arguments, never browser-supplied executable script. Time budgets, failure policy, and debug timing
+are configurable.
 
 ## 18. Persistence and scope
 
@@ -1514,6 +1996,13 @@ may be overridden per rule.
 - Use rolling counter buckets instead of retaining every damage or healing event forever.
 - Bound history, explanation candidates, transition chains, network pages, and script execution.
 - Page and virtualize editor registry results. Never send every modded registry object eagerly.
+- Build the catalog only after registration and reload completion, capture game-owned data on the
+  server thread, and move immutable text indexing off-thread. Never query registries while they are
+  still registering.
+- Maintain separate exact-ID, namespace, tag, token, and bounded fuzzy indexes by catalog. Rebuild
+  only invalidated providers and publish the result as one immutable catalog revision.
+- Cache catalog pages by permission context, catalog revision, field, query, filter, sort, and
+  cursor. Bound cache entries, result metadata, tag previews, icon bytes, and provider work.
 - Compile client snapshots once per configuration revision, then permission-filter and reuse safe
   sections instead of rebuilding the full payload for every player.
 - Coalesce draft validation requests and cancel obsolete validation work when a newer draft
@@ -1528,10 +2017,12 @@ Performance acceptance targets must be recorded against a synthetic large pack b
 - 1,000 stages.
 - 25,000 rules.
 - 100,000 selectors.
+- 500,000 catalog entries across static, dynamic, reload-managed, KubeJS, and extension sources.
 - 100 simultaneous players in simulation.
 - Dense inventory changes.
 - Repeated combat and structure sessions.
 - Reload with both legacy and package sources.
+- Concurrent autocomplete from several editors during datapack reload and configuration apply.
 
 Exact millisecond budgets will be established on the project's test hardware and checked for
 regression rather than guessed in this design document.
@@ -1553,6 +2044,13 @@ regression rather than guessed in this design document.
 - Apply always rechecks operator permission and base revision on the dedicated server.
 - Raw TOML editing cannot escape the stage root, introduce remote includes, or bypass schema and
   action security validation.
+- Catalog providers return bounded immutable metadata and cannot expose arbitrary file paths,
+  secrets, reflection handles, live mutable game objects, remote image URLs, or browser HTML.
+- Search text, cursors, provider IDs, icon tokens, KubeJS callback IDs, and typed arguments are
+  validated server-side. Browser labels and descriptions are rendered as text, never trusted HTML.
+- KubeJS forms can reference registered callbacks but cannot upload or evaluate script source.
+- Enumerating a registry grants no enforcement capability. Only registered, permission-checked
+  action and context providers may change gameplay.
 - Sensitive operator diagnostics are filtered from normal players.
 - A malformed provider result cannot produce NaN or infinite attributes, damage, healing, timers,
   priorities, or coordinates.
@@ -1576,8 +2074,10 @@ verification record. A phase is not complete because the classes compile.
   compiled rules, progression entries, prefix entries, and extensions.
 - Attach file and field provenance to every source value.
 - Publish machine-readable schemas with editor labels, help, defaults, validation, and control
-  hints for every field.
-- Gate: malformed package fixtures produce precise errors without touching runtime state.
+  hints, catalog binding, prefix modes, capability requirements, restart behavior, and permission
+  requirements for every field.
+- Gate: malformed package fixtures produce precise errors without touching runtime state, and the
+  schema coverage check rejects any field without editor metadata and round-trip ownership.
 
 ### Phase 3. Build the immutable compiled model
 
@@ -1602,26 +2102,39 @@ verification record. A phase is not complete because the classes compile.
 - Add legacy versus compiled semantic comparison tests.
 - Gate: every golden legacy stage has the same effective behavior after translation.
 
-### Phase 6. Upgrade selectors
+### Phase 6. Build the authoritative catalog and upgrade selectors
 
+- Capture loaded-mod metadata after startup, static registries after registration, dynamic
+  registries through server registry access, tags and reload-managed resources after datapack
+  reload, and live stage or scoreboard sources on their narrow invalidation events.
+- Add `EditorCatalogProvider`, immutable catalog revisions, exact, namespace, tag, token, and fuzzy
+  indexes, paged queries, bounded cursors, reference-only registry discovery, provider invalidation,
+  and capability metadata.
 - Add plain prefix-entry priority lookup tables, compact metadata shorthand, the internal
-  `SelectorSpec`, registry matchers, and validation.
+  `SelectorSpec`, universal registry matchers, match expansion preview, and validation.
 - Keep plain `PrefixEntry` adapters while old handlers remain.
-- Gate: all current prefix lists remain the recommended syntax, match identically, and inherit
-  category, stage, and global priority correctly.
+- Gate: all current prefix lists remain the recommended syntax, match identically, autocomplete
+  against the actual running pack, distinguish loader mods from namespaces, refresh after datapack
+  and KubeJS reload, and inherit category, stage, and global priority correctly. Large catalogs are
+  never sent eagerly.
 
 ### Phase 7. Unify decision priority
 
 - Route static, conditional, temporary, triggered, session, modifier, and extension candidates
   through one resolver.
-- Implement cascade, tie policies, specificity, and explain traces.
-- Gate: conflict matrices pass for every lock and unlock pairing and every priority source.
+- Implement lock, unlock, parent-linked local exclusion, global allow, cascade, tie policies,
+  specificity, per-entry recipe-viewer presentation, and explain traces.
+- Gate: conflict matrices pass for every lock, unlock, local exclusion, global allow, and viewer
+  presentation pairing at every priority source and action context.
 
 ### Phase 8. Build the condition registry and compiler
 
 - Move existing conditions behind registered providers.
 - Add boolean trees, comparisons, reusable references, event interests, and explanation output.
-- Gate: no central switch is required to register an extension condition.
+- Compile live, duration, latched, session, and scheduled temporary rules from the same condition
+  tree for locks, allows, exclusions, modifiers, abilities, and presentation.
+- Gate: no central switch is required to register an extension condition, and every registered
+  condition can activate a temporary rule without a dimension-specific branch.
 
 ### Phase 9. Unify grants and revokes
 
@@ -1668,8 +2181,10 @@ verification record. A phase is not complete because the classes compile.
 
 - Publish immutable APIs, transaction builders, registry hooks, events, simulation, and capability
   discovery.
-- Provide script examples and type information where KubeJS supports it.
-- Gate: TOML, Java, and KubeJS can express the same reference scenarios.
+- Provide KubeJS metadata registration, typed argument schemas, catalog IDs, examples, event
+  interests, missing-callback policy, and editor form discovery.
+- Gate: TOML, Java, and KubeJS can express the same reference scenarios, all registered script IDs
+  autocomplete after startup or supported reload, and the browser cannot execute arbitrary script.
 
 ### Phase 16. Implement migration tooling
 
@@ -1685,6 +2200,8 @@ verification record. A phase is not complete because the classes compile.
   chunked, compressed, acknowledged client snapshot plus safe deltas.
 - Refresh connected clients after apply and send the full current snapshot to future clients during
   login. Keep ore decisions server-side and synchronize only required display deltas.
+- Compile effective item, fluid, recipe, and per-viewer show, hide, and overlay decisions so broad
+  prefix policies and exact higher-priority overrides activate atomically.
 - Gate: join-during-apply, missed delta, checksum failure, incompatible protocol, stage deletion,
   team change, gamemode change, and EMI or JEI refresh tests pass.
 
@@ -1693,6 +2210,9 @@ verification record. A phase is not complete because the classes compile.
 - Add dedicated-server authorization, editor sessions, secrets, expiry, client payloads, the
   loopback HTTP service, packaged assets, browser launch, strict origin and host checks, CSP, rate
   limits, and cleanup.
+- Add the authenticated catalog manifest and paged-search route from browser to loopback bridge to
+  NeoForge request payload to dedicated-server catalog, plus bounded icon-token resolution on the
+  operator client.
 - Gate: the editor is unreachable off-host, unauthorized players cannot create or use sessions,
   secrets never enter logs, and logout or revocation immediately disables access.
 
@@ -1707,11 +2227,15 @@ verification record. A phase is not complete because the classes compile.
 ### Phase 20. Build the complete modern editor frontend
 
 - Implement the Preact and TypeScript shell, stage CRUD, all coverage-matrix panels, registry
-  pickers, graph editor, condition builder, modifier designer, challenge designer, conflict
-  analyzer, simulation, templates, migration, source mode, accessibility, and responsive design.
+  and prefix-aware catalog pickers, virtualized search, graph editor, condition builder, temporary
+  lifetime builder, local and global exception controls, modifier designer, challenge designer,
+  per-entry EMI or JEI controls, KubeJS schema forms, main settings, compatibility dashboard,
+  conflict analyzer, simulation, templates, migration, source mode, accessibility, and responsive
+  design.
 - Gate: every schema field is editable, every extension field has a generated fallback control,
   all thirty feature groups are traceable to a tested screen or engine surface, and no external
-  network request occurs at runtime.
+  network request occurs at runtime. A complete pack can be authored, applied, and rolled back
+  without filesystem access.
 
 ### Phase 21. Player UI, documentation, examples, and usability
 
@@ -1726,7 +2250,8 @@ verification record. A phase is not complete because the classes compile.
 
 - Run large synthetic pack benchmarks, dedicated-server tests, client UI tests, two-client team
   tests, editor concurrency tests, browser bridge tests, restart tests, optional-mod matrix, legacy
-  translation matrix, snapshot sync tests, and artifact inspection.
+  translation matrix, snapshot sync tests, catalog reload tests, KubeJS metadata tests, per-viewer
+  presentation tests, schema-to-editor coverage tests, and artifact inspection.
 - Confirm generated config hierarchy, all three stage files, and packaged editor assets in the JAR.
 - Produce migration notes, compatibility guarantees, known limits, changelog, and rollback steps.
 - Gate: Gradle build passes, all forced tests report zero failures, the server reaches ready state,
@@ -1742,7 +2267,14 @@ verification record. A phase is not complete because the classes compile.
 - Legacy detection.
 - Plain prefix lists, priority lookup tables, and compact priority suffix parsing.
 - Prefix compatibility and selector metadata.
-- Priority inheritance and every tie policy.
+- Catalog provider registration, capability metadata, invalidation, immutable revision publication,
+  reference-only fallback, and provider failure isolation.
+- Exact, namespace, tag, token, substring, and fuzzy search ranking, paging, cursors, revision
+  mismatch, permission filtering, result bounds, and cache invalidation.
+- Loaded-mod metadata and content-namespace separation, including one mod with several namespaces,
+  a datapack-only namespace, and an entry with no client display asset.
+- Priority inheritance and every tie policy for lock, unlock, parent-linked exclusion, global allow,
+  modifier, and viewer-presentation candidates.
 - Boolean condition truth tables.
 - Sequences, minimum counts, comparisons, and references.
 - Time parsing, rolling windows, reset policies, and offline policies.
@@ -1753,6 +2285,9 @@ verification record. A phase is not complete because the classes compile.
 - Challenge budget arithmetic and boundary conditions.
 - Migration mapping and checksums.
 - DTO version and permission filtering.
+- KubeJS editor metadata codecs, generated argument controls, required and optional callbacks,
+  legacy metadata-free callbacks, startup revision, and supported reload revision.
+- Schema-to-editor coverage for main config, three stage files, integrations, and extensions.
 - Editor token entropy, expiry, permission checks, origin validation, host validation, rate limits,
   size limits, path containment, and session cleanup.
 - Draft revision, undo, redo, autosave, three-way conflict, semantic diff, and atomic apply state
@@ -1765,6 +2300,12 @@ verification record. A phase is not complete because the classes compile.
 - Block, fluid, recipe, crop, dimension, enchant, entity, interaction, loot, mob, pet, screen, trade,
   profession, advancement, structure, region, Curios, ore, beacon, brewing, and ability rules.
 - Per-entry priority overrides a stage-wide mod lock.
+- A local exclusion removes only its referenced broad lock and does not defeat another stage's lock.
+- A higher-priority global allow defeats lower-priority locks in the same action context.
+- Permanent and temporary locks, allows, and exclusions resolve identically for every condition
+  provider, not only dimensions, structures, or regions.
+- A broad mod or tag recipe-viewer hide is overridden by an exact per-item show at higher priority
+  independently in EMI and JEI, while server enforcement remains unchanged.
 - A missing entry priority inherits advanced rule when applicable, category, stage, then global
   priority.
 - Grant on health gained and revoke on health lost.
@@ -1776,6 +2317,8 @@ verification record. A phase is not complete because the classes compile.
 - Exact structure entry, exit, lease, and leave-outcome conditions.
 - Modifier reconciliation never changes player position or camera state.
 - Reload failure retains the previous working rules.
+- Catalog entries added or removed by datapack reload and KubeJS reload appear only after a complete
+  new catalog revision and never expose a partially rebuilt index.
 
 ### 22.3 Migration tests
 
@@ -1804,6 +2347,14 @@ verification record. A phase is not complete because the classes compile.
 - Modern editor layout, rounded components, theme switching, responsive breakpoints, keyboard
   navigation, focus management, screen-reader names, reduced motion, and no external requests.
 - Every coverage-matrix panel can add, edit, duplicate, delete, validate, diff, and save its data.
+- Prefix pickers switch correctly among exact ID, mod or namespace, tag, name pattern, and extension
+  modes for every supported registry-backed field.
+- Every entry card distinguishes Exclude only from this lock from Allow despite other locks and
+  previews the priority outcome.
+- Main settings, compatibility, KubeJS metadata, and per-entry EMI or JEI presentation can be
+  configured without leaving the editor.
+- Automated schema coverage fails when a codec field lacks a form control, help text, validator, or
+  round-trip test.
 
 ### 22.5 Performance and soak tests
 
@@ -1817,6 +2368,8 @@ verification record. A phase is not complete because the classes compile.
 - Reload while structure and challenge sessions are active.
 - Long editor sessions with large registries, repeated autosave, several collaborators, repeated
   validation, and large semantic diffs.
+- Five hundred thousand catalog entries, concurrent paged searches, fuzzy search cancellation,
+  repeated datapack and KubeJS invalidation, icon-cache eviction, and stale cursor recovery.
 - Connected-client broadcast and future-client login after hundreds of applied revisions.
 
 ### 22.6 Editor and synchronization integration tests
@@ -1826,6 +2379,8 @@ verification record. A phase is not complete because the classes compile.
 - The HTTP listener binds only to loopback and uses a random port.
 - Browser API calls without the session secret, from the wrong origin, with the wrong host, above
   the rate limit, or above the size limit fail without reaching draft mutation.
+- Catalog requests with an unknown provider, invalid field binding, oversized page, stale revision,
+  forged cursor, forbidden permission scope, or unsafe icon token fail without leaking server data.
 - A remote operator can use the client-local editor without opening a port on the dedicated server.
 - Browser close, player logout, permission loss, server switch, client crash, and server shutdown
   release resources and invalidate access.
@@ -1838,6 +2393,10 @@ verification record. A phase is not complete because the classes compile.
 - A player online during apply and a player joining afterward receive identical effective stage,
   lock, display, modifier, challenge, and ore presentation state.
 - Automated browser tests use the packaged production assets rather than a development server.
+- One automated authoring journey creates a stage, searches modded items, applies a mod-wide lock,
+  adds an exact prioritized exclusion, adds a KubeJS-triggered temporary global allow, chooses a
+  per-item JEI policy, edits compatibility and main defaults, validates, simulates, applies, syncs,
+  and rolls back without reading or writing a file outside the editor transaction.
 
 ## 23. Documentation deliverables
 
@@ -1847,6 +2406,10 @@ verification record. A phase is not complete because the classes compile.
 - A manual three-file first-stage tutorial for power users.
 - A complete field reference generated from codecs where possible.
 - Selector and priority reference with conflict diagrams.
+- Catalog and autocomplete reference explaining loaded mods versus namespaces, static versus dynamic
+  registries, tags, reload resources, reference-only providers, paging, refresh, and validation.
+- Lock, local exclusion, global allow, temporary lifetime, and per-entry EMI or JEI cookbook with
+  worked priority examples.
 - Condition reference with value type, events, scope, persistence, and examples.
 - Grant and revoke cookbook.
 - Contextual buff and debuff cookbook.
@@ -1856,12 +2419,18 @@ verification record. A phase is not complete because the classes compile.
 - Legacy migration guide with before and after files.
 - Java API reference.
 - KubeJS reference with executable scripts.
+- KubeJS editor-metadata reference with typed condition, value, action, reward, event, counter,
+  selector, context, and callback registration examples.
 - Command and permissions reference.
 - Editor session, draft, collaboration, apply, backup, rollback, and audit reference.
 - Localhost bridge security model, privacy guarantees, troubleshooting, and threat model.
 - Automatic client snapshot protocol, current-client apply behavior, and future-client login
   behavior.
 - Complete editor coverage checklist mapping every config field to its screen.
+- Main settings and compatibility dashboard reference with live apply, reload, reconnect, and
+  restart labels.
+- A no-file authoring tutorial that begins at `/pstages editor` and ends with apply, client sync,
+  backup inspection, and rollback.
 - UI authoring and spoiler guide.
 - Performance tuning and diagnostics guide.
 - Troubleshooting guide based on exact validation codes.
@@ -1943,6 +2512,25 @@ Examples that merely look correct are not enough.
 - Server enforcement remains correct when presentation packets are delayed or a modified client
   ignores them.
 
+### 24.9 Registry-backed no-file authoring
+
+- A server starts with several content mods, a datapack-only namespace, modded tags and structures,
+  KubeJS callbacks, EMI, and JEI.
+- An authorized author opens the editor and searches the server's actual items, blocks, fluids,
+  entities, enchantments, professions, structures, recipes, advancements, tags, mods or namespaces,
+  KubeJS IDs, and extension catalogs without receiving an eager dump of every entry.
+- They lock a whole namespace, add a higher-priority exact local exclusion, add a separate global
+  allow, and preview the different outcomes.
+- They make a temporary lock activate from a nested health, boss-session, scoreboard, and KubeJS
+  condition rather than a dimension shortcut.
+- They hide the namespace in both recipe viewers but keep one exact item visible in JEI with a lock
+  overlay.
+- They edit an integration default and main priority policy, validate, simulate, review generated
+  TOML, apply, and roll back without touching the server filesystem.
+- A datapack reload adds an item tag and a KubeJS reload changes callback metadata. The editor
+  receives complete new catalog revisions, invalidates stale pages, and never applies a reference
+  against a partially rebuilt catalog.
+
 ## 25. Definition of done
 
 The rehaul is complete only when all of the following are true:
@@ -1962,12 +2550,28 @@ The rehaul is complete only when all of the following are true:
 - The generic budget engine supports the boss hit-limit scenario.
 - All thirty numbered feature groups pass their implementation and verification gates.
 - Every row in the editor coverage matrix has a complete tested control surface.
+- The editor catalog comes from the running dedicated server and covers loaded-mod metadata, static
+  registries, server dynamic registries, all available registry tags, recipes, advancements, loot
+  resources, live ProgressiveStages IDs, KubeJS registrations, and extension catalogs with tested
+  reload invalidation.
+- Exact ID, unprefixed ID, mod or namespace, tag, hash-tag, name, and registered extension matchers
+  autocomplete, validate, preview, and preserve the existing prefix semantics in every compatible
+  lock category.
+- Locks, global allows, parent-linked local exclusions, modifiers, and per-entry EMI or JEI
+  presentation use the same deterministic priority resolver.
+- Every condition provider can activate live, duration, latched, session, or scheduled temporary
+  locks, allows, exclusions, modifiers, abilities, and presentation without a dimension-only path.
+- Required KubeJS callback metadata produces typed editor forms and autocomplete, while legacy
+  callback IDs remain usable and arbitrary browser script execution is impossible.
 - `/pstages editor` is dedicated-server-only, operator-authorized, loopback-only, self-contained,
   and usable remotely through the connected operator client without opening a server web port.
 - Stage TOML remains server-only. Connected and future clients automatically activate the same
   verified compiled client revision.
 - The editor supports drafts, undo, redo, validation, simulation, conflict handling, atomic apply,
   backups, audit history, and rollback.
+- A normal author can configure the main mod settings, all stage fields, all current lock categories,
+  all lifecycle behavior, installed compatibility, KubeJS references, and recipe-viewer policy,
+  then apply and roll back without opening or manually editing a file.
 - Config, datapack, Java, KubeJS, command, and UI surfaces describe the same canonical rules.
 - Every old schema section has a tested translation.
 - Failed parsing, compilation, migration, or reload never replaces a valid runtime snapshot.
