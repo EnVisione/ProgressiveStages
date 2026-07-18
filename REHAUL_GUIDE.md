@@ -33,7 +33,7 @@ a stage. Old one file stages still load. Schema 4 packages and old 3.0.1 stages 
 
 ## 2. Make a stage without touching a file
 
-This workflow is for a dedicated server.
+This workflow works in an integrated single-player world and on a dedicated server.
 
 1. Join with the normal ProgressiveStages client installed.
 2. Make sure your account has operator permission level 3 or higher.
@@ -72,8 +72,9 @@ Useful recovery commands:
 /pstages editor revoke <session_uuid>
 ```
 
-The editor is deliberately unavailable in an integrated single-player server. Manual files remain
-available there.
+In single player, the world owner must have operator permission. If commands are disabled, open the
+world to LAN with cheats enabled for that session or enable commands through the normal Minecraft
+world settings. The HTTP bridge still binds only to `127.0.0.1` on the computer running the client.
 
 ## 3. Make a stage with three files
 
@@ -559,7 +560,7 @@ runtime reset. Session-only policies may intentionally end on their configured b
 
 ## 20. Localhost editor security
 
-- Only permission level 3 operators on a dedicated server may open a session.
+- Only permission level 3 operators may open a session in single player or on a dedicated server.
 - The HTTP listener binds to `127.0.0.1` on a random port on the operator's own client.
 - The dedicated server does not expose an HTTP port.
 - A 256-bit secret travels through the URL fragment and is immediately removed from browser

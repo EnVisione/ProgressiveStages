@@ -48,7 +48,6 @@ public final class EditorSessionService {
     public static EditorSessionService get() { return INSTANCE; }
 
     public synchronized EditorSessionOpen open(ServerPlayer operator) {
-        if (!operator.server.isDedicatedServer()) throw new IllegalStateException("The editor is available only on dedicated servers");
         if (!operator.hasPermissions(3)) throw new SecurityException("Operator permission is required");
         cleanup();
         long configuration = StageFileLoader.getInstance().getCompiledSnapshot().revision();
@@ -61,7 +60,6 @@ public final class EditorSessionService {
     }
 
     public synchronized EditorSessionOpen resume(ServerPlayer operator, UUID draftId) {
-        if (!operator.server.isDedicatedServer()) throw new IllegalStateException("The editor is available only on dedicated servers");
         if (!operator.hasPermissions(3)) throw new SecurityException("Operator permission is required");
         cleanup();
         EditorDraft draft = drafts.computeIfAbsent(draftId, this::loadDraft);

@@ -444,10 +444,6 @@ public class StageCommand {
     /** /stage gui — push the player's live trigger progress, which opens the GUI client-side. */
     private static int openEditor(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
-        if (!context.getSource().getServer().isDedicatedServer()) {
-            context.getSource().sendFailure(Component.literal("The localhost editor is available only while connected to a dedicated server"));
-            return 0;
-        }
         try {
             var session = EditorSessionService.get().open(player);
             com.enviouse.progressivestages.common.network.NetworkHandler.sendEditorOpen(player, session);

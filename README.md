@@ -22,7 +22,8 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
   [Complete Documentation](DOCUMENTATION.md).
 - **Using schema 4 or the localhost editor:** follow the
   [Schema 4 and Editor Rehaul Guide](REHAUL_GUIDE.md), including all thirty feature groups and
-  machine-tested three-file examples.
+  machine-tested three-file examples. The editor works for permission level 3 operators in
+  single-player worlds and on dedicated servers.
 - **Building location, combat, timer, or priority-based access rules:** copy the
   [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
 - **Building or approving a release:** follow the
