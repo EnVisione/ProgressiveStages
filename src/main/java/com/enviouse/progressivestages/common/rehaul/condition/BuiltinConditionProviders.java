@@ -38,7 +38,9 @@ final class BuiltinConditionProviders {
         providers.add(numericProvider("counter", "counter", ConditionBehavior.RETROACTIVE));
         providers.add(numericProvider("scoreboard", "scoreboard", ConditionBehavior.LIVE_STATE));
         providers.add(numericProvider("death", "death", ConditionBehavior.EVENT_EDGE));
+        providers.add(numericProvider("other_player_death", "other_player_death", ConditionBehavior.EVENT_EDGE));
         providers.add(numericProvider("respawn", "respawn", ConditionBehavior.EVENT_EDGE));
+        providers.add(numericProvider("player_kill", "player_kill", ConditionBehavior.EVENT_EDGE));
         providers.add(numericProvider("health_gained", "health_gained", ConditionBehavior.ROLLING_WINDOW));
         providers.add(numericProvider("health_lost", "health_lost", ConditionBehavior.ROLLING_WINDOW));
         providers.add(numericProvider("damage_taken", "damage_taken", ConditionBehavior.ROLLING_WINDOW));
@@ -47,6 +49,7 @@ final class BuiltinConditionProviders {
         providers.add(numericProvider("hits_dealt", "hits_dealt", ConditionBehavior.ROLLING_WINDOW));
         providers.add(booleanProvider("health_threshold_crossed", "health_threshold_crossed", ConditionBehavior.EVENT_EDGE));
         providers.add(numericProvider("no_damage_for", "no_damage_for", ConditionBehavior.LIVE_STATE));
+        providers.add(numericProvider("structure_time", "structure_time", ConditionBehavior.SESSION));
         for (String id : List.of("kill", "mine", "craft", "pickup", "use", "drop", "break_item",
                 "distance", "stat", "advancement", "item_possession", "has_item", "effect", "breed", "day",
                 "day_count", "world_time", "enter_structure", "tame", "kill_with_item", "kill_with", "fish",
@@ -54,8 +57,10 @@ final class BuiltinConditionProviders {
                 "custom_counter", "health", "script_value")) {
             providers.add(triggerProvider(id));
         }
-        for (String id : List.of("structure_leave_outcome", "leave_structure", "combat_session",
-                "boss_session", "region_session", "custom_session")) {
+        for (String id : List.of("structure_leave_outcome", "leave_structure")) {
+            providers.add(numericProvider(id, id, ConditionBehavior.EVENT_EDGE));
+        }
+        for (String id : List.of("combat_session", "boss_session", "region_session", "custom_session")) {
             providers.add(numericProvider(id, id, ConditionBehavior.SESSION));
         }
         providers.add(new LegacyContextProvider());

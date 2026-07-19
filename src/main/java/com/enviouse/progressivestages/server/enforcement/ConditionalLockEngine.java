@@ -132,6 +132,11 @@ public final class ConditionalLockEngine {
 
     public static Decision resolve(ServerPlayer player, ConditionalRule.TargetType type,
                                    ResourceLocation id, Holder<?> holder, boolean staticBlocked) {
+        return resolve(player, type, compiledAction(type), id, holder, staticBlocked);
+    }
+
+    public static Decision resolve(ServerPlayer player, ConditionalRule.TargetType type, String action,
+                                   ResourceLocation id, Holder<?> holder, boolean staticBlocked) {
         Decision winner = staticBlocked
             ? new Decision(ConditionalRule.Effect.LOCK, 0, null, null) : null;
         List<ConditionalRule> rules = rulesByTarget.get(type);
@@ -148,7 +153,7 @@ public final class ConditionalLockEngine {
             }
         }
         var compiled = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
-            .resolve(player, compiledCategory(type), compiledAction(type), id, holder).orElse(null);
+            .resolve(player, compiledCategory(type), action, id, holder).orElse(null);
         if (compiled != null && compiled.winningEffect() != null && compiled.winningRule() != null) {
             var rule = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
                 .findRule(compiled.winningRule()).orElse(null);

@@ -21,7 +21,7 @@
     trades: { label: "Villager trades", catalog: "items", actions: ["display", "purchase"] },
     professions: { label: "Villager professions", catalog: "professions", actions: ["trade"] },
     advancements: { label: "Advancements", catalog: "advancements", actions: ["display", "toast"] },
-    structures: { label: "Structures", catalog: "structures", actions: ["enter", "break", "place", "explode", "spawn"] },
+    structures: { label: "Structures", catalog: "structures", actions: ["enter", "break", "place", "open_container", "item_use", "interact_block", "interact_entity"] },
     regions: { label: "Regions", catalog: "dimensions", actions: ["enter", "break", "place", "explode", "spawn"] },
     curios: { label: "Curios slots", catalog: "curios_slots", actions: ["equip", "retain"] },
     ores: { label: "Ore visuals and drops", catalog: "blocks", actions: ["display", "drop"] },
@@ -30,19 +30,63 @@
     abilities: { label: "Player abilities", catalog: "abilities", actions: ["use"] }
   };
 
+  const ACTION_LABELS = {
+    use: "Use the target", pickup: "Pick up the target", inventory: "Keep in inventory",
+    hotbar: "Keep in hotbar", mouse_pickup: "Move with the cursor", drop: "Drop the target",
+    place: "Place the target", break: "Break the target", interact: "Interact with the target",
+    flow: "Allow fluid flow", submerge: "Enter the fluid", craft: "Craft the recipe",
+    automate: "Craft through automation", display: "Show in a viewer", plant: "Plant the crop",
+    grow: "Let the crop grow", bonemeal: "Use bonemeal", harvest: "Harvest the crop",
+    enter: "Enter the target", leave: "Leave the target", stay: "Stay inside for more time",
+    portal: "Use a portal", teleport: "Teleport there", table: "Use at an enchanting table",
+    anvil: "Use in an anvil", trade: "Trade for the target", hold: "Keep the enchantment",
+    attack: "Attack the entity", mount: "Mount the entity", block_right_click: "Right click a block",
+    item_on_block: "Use an item on a block", item_on_entity: "Use an item on an entity",
+    generate: "Generate the loot", open: "Open the target", spawn: "Spawn the entity",
+    replace: "Replace the entity", tame: "Tame the pet", breed: "Breed the pet",
+    command: "Command the pet", ride: "Ride the pet", purchase: "Purchase the trade",
+    toast: "Show the toast", explode: "Damage with explosions", equip: "Equip the target",
+    retain: "Keep the target equipped", apply: "Apply the effect", brew: "Brew the potion",
+    take: "Take the brewed potion", perform: "Use the ability", open_container: "Open containers inside",
+    item_use: "Use items inside", interact_block: "Interact with blocks inside", interact_entity: "Interact with entities inside"
+  };
+
   const CONDITIONS = [
-    ["none", "Always active", ""], ["stage_owned", "Owns another stage", "stages"],
-    ["dimension", "Inside a dimension", "dimensions"], ["biome", "Inside a biome", "biomes"],
-    ["structure", "Inside a structure", "structures"], ["weather", "During weather", ""],
+    ["none", "Always active", "", "This rule has no extra location or event requirement."],
+    ["stage_owned", "Owns another stage", "stages", "The rule is active while the player owns the selected stage."],
+    ["dimension", "Inside a dimension", "dimensions", "The rule follows the player into and out of the selected dimension."],
+    ["biome", "Inside a biome", "biomes", "The rule is active only while the player is inside the selected biome."],
+    ["structure", "Inside an assigned structure", "structures", "The rule is active while the player is inside an exact structure session supplied by a compatible mod."],
+    ["weather", "During weather", "", "Use rain thunder or clear as the target value."],
     ["kill", "Kill a mob", "entities"], ["mine", "Mine a block", "blocks"],
     ["craft", "Craft an item", "items"], ["pickup", "Pick up an item", "items"],
     ["use", "Use an item", "items"], ["advancement", "Earn an advancement", "advancements"],
     ["item_possession", "Own an item", "items"], ["effect", "Have an effect", "effects"],
-    ["enter_structure", "Enter a structure", "structures"], ["tame", "Tame a mob", "entities"],
+    ["enter_structure", "Enter an assigned structure", "structures", "Matches when the player enters the selected exact structure session."],
+    ["leave_structure", "Leave an assigned structure", "structures", "Matches when the player leaves the selected exact structure session."],
+    ["structure_time", "Stay inside an assigned structure", "structures", "Required amount is the number of seconds spent inside the selected exact structure session."],
+    ["tame", "Tame a mob", "entities"],
     ["kill_with_item", "Kill with an item", "items"], ["fish", "Catch an item", "items"],
     ["sleep", "Sleep", ""], ["ride", "Ride an entity", "entities"],
     ["level", "Reach an XP level", ""], ["play_time", "Reach play time", ""],
-    ["death", "Die a number of times", ""], ["boss_session", "During a boss fight", "entities"],
+    ["death", "Player dies", "", "Matches the selected player's own death count."],
+    ["other_player_death", "Another player dies", "", "Matches when any other online player dies. The player does not need to be the killer."],
+    ["respawn", "Player respawns", "", "Matches after the selected player returns after death."],
+    ["player_kill", "Defeat another player", "", "Matches when the selected player defeats another player."],
+    ["damage_taken", "Take damage", "", "Required amount is cumulative damage taken in the active counter window."],
+    ["damage_dealt", "Deal damage", "", "Required amount is cumulative damage dealt in the active counter window."],
+    ["hits_taken", "Be hit", "", "Required amount is the number of damaging hits received."],
+    ["hits_dealt", "Hit an entity", "", "Required amount is the number of damaging hits dealt."],
+    ["health_gained", "Recover health", "", "Required amount is the health recovered."],
+    ["health_lost", "Lose health", "", "Required amount is the health lost."],
+    ["no_damage_for", "Avoid damage for time", "", "Required amount is the number of milliseconds without taking damage."],
+    ["current_health", "Reach a health value", "", "Required amount is the minimum current health."],
+    ["food", "Reach a food value", "", "Required amount is the minimum food level."],
+    ["altitude", "Reach an altitude", "", "Required amount is the minimum Y coordinate."],
+    ["stage_count", "Own a number of stages", "", "Required amount is the number of stages currently owned."],
+    ["online_team_size", "Have team members online", "", "Required amount is the number of online team members."],
+    ["stage_held_for", "Own a stage for time", "stages", "Required amount is the number of milliseconds the selected stage has been owned."],
+    ["boss_session", "During a boss fight", "entities"],
     ["combat_session", "During combat", "entities"], ["region_session", "During a region session", ""],
     ["kubejs", "KubeJS event", "events"], ["script", "Script callback", "events"]
   ];
@@ -200,6 +244,8 @@
     const rules = ruleModels(state.boot.draft.files[stage.rulesPath] || "");
     const progressionText = state.boot.draft.files[stage.progressionPath] || "";
     const progression = progressionModels(progressionText);
+    const grants = progression.filter(entry => entry.kind === "grants");
+    const revokes = progression.filter(entry => entry.kind === "revokes");
     const purchase = purchaseModel(progressionText);
     const dropModifierCount = extractArrayBlocks(state.boot.draft.files[stage.rulesPath] || "", "drop_modifiers").length;
     const hidden = booleanValue(readTomlValue(stageText, "stage.hidden"));
@@ -236,12 +282,13 @@
         <div class="dependency-field"><span>Player progression UI position</span><div class="dependency-summary"><div class="dependency-copy"><strong>${escapeHtml(mapPosition)}</strong><small>Drag this stage in Player UI layout or enter exact map coordinates here.</small></div><button type="button" id="editMapPosition">Edit player UI position</button></div></div>
         <label class="toggle-line"><input type="checkbox" data-stage-field="stage.hidden" data-boolean="true" ${hidden ? "checked" : ""}>Hide this stage from players until it is revealed</label>
       </div></div></article>
-      <article class="builder-section"><div class="builder-section-head"><div><h2>Rules</h2><p>${rules.length ? `${rules.length} currently active` : "None currently active"}. Drag cards to organize advanced rules.</p></div><button id="addRule" class="primary" ${stage.archived ? "disabled" : ""}>＋ Add rule</button></div><div class="builder-section-body">${rulesHtml(rules)}</div></article>
-      <article class="builder-section"><div class="builder-section-head"><div><h2>How players obtain this stage</h2><p>Use an item purchase automatic gameplay a quest command or API hook.</p></div><button id="addProgression" class="primary" ${stage.legacy || stage.archived ? "disabled" : ""}>＋ Add automatic path</button></div><div class="builder-section-body"><div class="acquisition-grid">
+      <article class="builder-section"><div class="builder-section-head"><div><h2>Rules</h2><p>${rules.length ? `${rules.length} currently active` : "None currently active"}. Each rule combines a target, player action, result, priority, activation condition, lifetime, and optional exception.</p></div><button id="addRule" class="primary" ${stage.archived ? "disabled" : ""}>＋ Add rule</button></div><div class="builder-section-body"><div class="rule-explanation"><strong>How rules work together.</strong> A rule first checks its target and player action. Its activation condition decides when it participates. If several rules match, the highest priority wins. Give an exception a higher priority than the broader lock it should override. A permanent lock normally protects content until this stage is owned. A temporary rule follows its condition and lifetime.</div>${rulesHtml(rules)}</div></article>
+      <article class="builder-section"><div class="builder-section-head"><div><h2>How players obtain this stage</h2><p>Use an item purchase, automatic gameplay trigger, quest command, KubeJS event, or API hook.</p></div><button id="addProgression" class="primary" ${stage.legacy || stage.archived ? "disabled" : ""}>＋ Add way to obtain</button></div><div class="builder-section-body"><div class="acquisition-grid">
         <article class="acquisition-card ${purchase.enabled ? "active" : ""}"><span class="acquisition-icon">◆</span><div><strong>Buy with items</strong><small>${escapeHtml(purchase.enabled ? purchase.summary : "Not configured. Players can pay items and XP from the in game stage tree.")}</small></div><button id="editPurchase">${purchase.enabled ? "Edit purchase" : "Set up purchase"}</button></article>
-        <article class="acquisition-card ${progression.length ? "active" : ""}"><span class="acquisition-icon">↟</span><div><strong>Earn through gameplay</strong><small>${progression.length ? `${progression.length} automatic grant or revoke paths configured.` : "Add kills mining crafting exploration or KubeJS events."}</small></div></article>
+        <article class="acquisition-card ${grants.length ? "active" : ""}"><span class="acquisition-icon">↟</span><div><strong>Earn through gameplay</strong><small>${grants.length ? `${grants.length} automatic ways to obtain this stage.` : "Add kills, mining, crafting, exploration, player events, or KubeJS events."}</small></div></article>
         <article class="acquisition-card"><span class="acquisition-icon">⌘</span><div><strong>Quest command or API</strong><small>Always available through PSTages FTB Quests KubeJS and the Java API.</small></div></article>
-      </div>${progressionHtml(progression)}</div></article>
+      </div>${progressionHtml(grants, "No automatic way to obtain this stage yet.")}</div></article>
+      <article class="builder-section"><div class="builder-section-head"><div><h2>How players lose this stage</h2><p>Revoke it when the owner dies, another online player dies, the owner defeats another player, a structure session changes, damage occurs, exploration completes, KubeJS fires, or any other supported trigger matches.</p></div><button id="addRevoke" class="primary" ${stage.legacy || stage.archived ? "disabled" : ""}>＋ Add way to lose</button></div><div class="builder-section-body"><div class="rule-explanation"><strong>Stage loss is a trigger too.</strong> The same event and live condition library used for grants is available here. Choose Revoke this stage, then select exactly who owns the progress, how many events are required, whether it repeats, and any cooldown. Player dies means the stage owner dies. Another player dies means any other online player dies. Defeat another player means the stage owner wins a player fight.</div>${progressionHtml(revokes, "No automatic way to lose this stage yet.")}</div></article>
       <article class="builder-section"><div class="builder-section-head"><div><h2>More stage features</h2><p>Guided shortcuts for rewards, costs, challenges, variables, and advanced systems.</p></div></div><div class="builder-section-body"><div class="feature-grid">
         ${featureButton("rewards", "Rewards", "Items, effects, XP, commands, and teleport")}
         ${featureButton("cost", "Unlock cost", "Items, XP, cooldown, and refunds")}
@@ -262,15 +309,15 @@
     if (!rules.length) return `<div class="empty-state"><span><strong>No rules currently active.</strong><br>Add one, choose a category, then pick from the live server registry.</span></div>`;
     return `<div id="ruleList" class="rule-list">${rules.map((rule, index) => `<article class="rule-card" ${rule.generic ? "draggable=\"true\"" : ""} data-rule-index="${index}">
       <span class="drag-handle" title="Drag to reorder">${rule.generic ? "⠿" : "·"}</span>
-      <span class="rule-title"><strong>${escapeHtml(CATEGORIES[rule.category]?.label || title(rule.category))}</strong><small><span class="effect-chip ${escapeHtml(rule.effect)}">${escapeHtml(effectLabel(rule.effect))}</span> · ${escapeHtml(rule.action || "access")} · priority ${rule.priority}</small></span>
+      <span class="rule-title"><strong>${escapeHtml(CATEGORIES[rule.category]?.label || title(rule.category))}</strong><small><span class="effect-chip ${escapeHtml(rule.effect)}">${escapeHtml(effectLabel(rule.effect))}</span> · ${escapeHtml(ACTION_LABELS[rule.action] || title(rule.action || "access"))} · priority ${rule.priority}</small></span>
       <span class="rule-target"><strong>${escapeHtml(rule.selector)}</strong><small>${rule.temporary ? `${title(rule.lifetime)} while ${conditionLabel(rule.conditionType)}` : rule.classic ? "Classic selector" : viewerLabel(rule)}</small></span>
       <span class="rule-actions"><button data-edit-rule="${index}">Edit</button><button data-delete-rule="${index}" class="danger" aria-label="Delete rule">×</button></span>
     </article>`).join("")}</div>`;
   }
 
-  function progressionHtml(entries) {
-    if (!entries.length) return `<div class="empty-state"><span><strong>Nothing automatic yet.</strong><br>Add a grant or revoke and choose what players need to do.</span></div>`;
-    return `<div class="progression-list">${entries.map((entry, index) => `<article class="progression-card"><span class="drag-handle">◆</span><span class="rule-title"><strong>${entry.kind === "grants" ? "Grant stage" : "Revoke stage"}</strong><small>${conditionLabel(entry.conditionType)} · ${escapeHtml(entry.repeat || "once")}</small></span><span class="rule-target"><strong>${escapeHtml(entry.conditionTarget || "No target needed")}</strong><small>Required amount ${entry.count}</small></span><span class="rule-actions"><button data-edit-progression="${index}">Edit</button><button data-delete-progression="${index}" class="danger">×</button></span></article>`).join("")}</div>`;
+  function progressionHtml(entries, emptyMessage) {
+    if (!entries.length) return `<div class="empty-state"><span><strong>${escapeHtml(emptyMessage)}</strong><br>Click the gold button and choose a plain language trigger.</span></div>`;
+    return `<div class="progression-list">${entries.map(entry => `<article class="progression-card"><span class="drag-handle">◆</span><span class="rule-title"><strong>${entry.kind === "grants" ? "Grant stage" : "Revoke stage"}</strong><small>${conditionLabel(entry.conditionType)} · ${escapeHtml(entry.repeat || "once")}</small></span><span class="rule-target"><strong>${escapeHtml(entry.conditionTarget || "No target needed")}</strong><small>Required amount ${entry.count}</small></span><span class="rule-actions"><button data-edit-progression-kind="${entry.kind}" data-edit-progression-table="${entry.tableIndex}">Edit</button><button data-delete-progression-kind="${entry.kind}" data-delete-progression-table="${entry.tableIndex}" class="danger">×</button></span></article>`).join("")}</div>`;
   }
 
   function bindBuilder(stage, rules, progression) {
@@ -289,10 +336,13 @@
     qa("[data-edit-rule]", $("formView")).forEach(button => button.onclick = () => openRuleEditor(stage, rules[Number(button.dataset.editRule)]));
     qa("[data-delete-rule]", $("formView")).forEach(button => button.onclick = () => deleteRule(stage, rules[Number(button.dataset.deleteRule)]).catch(error => toast(error.message)));
     bindRuleDragging(stage, rules);
-    $("addProgression").onclick = () => openProgressionEditor(stage, null);
+    $("addProgression").onclick = () => openProgressionEditor(stage, null, "grants");
+    $("addRevoke").onclick = () => openProgressionEditor(stage, null, "revokes");
     $("editPurchase").onclick = () => openPurchaseEditor(stage);
-    qa("[data-edit-progression]", $("formView")).forEach(button => button.onclick = () => openProgressionEditor(stage, progression[Number(button.dataset.editProgression)]));
-    qa("[data-delete-progression]", $("formView")).forEach(button => button.onclick = () => deleteProgression(stage, progression[Number(button.dataset.deleteProgression)]).catch(error => toast(error.message)));
+    qa("[data-edit-progression-kind]", $("formView")).forEach(button => button.onclick = () => openProgressionEditor(stage,
+      progression.find(entry => entry.kind === button.dataset.editProgressionKind && entry.tableIndex === Number(button.dataset.editProgressionTable))));
+    qa("[data-delete-progression-kind]", $("formView")).forEach(button => button.onclick = () => deleteProgression(stage,
+      progression.find(entry => entry.kind === button.dataset.deleteProgressionKind && entry.tableIndex === Number(button.dataset.deleteProgressionTable))).catch(error => toast(error.message)));
     qa("[data-feature]", $("formView")).forEach(button => button.onclick = () => openFeatureEditor(stage, button.dataset.feature));
   }
 
@@ -469,7 +519,7 @@
     const targetX = width / 2;
     const positions = dependencies.map((dependency, index) => ({ dependency, x: width * (index + 1) / (dependencies.length + 1) }));
     const paths = positions.map(position => `<path d="M ${position.x} 205 C ${position.x} 145, ${targetX} 130, ${targetX} 68"/>`).join("");
-    return `<div class="lineage-canvas" style="width:${width}px"><svg class="lineage-lines" viewBox="0 0 ${width} 250" preserveAspectRatio="none">${paths}</svg><div class="lineage-target" style="left:${targetX - 90}px"><strong>${escapeHtml(stage.name)}</strong><small>${escapeHtml(dependencySummary(dependencyIds, mode, count))}</small></div>${positions.map(position => `<div class="lineage-source" style="left:${position.x - 85}px"><strong>${escapeHtml(position.dependency.name)}</strong><small>${escapeHtml(stageParents(position.dependency).length ? `from ${stageParents(position.dependency).map(stageName).join(" and ")}` : "beginner path")}</small></div>`).join("")}</div>`;
+    return `<svg class="lineage-canvas" width="${width}" height="250" viewBox="0 0 ${width} 250" aria-label="Required stage path preview"><g class="lineage-lines">${paths}</g><foreignObject x="${targetX - 90}" y="10" width="180" height="58"><div xmlns="http://www.w3.org/1999/xhtml" class="lineage-target"><strong>${escapeHtml(stage.name)}</strong><small>${escapeHtml(dependencySummary(dependencyIds, mode, count))}</small></div></foreignObject>${positions.map(position => `<foreignObject x="${position.x - 85}" y="185" width="170" height="58"><div xmlns="http://www.w3.org/1999/xhtml" class="lineage-source"><strong>${escapeHtml(position.dependency.name)}</strong><small>${escapeHtml(stageParents(position.dependency).length ? `from ${stageParents(position.dependency).map(stageName).join(" and ")}` : "beginner path")}</small></div></foreignObject>`).join("")}</svg>`;
   }
 
   function normalizeDependencyCount(selected, policy) {
@@ -570,12 +620,13 @@
       jei: "inherit", emi: "inherit", exceptionSelector: "", exceptionPriority: 101
     };
     openModal(`
-      <h2 id="modalTitle">${rule ? "Edit rule" : "Add a rule"}</h2><p>Choose plain language options. The editor writes the selector, priority, temporary condition, and viewer policy.</p>
+      <h2 id="modalTitle">${rule ? "Edit rule" : "Add a rule"}</h2><p>Build one decision in plain language. The editor writes the target selector, exact action, ownership behavior, priority, activation condition, lifetime, viewer policy, and exception.</p>
       <form id="ruleForm"><div class="modal-grid">
         <label>What kind of thing?<select id="ruleCategory">${categoryOptions(current.category)}</select></label>
         <label>What player action?<select id="ruleAction"></select></label>
-        <label>What should happen?<select id="ruleEffect"><option value="lock">Lock until this stage is owned</option><option value="deny">Always deny while active</option><option value="allow">Allow and override lower locks</option><option value="unlock">Unlock while active</option><option value="replace">Replace the target</option><option value="present">Only change recipe viewer display</option></select></label>
+        <label>What should happen?<select id="ruleEffect"></select></label>
         <label>Priority<input id="rulePriority" type="number" value="${current.priority}"><small>Higher numbers win.</small></label>
+        <div id="ruleExplanation" class="rule-explanation"></div>
         <section class="modal-section"><h3>Choose the target</h3><div class="modal-grid">
           <label>Selection method<select id="ruleMode"><option value="id">One exact ID</option><option value="mod">Everything from a mod</option><option value="tag">Everything in a tag</option><option value="name">Anything with a name</option></select></label>
           <label>Only show this mod<input id="ruleMod" list="ruleMods" placeholder="All mods"><datalist id="ruleMods"></datalist></label>
@@ -584,11 +635,12 @@
           <div id="ruleSelected" class="selected-target">${escapeHtml(current.selector || "Nothing selected yet")}</div>
         </div></section>
         <section class="modal-section"><h3>When is this rule active?</h3><div class="modal-grid">
+          <label id="ruleConditionTargetLabel">Condition target<input id="ruleConditionTarget" list="ruleConditionTargets" value="${escapeHtml(current.conditionTarget)}" placeholder="Chosen ID or KubeJS event"><datalist id="ruleConditionTargets"></datalist></label>
+          <label id="ruleCountLabel">Required amount<input id="ruleCount" type="number" min="1" value="${current.count || 1}"></label>
           <label>Activation<select id="ruleCondition">${conditionOptions(current.conditionType)}</select></label>
-          <label>Condition target<input id="ruleConditionTarget" list="ruleConditionTargets" value="${escapeHtml(current.conditionTarget)}" placeholder="Chosen ID or KubeJS event"><datalist id="ruleConditionTargets"></datalist></label>
-          <label>Required amount<input id="ruleCount" type="number" min="1" value="${current.count || 1}"></label>
           <label>Lifetime<select id="ruleLifetime"><option value="permanent">Permanent stage rule</option><option value="live">Only while condition is true</option><option value="duration">Timed after trigger</option><option value="session">For the current session</option><option value="latched">Stay active until reset</option><option value="schedule">Scheduled lifetime</option></select></label>
           <label class="wide-field">Duration or schedule<input id="ruleDuration" value="${escapeHtml(current.duration)}" placeholder="30s, 5m, or a schedule value"></label>
+          <div id="ruleConditionHelp" class="condition-help"></div>
         </div></section>
         <section class="modal-section"><h3>Recipe viewer and exception</h3><div class="modal-grid">
           <label>JEI<select id="ruleJei">${viewerOptions(current.jei)}</select></label><label>EMI<select id="ruleEmi">${viewerOptions(current.emi)}</select></label>
@@ -601,10 +653,13 @@
       const action = $("ruleAction");
       const effect = $("ruleEffect");
       const mode = $("ruleMode");
-      effect.value = current.effect;
       mode.value = selectorMode(current.selector);
       $("ruleLifetime").value = current.temporary ? current.lifetime : "permanent";
       updateActionOptions(action, category.value, current.action);
+      updateEffectOptions(effect, category.value, current.effect);
+      const explain = () => updateRuleExplanation(category.value, action.value, effect.value,
+        Number($("rulePriority").value || 0), $("ruleCondition").value, $("ruleLifetime").value,
+        Number($("ruleExceptionPriority").value || 0));
       const refresh = debounce(async () => {
         try {
           const definition = CATEGORIES[category.value];
@@ -619,10 +674,21 @@
       }, 180);
       loadModNames("ruleMods");
       bindConditionAutocomplete("ruleCondition", "ruleConditionTarget", "ruleConditionTargets");
-      category.onchange = () => { updateActionOptions(action, category.value); selected.value = ""; $("ruleSelected").textContent = "Choose a new target"; refresh(); };
+      updateConditionHelp("ruleCondition", "ruleConditionTargetLabel", "ruleCountLabel", "ruleConditionHelp");
+      category.onchange = () => { updateActionOptions(action, category.value); updateEffectOptions(effect, category.value); selected.value = ""; $("ruleSelected").textContent = "Choose a new target"; explain(); refresh(); };
+      action.onchange = explain;
+      effect.onchange = explain;
+      $("rulePriority").oninput = explain;
+      $("ruleExceptionPriority").oninput = explain;
+      $("ruleLifetime").onchange = explain;
+      $("ruleCondition").addEventListener("change", () => {
+        updateConditionHelp("ruleCondition", "ruleConditionTargetLabel", "ruleCountLabel", "ruleConditionHelp");
+        explain();
+      });
       mode.onchange = refresh;
       $("ruleSearch").oninput = refresh;
       $("ruleMod").oninput = refresh;
+      explain();
       refresh();
       $("ruleForm").onsubmit = async event => {
         event.preventDefault();
@@ -760,22 +826,26 @@
     return { id, count: Math.max(1, Number(match?.[2] || 1)) };
   }
 
-  function openProgressionEditor(stage, entry) {
-    const current = entry || { kind: "grants", conditionType: "kill", conditionTarget: "", count: 1, repeat: "once", scope: "player", priority: 0, cooldown: "" };
-    openModal(`<h2 id="modalTitle">${entry ? "Edit progression" : "Add progression"}</h2><p>Choose what a player does and whether it grants or revokes this stage.</p><form id="progressionForm"><div class="modal-grid">
+  function openProgressionEditor(stage, entry, defaultKind = "grants") {
+    const current = entry || { kind: defaultKind, conditionType: defaultKind === "revokes" ? "death" : "kill", conditionTarget: "", count: 1, repeat: "once", scope: "player", priority: 0, cooldown: "" };
+    openModal(`<h2 id="modalTitle">${entry ? "Edit progression" : current.kind === "revokes" ? "Add a way to lose this stage" : "Add a way to obtain this stage"}</h2><p>Every grant and revoke uses the same detailed trigger library. Choose the event, optional target, required amount, progress owner, repeat policy, priority, and cooldown.</p><form id="progressionForm"><div class="modal-grid">
       <label>Result<select id="progressionKind"><option value="grants">Grant this stage</option><option value="revokes">Revoke this stage</option></select></label>
       <label>Trigger<select id="progressionCondition">${conditionOptions(current.conditionType, true)}</select></label>
-      <label class="wide-field">Target ID or event<input id="progressionTarget" list="progressionTargets" value="${escapeHtml(current.conditionTarget)}" placeholder="minecraft:wither or my_event"><datalist id="progressionTargets"></datalist></label>
-      <label>Required amount<input id="progressionCount" type="number" min="1" value="${current.count}"></label>
+      <label id="progressionTargetLabel" class="wide-field">Target ID or event<input id="progressionTarget" list="progressionTargets" value="${escapeHtml(current.conditionTarget)}" placeholder="minecraft:wither or my_event"><datalist id="progressionTargets"></datalist></label>
+      <label id="progressionCountLabel">Required amount<input id="progressionCount" type="number" min="1" value="${current.count}"></label>
       <label>Repeat policy<select id="progressionRepeat"><option value="once">Once</option><option value="edge">When it changes to true</option><option value="always">Every successful evaluation</option></select></label>
       <label>Who owns progress?<select id="progressionScope"><option value="player">Each player</option><option value="team">Whole team</option><option value="server">Whole server</option></select></label>
       <label>Priority<input id="progressionPriority" type="number" value="${current.priority}"></label>
       <label>Cooldown<input id="progressionCooldown" value="${escapeHtml(current.cooldown)}" placeholder="Optional. Example 30s"></label>
+      <div id="progressionConditionHelp" class="condition-help"></div>
     </div><div class="modal-actions"><button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">Save progression</button></div></form>`, () => {
       $("progressionKind").value = current.kind;
       $("progressionRepeat").value = current.repeat;
       $("progressionScope").value = current.scope;
       bindConditionAutocomplete("progressionCondition", "progressionTarget", "progressionTargets");
+      updateConditionHelp("progressionCondition", "progressionTargetLabel", "progressionCountLabel", "progressionConditionHelp");
+      $("progressionCondition").addEventListener("change", () => updateConditionHelp(
+        "progressionCondition", "progressionTargetLabel", "progressionCountLabel", "progressionConditionHelp"));
       $("progressionForm").onsubmit = async event => {
         event.preventDefault();
         const model = {
@@ -1250,9 +1320,8 @@
         graphPath(from.stage.key, to.stage.key, from.x + 89, from.y, to.x + 89, to.y + 52)).join("");
     $("graph").dataset.baseWidth = maxX;
     $("graph").dataset.baseHeight = maxY;
-    $("graph").style.width = `${maxX}px`;
-    $("graph").style.height = `${maxY}px`;
-    $("graph").innerHTML = `<svg class="graph-lines" viewBox="0 0 ${maxX} ${maxY}" preserveAspectRatio="none">${lines}</svg>` + nodes.map(node => `<button class="graph-node" data-graph-stage="${escapeHtml(node.stage.key)}" data-map-x="${node.mapX}" data-map-y="${node.mapY}" style="left:${node.x}px;top:${node.y}px" title="Drag to change this icon in the Minecraft progression UI. Click to edit the stage."><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button>`).join("");
+    $("graph").setAttribute("viewBox", `0 0 ${maxX} ${maxY}`);
+    $("graph").innerHTML = `<g class="graph-lines">${lines}</g>` + nodes.map(node => `<foreignObject class="graph-node-shell" data-graph-stage="${escapeHtml(node.stage.key)}" data-map-x="${node.mapX}" data-map-y="${node.mapY}" x="${node.x}" y="${node.y}" width="178" height="52" tabindex="0" role="button" aria-label="${escapeHtml(node.stage.name)}. ${escapeHtml(graphDependencyLabel(node))}. Drag to change its position or press enter to edit it."><button xmlns="http://www.w3.org/1999/xhtml" class="graph-node" type="button" tabindex="-1"><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button></foreignObject>`).join("");
     applyGraphScale();
     if ($("graphStatus")) $("graphStatus").textContent = `${nodes.length} stages shown. ${directIds.size < nodes.length ? `${nodes.length - directIds.size} prerequisite paths included. ` : ""}Dragging saves player map coordinates. Arrange and save stores every automatic position.`;
     qa("[data-graph-stage]", $("graph")).forEach(node => {
@@ -1264,6 +1333,11 @@
         selectStage(node.dataset.graphStage);
       };
       node.onpointerdown = event => dragGraphNode(event, node);
+      node.onkeydown = event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        selectStage(node.dataset.graphStage);
+      };
     });
   }
 
@@ -1277,10 +1351,10 @@
       const from = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === path.dataset.graphFrom);
       const to = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === path.dataset.graphTo);
       if (!from || !to) return;
-      const x1 = parseInt(from.style.left) + 89;
-      const y1 = parseInt(from.style.top);
-      const x2 = parseInt(to.style.left) + 89;
-      const y2 = parseInt(to.style.top) + 52;
+      const x1 = Number(from.getAttribute("x")) + 89;
+      const y1 = Number(from.getAttribute("y"));
+      const x2 = Number(to.getAttribute("x")) + 89;
+      const y2 = Number(to.getAttribute("y")) + 52;
       const middle = Math.round((y1 + y2) / 2);
       path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}`);
     });
@@ -1290,8 +1364,8 @@
     const viewport = $("graphViewport");
     const graph = $("graph");
     if (!viewport || !graph) return;
-    const width = Math.max(1, parseFloat(graph.style.width) || graph.scrollWidth);
-    const height = Math.max(1, parseFloat(graph.style.height) || graph.scrollHeight);
+    const width = Math.max(1, Number(graph.dataset.baseWidth) || 1);
+    const height = Math.max(1, Number(graph.dataset.baseHeight) || 1);
     const scale = Math.min(1, (viewport.clientWidth - 24) / width, (viewport.clientHeight - 24) / height);
     setGraphZoom(scale);
     viewport.scrollLeft = 0;
@@ -1306,18 +1380,52 @@
 
   function applyGraphScale() {
     const graph = $("graph");
-    const sizer = $("graphSizer");
-    const viewport = $("graphViewport");
-    if (!graph || !sizer || !viewport) return;
-    const width = Math.max(1, Number(graph.dataset.baseWidth) || parseFloat(graph.style.width) || 1);
-    const height = Math.max(1, Number(graph.dataset.baseHeight) || parseFloat(graph.style.height) || 1);
-    graph.style.transform = `scale(${state.graphZoom})`;
-    sizer.style.width = `${Math.max(viewport.clientWidth, Math.ceil(width * state.graphZoom))}px`;
-    sizer.style.height = `${Math.max(viewport.clientHeight, Math.ceil(height * state.graphZoom))}px`;
+    if (!graph) return;
+    const width = Math.max(1, Number(graph.dataset.baseWidth) || 1);
+    const height = Math.max(1, Number(graph.dataset.baseHeight) || 1);
+    graph.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    graph.setAttribute("width", Math.ceil(width * state.graphZoom));
+    graph.setAttribute("height", Math.ceil(height * state.graphZoom));
   }
 
   function changeGraphZoom(amount) {
     setGraphZoom(state.graphZoom + amount);
+  }
+
+  function bindGraphViewport() {
+    const viewport = $("graphViewport");
+    if (!viewport) return;
+    viewport.addEventListener("wheel", event => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const bounds = viewport.getBoundingClientRect();
+      const localX = event.clientX - bounds.left + viewport.scrollLeft;
+      const localY = event.clientY - bounds.top + viewport.scrollTop;
+      const oldZoom = state.graphZoom;
+      setGraphZoom(oldZoom + (event.deltaY < 0 ? 0.1 : -0.1));
+      const ratio = state.graphZoom / oldZoom;
+      viewport.scrollLeft = localX * ratio - (event.clientX - bounds.left);
+      viewport.scrollTop = localY * ratio - (event.clientY - bounds.top);
+    }, { passive: false });
+    viewport.onpointerdown = event => {
+      if (event.button !== 0 || event.target.closest?.("[data-graph-stage]")) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const left = viewport.scrollLeft;
+      const top = viewport.scrollTop;
+      viewport.setPointerCapture(event.pointerId);
+      viewport.onpointermove = move => {
+        viewport.scrollLeft = left - (move.clientX - startX);
+        viewport.scrollTop = top - (move.clientY - startY);
+      };
+      viewport.onpointerup = viewport.onpointercancel = finish => {
+        viewport.onpointermove = null;
+        viewport.onpointerup = null;
+        viewport.onpointercancel = null;
+        if (viewport.hasPointerCapture(finish.pointerId)) viewport.releasePointerCapture(finish.pointerId);
+      };
+    };
   }
 
   function graphDependencyLabel(node) {
@@ -1374,8 +1482,8 @@
     event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;
-    const left = parseInt(node.style.left);
-    const top = parseInt(node.style.top);
+    const left = Number(node.getAttribute("x"));
+    const top = Number(node.getAttribute("y"));
     const scale = state.graphZoom || 1;
     node.dataset.dragged = "false";
     node.setPointerCapture(event.pointerId);
@@ -1383,8 +1491,8 @@
       if (Math.abs(move.clientX - startX) >= 3 || Math.abs(move.clientY - startY) >= 3) {
         node.dataset.dragged = "true";
       }
-      node.style.left = Math.max(0, Math.round(left + (move.clientX - startX) / scale)) + "px";
-      node.style.top = Math.max(0, Math.round(top + (move.clientY - startY) / scale)) + "px";
+      node.setAttribute("x", Math.max(0, Math.round(left + (move.clientX - startX) / scale)));
+      node.setAttribute("y", Math.max(0, Math.round(top + (move.clientY - startY) / scale)));
       updateGraphConnections();
     };
     node.onpointerup = async move => {
@@ -1396,8 +1504,8 @@
       const stage = stagePackages().find(value => value.key === node.dataset.graphStage);
       if (!stage) return;
       let content = state.boot.draft.files[stage.stagePath] || "";
-      const mapX = Math.max(0, Math.round((parseInt(node.style.left) - GRAPH_PREVIEW_LEFT) / GRAPH_PREVIEW_X));
-      const mapY = Math.max(0, Math.round((parseInt(node.style.top) - GRAPH_PREVIEW_TOP) / GRAPH_PREVIEW_Y));
+      const mapX = Math.max(0, Math.round((Number(node.getAttribute("x")) - GRAPH_PREVIEW_LEFT) / GRAPH_PREVIEW_X));
+      const mapY = Math.max(0, Math.round((Number(node.getAttribute("y")) - GRAPH_PREVIEW_TOP) / GRAPH_PREVIEW_Y));
       content = upsertToml(content, "display.x", mapX);
       content = upsertToml(content, "display.y", mapY);
       try {
@@ -1411,8 +1519,8 @@
       node.onpointermove = null;
       node.onpointerup = null;
       node.onpointercancel = null;
-      node.style.left = `${left}px`;
-      node.style.top = `${top}px`;
+      node.setAttribute("x", left);
+      node.setAttribute("y", top);
       updateGraphConnections();
       if (node.hasPointerCapture(cancel.pointerId)) node.releasePointerCapture(cancel.pointerId);
     };
@@ -1750,7 +1858,7 @@
   async function review() {
     const review = await api({ action: "review" });
     const diff = review.diff.map(entry => `<div class="diff"><strong class="change-${entry.change}">${entry.change}</strong><span>${escapeHtml(entry.path)}</span><small>${entry.beforeBytes} → ${entry.afterBytes} bytes</small></div>`).join("");
-    openDrawer(`${validationHtml(review.validation)}<h3>Stage file changes</h3>${diff || "<p>No changes.</p>"}<div id="applyStatus" aria-live="polite"></div><div class="source-actions"><button id="confirmApply" class="primary" ${review.validation.valid ? "" : "disabled"}>Confirm and apply to server</button></div>`);
+    openDrawer(`${validationHtml(review.validation)}<h3>Stage file changes</h3>${diff || "<p>No changes.</p>"}<p class="muted">After a successful apply, every online operator receives this complete file list and the synchronization result in Minecraft chat.</p><div id="applyStatus" aria-live="polite"></div><div class="source-actions"><button id="confirmApply" class="primary" ${review.validation.valid ? "" : "disabled"}>Confirm and apply to server</button></div>`);
     q("#confirmApply")?.addEventListener("click", () => apply());
   }
 
@@ -1772,7 +1880,8 @@
       renderAll();
       toast("Applied and synchronized to every client");
       const rollback = result.transactionId ? `<button id="rollback">Rollback this transaction</button>` : "";
-      openDrawer(`<div class="validation-ok"><strong>Applied</strong><p>Server revision ${result.configurationRevision}.</p>${rollback}</div>`);
+      const appliedDiff = (result.diff || []).map(entry => `<div class="diff"><strong class="change-${entry.change}">${entry.change}</strong><span>${escapeHtml(entry.path)}</span><small>${entry.beforeBytes} → ${entry.afterBytes} bytes</small></div>`).join("");
+      openDrawer(`<div class="validation-ok"><strong>Applied and synchronized</strong><p>Server revision ${result.configurationRevision}. Every online operator received the complete change list and synchronization result in Minecraft chat.</p>${rollback}</div><h3>Applied file changes</h3>${appliedDiff || "<p>No file content changed. The live configuration was already current.</p>"}`);
       if (result.transactionId) {
         $("rollback").onclick = async () => {
           if (!confirm("Rollback this applied transaction")) return;
@@ -2049,7 +2158,67 @@
   }
 
   function updateActionOptions(select, category, selected) {
-    select.innerHTML = (CATEGORIES[category]?.actions || ["access"]).map(action => `<option ${action === selected ? "selected" : ""}>${action}</option>`).join("");
+    select.innerHTML = (CATEGORIES[category]?.actions || ["access"]).map(action => `<option value="${escapeHtml(action)}" ${action === selected ? "selected" : ""}>${escapeHtml(ACTION_LABELS[action] || title(action))}</option>`).join("");
+  }
+
+  function effectOptions(category) {
+    const structure = category === "structures";
+    const subject = structure ? "structure" : (CATEGORIES[category]?.label || "target").toLowerCase();
+    const values = [
+      ["lock", structure ? "Deny access to structure until this stage is owned" : `Deny ${subject} until this stage is owned`],
+      ["deny", structure ? "Deny access to structure while this rule is active" : `Deny ${subject} while this rule is active`],
+      ["allow", structure ? "Allow access to structure while this stage is owned" : `Allow ${subject} while this stage is owned`],
+      ["unlock", structure ? "Allow access to structure while this rule is active" : `Allow ${subject} while this rule is active`]
+    ];
+    if (["mobs", "ores"].includes(category)) values.push(["replace", "Replace the selected target"]);
+    if (["recipes", "advancements", "ores"].includes(category)) values.push(["present", "Only change how the target is shown"]);
+    return values;
+  }
+
+  function updateEffectOptions(select, category, selected) {
+    const values = effectOptions(category);
+    const choice = values.some(([value]) => value === selected) ? selected : values[0][0];
+    select.innerHTML = values.map(([value, label]) => `<option value="${value}" ${value === choice ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+  }
+
+  function updateRuleExplanation(category, action, effect, priority, condition, lifetime, exceptionPriority) {
+    const output = $("ruleExplanation");
+    if (!output) return;
+    const subject = CATEGORIES[category]?.label || title(category);
+    const actionText = ACTION_LABELS[action] || title(action);
+    const result = effectOptions(category).find(([value]) => value === effect)?.[1] || effectLabel(effect);
+    const ownership = ["lock", "deny"].includes(effect)
+      ? "A permanent deny protects the target before this stage is owned."
+      : "An allow participates after this stage is owned and can override a lower priority deny.";
+    const active = condition === "none" ? "There is no extra activation condition."
+      : `${conditionLabel(condition)} must match. ${conditionHelp(condition)}`;
+    const lifetimeText = lifetime === "permanent" ? "The decision follows normal stage ownership."
+      : `The decision uses the ${title(lifetime)} lifetime and is temporary.`;
+    const exception = exceptionPriority > priority
+      ? `The exception priority ${exceptionPriority} overrides this rule at priority ${priority}.`
+      : `Raise the exception above priority ${priority} if it must override this rule.`;
+    const structureHelp = category === "structures"
+      ? "Choose Inside an assigned structure, Enter an assigned structure, Leave an assigned structure, or Stay inside an assigned structure under activation when location timing should control the rule."
+      : "";
+    output.innerHTML = `<strong>${escapeHtml(subject)}. ${escapeHtml(actionText)}.</strong> ${escapeHtml(result)}. ${escapeHtml(ownership)} ${escapeHtml(active)} ${escapeHtml(lifetimeText)} ${escapeHtml(exception)} ${escapeHtml(structureHelp)}`;
+  }
+
+  function updateConditionHelp(selectId, targetLabelId, countLabelId, helpId) {
+    const select = $(selectId);
+    const targetLabel = $(targetLabelId);
+    const countLabel = $(countLabelId);
+    const help = $(helpId);
+    if (!select || !targetLabel || !countLabel || !help) return;
+    const definition = CONDITIONS.find(([id]) => id === select.value);
+    const needsTarget = Boolean(definition?.[2]);
+    targetLabel.classList.toggle("hidden", !needsTarget && !["kubejs", "script", "weather"].includes(select.value));
+    countLabel.classList.toggle("hidden", ["none", "stage_owned", "dimension", "biome", "structure", "weather", "effect", "boss_session", "combat_session", "region_session"].includes(select.value));
+    help.textContent = conditionHelp(select.value);
+  }
+
+  function conditionHelp(id) {
+    return CONDITIONS.find(([value]) => value === id)?.[3]
+      || "Choose the target and amount required. The editor validates the result before apply.";
   }
 
   function conditionLabel(id) {
@@ -2142,6 +2311,7 @@
   $("graphZoomIn").onclick = () => changeGraphZoom(0.1);
   $("graphCategory").onchange = () => { renderGraph(); requestAnimationFrame(fitGraphViewport); };
   $("graphSearch").oninput = debounce(() => { renderGraph(); requestAnimationFrame(fitGraphViewport); }, 180);
+  bindGraphViewport();
   $("theme").onclick = () => document.documentElement.classList.toggle("light");
   $("validate").onclick = () => validate().catch(error => toast(error.message));
   $("review").onclick = () => review().catch(error => toast(error.message));

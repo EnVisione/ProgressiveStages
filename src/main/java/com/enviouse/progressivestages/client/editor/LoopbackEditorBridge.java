@@ -68,6 +68,7 @@ public final class LoopbackEditorBridge {
             if (path.equals("/app.css")) { staticAsset(exchange, "app.css", "text/css; charset=utf-8"); return; }
             if (path.equals("/app.js")) { staticAsset(exchange, "app.js", "text/javascript; charset=utf-8"); return; }
             if (path.equals("/legacy.js")) { staticAsset(exchange, "legacy.js", "text/javascript; charset=utf-8"); return; }
+            if (path.equals("/favicon.svg") || path.equals("/favicon.ico")) { staticAsset(exchange, "favicon.svg", "image/svg+xml; charset=utf-8"); return; }
             if (path.equals("/api/request")) { api(exchange); return; }
             send(exchange, 404, "Not found", "text/plain; charset=utf-8");
         } catch (RuntimeException failure) {

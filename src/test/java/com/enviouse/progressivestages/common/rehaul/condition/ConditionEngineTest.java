@@ -76,6 +76,26 @@ class ConditionEngineTest {
         assertFalse(engine.evaluate(ResourceLocation.parse("test:latched"), latched, condition, reset, no).active());
     }
 
+    @Test
+    void playerAndStructureLifecycleConditionsUseRuntimeValues() {
+        ConditionNode playerKill = compiler.compile(Map.of("type", "player_kill", "count", 1));
+        ConditionNode otherPlayerDeath = compiler.compile(Map.of("type", "other_player_death", "count", 1));
+        ConditionNode structureTime = compiler.compile(Map.of("type", "structure_time",
+            "id", "minecraft:stronghold", "count", 30));
+        ConditionNode structureLeave = compiler.compile(Map.of("type", "leave_structure",
+            "id", "minecraft:stronghold", "count", 1));
+        ConditionContext context = context(100, Map.of(
+            "player_kill", 1D,
+            "other_player_death", 1D,
+            "structure_time.minecraft:stronghold", 35D,
+            "leave_structure.minecraft:stronghold", 1D));
+
+        assertTrue(evaluator.evaluate(playerKill, context).result().matched());
+        assertTrue(evaluator.evaluate(otherPlayerDeath, context).result().matched());
+        assertTrue(evaluator.evaluate(structureTime, context).result().matched());
+        assertTrue(evaluator.evaluate(structureLeave, context).result().matched());
+    }
+
     private static ConditionContext context(long now, Map<String, Object> values) {
         return new ConditionContext("player", SubjectScope.PLAYER, now, values, Set.of(), Map.of());
     }

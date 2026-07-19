@@ -368,6 +368,7 @@ public final class EditorSessionService {
         if (result.success()) {
             draft.acceptApplied(result.configurationRevision());
             persist(draft);
+            EditorApplyChat.broadcast(server, actor, result);
         }
         return result;
     }

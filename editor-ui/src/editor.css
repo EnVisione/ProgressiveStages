@@ -127,15 +127,14 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 9px; bac
 .dependency-option strong, .dependency-option small { display: block; }
 .dependency-option small { color: var(--muted); margin-top: 2px; }
 .dependency-visualizer { position: relative; min-height: 250px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: radial-gradient(circle, var(--line) 1px, transparent 1px); background-size: 22px 22px; }
-.lineage-canvas { position: relative; height: 250px; min-width: 100%; }
-.lineage-target, .lineage-source { position: absolute; z-index: 2; width: 180px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--panel); text-align: center; }
-.lineage-target { top: 10px; border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 6px 22px #0006; }
-.lineage-source { top: 185px; }
+.lineage-canvas { display: block; height: 250px; min-width: 100%; overflow: visible; }
+.lineage-target, .lineage-source { display: grid; place-content: center; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--panel); text-align: center; }
+.lineage-target { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 6px 22px #0006; }
 .lineage-target strong, .lineage-target small, .lineage-source strong, .lineage-source small { display: block; }
 .lineage-target small, .lineage-source small { color: var(--muted); margin-top: 2px; }
 .lineage-sources { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 94px; }
 .lineage-source { margin: 0; }
-.lineage-lines { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
+.lineage-lines { pointer-events: none; }
 .lineage-lines path { fill: none; stroke: var(--accent); stroke-width: 2.5; }
 .dependency-mode-help { grid-column: 1 / -1; padding: 9px 11px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--accent-soft); color: var(--muted); }
 
@@ -179,16 +178,20 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 9px; bac
 .graph-zoom output { min-width: 46px; color: var(--muted); font-size: 11px; text-align: center; }
 .graph-status { min-height: 22px; padding: 0 2px 8px; color: var(--muted); font-size: 12px; }
 .graph-viewport { width: 100%; height: calc(100vh - 245px); min-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: radial-gradient(circle, var(--line) 1px, transparent 1px); background-size: 24px 24px; }
-.graph-sizer { position: relative; min-width: 100%; min-height: 100%; }
-.graph { position: absolute; left: 0; top: 0; display: block; transform-origin: left top; }
-.graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 0; }
+.graph-sizer { min-width: 100%; min-height: 100%; }
+.graph { display: block; overflow: visible; }
+.graph-lines { pointer-events: none; }
 .graph-lines path { fill: none; stroke: color-mix(in srgb, var(--accent) 62%, var(--line)); stroke-width: 3; stroke-linecap: round; }
-.graph-node { position: absolute; display: flex; align-items: center; width: 178px; min-height: 52px; touch-action: none; cursor: grab; text-align: left; z-index: 1; user-select: none; }
+.graph-node-shell { overflow: visible; touch-action: none; cursor: grab; }
+.graph-node { display: flex; align-items: center; width: 100%; height: 100%; min-height: 52px; touch-action: none; cursor: grab; text-align: left; user-select: none; }
 .graph-node::before { content: "◆"; color: var(--accent); margin-right: 7px; }
 .graph-node:active { cursor: grabbing; }
 .graph-node span { min-width: 0; }
 .graph-node strong, .graph-node small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .graph-node small { color: var(--muted); margin-top: 2px; font-size: 10px; }
+.rule-explanation { grid-column: 1 / -1; padding: 11px 13px; border-left: 3px solid var(--accent); border-radius: 7px; background: var(--accent-soft); color: var(--muted); line-height: 1.5; }
+.rule-explanation strong { color: var(--text); }
+.condition-help { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.45; }
 
 .inspector-body { padding: 16px; overflow: auto; }
 .inspector-body h3 { margin-top: 0; }

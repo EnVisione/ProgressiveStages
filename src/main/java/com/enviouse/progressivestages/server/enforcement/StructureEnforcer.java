@@ -122,7 +122,8 @@ public final class StructureEnforcer {
                 Optional<StageId> missing = firstMissing(player,
                     aggregate.lockedEntry.getOrDefault(structureId, Set.of()));
                 ConditionalLockEngine.Decision conditional = ConditionalLockEngine.resolve(player,
-                    ConditionalRule.TargetType.STRUCTURE, structureId, null, missing.isPresent());
+                    ConditionalRule.TargetType.STRUCTURE, compiledAction(action), structureId, null,
+                    missing.isPresent());
                 boolean locked = conditional != null && conditional.effect() == ConditionalRule.Effect.LOCK;
                 if (!locked || !staticProtects(action, aggregate)) continue;
                 StageId display = conditional.ownerStage() != null
@@ -212,6 +213,18 @@ public final class StructureEnforcer {
         }
         return new EvaluationResult(true, StructureAccessDecision.Reason.NONE,
             null, null, null, null, candidate);
+    }
+
+    private static String compiledAction(StructureAction action) {
+        return switch (action) {
+            case ENTRY -> "enter";
+            case BLOCK_BREAK -> "break";
+            case BLOCK_PLACE -> "place";
+            case CONTAINER_OPEN -> "open_container";
+            case ITEM_USE -> "item_use";
+            case BLOCK_INTERACT -> "interact_block";
+            case ENTITY_INTERACT -> "interact_entity";
+        };
     }
 
     private static boolean staticProtects(StructureAction action,

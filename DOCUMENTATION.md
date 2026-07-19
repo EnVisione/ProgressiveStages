@@ -41,7 +41,7 @@
 2. [Core Concepts](#2-core-concepts)
 3. [Quick Start — Your First Stage in 90 Seconds](#3-quick-start--your-first-stage-in-90-seconds)
    - [3.1 How to use the complete legacy Diamond Stage reference](#31-how-to-use-the-complete-legacy-diamond-stage-reference)
-   - [3.2 No-code localhost stage editor](#32-no-code-localhost-stage-editor)
+   - [3.2 No code localhost stage editor](#32-no-code-localhost-stage-editor)
 4. [Stage Files — The Unified TOML Schema](#4-stage-files--the-unified-toml-schema)
    - [4.1 The Prefix System](#41-the-prefix-system)
    - [4.2 `[stage]` — identity + dependencies](#42-stage--identity--dependencies)
@@ -353,7 +353,7 @@ commented out, so they teach the syntax without activating dozens of unrelated r
 copy the relevant example into a small test stage first. This makes mistakes easy to identify and
 keeps an experimental rule from changing the production Diamond Age unexpectedly.
 
-### 3.2 No-code localhost stage editor
+### 3.2 No code localhost stage editor
 
 An operator at permission level 3 may run `/pstages editor` in an integrated single-player world
 or while connected to a dedicated server. The client opens a private loopback website. It does not
@@ -375,18 +375,31 @@ To create a stage without knowing TOML:
    explains each card's parents, prevents dependency cycles, and previews selected paths flowing
    upward into the stage being edited. Choose all selected paths for a hybrid class, any one path
    for alternatives, or an exact minimum for a quorum.
-6. Click `Add rule`. Choose a category. The action menu changes to the actions supported by that
-   category, and the search catalog changes to the matching registry. Entity rules cannot
-   accidentally choose an item, block rules cannot accidentally choose a fluid, and a mod filter
-   can reduce a large result set to one installed mod.
-7. Choose Exact ID, Whole mod, Tag, or Name match. Choose Lock, Deny, Allow, Unlock, Replace, or
-   viewer-only presentation. Set priority, JEI policy, EMI policy, and an optional exclusion.
-8. For a situational rule, choose a live, duration, session, latched, or scheduled lifetime and a
-   dimension, biome, structure, stage, mob, item, advancement, combat, boss, KubeJS, or other
-   listed activation condition.
-9. Click `Add progression` to make a condition grant or revoke the stage. Choose its count, repeat
-   policy, player/team/server scope, priority, and cooldown. The **How players obtain this stage**
-   section separately shows automatic gameplay, item purchase, and quest, command, or API paths.
+6. Click `Add rule`. Choose a category. The action menu changes to the actions the server can
+   actually enforce for that category, and the search catalog changes to the matching registry.
+   Entity rules cannot accidentally choose an item, block rules cannot accidentally choose a
+   fluid, and a mod filter can reduce a large result set to one installed mod. A structure rule
+   offers entry, block breaking, block placement, container access, item use, block interaction,
+   and entity interaction. Its result choices use plain phrases such as `Allow access to structure`
+   and `Deny access to structure`.
+7. Choose Exact ID, Whole mod, Tag, or Name match. Choose the result, then read the explanation that
+   the form generates below the choice. It explains stage ownership, the selected action, activation,
+   lifetime, priority, and exception precedence. A larger priority wins. An exception must normally
+   have a larger priority than the broad rule that it should override. JEI and EMI presentation can
+   be controlled independently.
+8. For a situational rule, choose a live, duration, session, latched, or scheduled lifetime. Choose
+   a dimension, biome, exact assigned structure, stage, mob, item, advancement, combat session,
+   boss session, damage event, player death, player defeat, KubeJS event, or another listed
+   activation condition. Structure choices include entering, leaving, being inside, and remaining
+   inside for a required number of seconds. The help text beside the condition explains whether a
+   target and amount are required.
+9. Use **How players obtain this stage** to add grants. Use **How players lose this stage** to add
+   revokes. Both sections use the same trigger library and ask for the amount, repeat policy, player,
+   team, or server scope, priority, and cooldown. `Player dies` means the stage owner dies.
+   `Another player dies` means any other online player dies, even when the stage owner is not the
+   killer. `Defeat another player` means the stage owner defeats another player. Structure entry,
+   structure exit, and time inside an exact assigned structure can grant or revoke a stage. The obtain section
+   also shows automatic gameplay, item purchase, and quest, command, or API paths.
    Choose **Set up purchase**, search the live item registry, click payment items, and set each
    amount plus optional XP, cooldown, refund, and trigger bypass. Use reward cards for items,
    effects, commands, teleportation, and XP granted after ownership changes.
@@ -395,13 +408,19 @@ To create a stage without knowing TOML:
     creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates 32-diamond purchase
     plus a Fortune-only double-diamond rule.
 11. Drag advanced rule cards to organize them. Open `Player UI layout`, filter by category, search
-    with prerequisite ancestry, zoom, fit the complete graph, or drag nodes to save their in-game
-    coordinates. Curved connectors follow at every zoom. Automatic layout puts beginner stages at
+    with prerequisite ancestry, zoom, fit the complete graph, or drag nodes to save their in game
+    coordinates. Drag empty graph space to pan. Scroll to move through a large graph. Hold Control
+    while scrolling to zoom around the mouse pointer. Curved connectors follow at every zoom.
+    Automatic layout puts beginner stages at
     the bottom, reduces crossings, and places evolutions above them. `Arrange and save` writes the
     complete crossing-reduced layout. `Use automatic layout` removes every manual position. The
     Stage details card also has `Edit player UI position` for exact X and Y values or a one-stage
     reset. The browser scales cards for editing but stores the compact coordinates Minecraft uses.
-12. Click `Check my work`. Then click `Review and apply`, inspect the file diff, and confirm.
+12. Click `Check my work`. Then click `Review and apply`, inspect every file in the diff, and confirm.
+    After the server validates, writes, reloads, and synchronizes the result, every online operator
+    receives the complete file change list in Minecraft chat. The final chat line confirms the live
+    configuration revision and transaction identifier. The browser keeps the same applied file list
+    visible so the operator can compare both reports.
 
 The easy builder writes the same schema that a TOML expert would write. There is no reduced
 runtime, separate simple-rule engine, or client-only shortcut. Priority, exclusions, temporary
@@ -424,6 +443,41 @@ dependency_count = 2
 Use `dependency_mode = "any"` when either selected path is sufficient. Use `at_least` with
 `dependency_count = 2` when two of three or more selected paths are required. The same choices are
 available in the visual builder without typing these fields.
+
+For example, this revoke removes the stage the first time its owner dies:
+
+```toml
+[[revokes]]
+id = "pack:mage/revoke_on_death"
+repeat = "once"
+scope = "player"
+priority = 100
+condition = { type = "death", count = 1 }
+```
+
+This revoke removes the stage when its owner defeats another player:
+
+```toml
+[[revokes]]
+id = "pack:mage/revoke_after_player_fight"
+repeat = "edge"
+scope = "player"
+priority = 100
+condition = { type = "player_kill", count = 1 }
+```
+
+This revoke removes the stage after the owner remains inside the assigned stronghold session for
+thirty seconds. Structure session conditions use the exact structure identity supplied by a
+compatible structure provider. They do not guess from a nearby structure chunk.
+
+```toml
+[[revokes]]
+id = "pack:mage/revoke_in_stronghold"
+repeat = "edge"
+scope = "player"
+priority = 100
+condition = { type = "structure_time", id = "minecraft:stronghold", count = 30 }
+```
 
 The source and Inspector tabs remain available. Source mode has one tab for each file in the
 selected stage package and preserves unknown extension fields. The Inspector lists Java and KubeJS

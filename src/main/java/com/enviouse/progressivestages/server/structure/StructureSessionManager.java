@@ -50,13 +50,15 @@ public final class StructureSessionManager {
 
     private static final class ParticipantState {
         private final long visitSequence;
+        private final long enteredAtGameTick;
         private UUID leaseOwner;
         private boolean inside = true;
         private long exitDeadline = -1L;
         private BlockPos lastPosition;
 
-        private ParticipantState(long visitSequence, BlockPos position, UUID leaseOwner) {
+        private ParticipantState(long visitSequence, long enteredAtGameTick, BlockPos position, UUID leaseOwner) {
             this.visitSequence = visitSequence;
+            this.enteredAtGameTick = enteredAtGameTick;
             this.lastPosition = position.immutable();
             this.leaseOwner = leaseOwner;
         }
@@ -214,7 +216,8 @@ public final class StructureSessionManager {
                 if (acquired.acquired()) {
                     runtime.visitSequence++;
                     runtime.participants.put(player.getUUID(),
-                        new ParticipantState(runtime.visitSequence, player.blockPosition(), acquired.owner()));
+                        new ParticipantState(runtime.visitSequence, player.level().getGameTime(),
+                            player.blockPosition(), acquired.owner()));
                 }
             }
         }
@@ -283,6 +286,19 @@ public final class StructureSessionManager {
         return viewsFor(player.getUUID());
     }
 
+    public Map<ResourceLocation, Long> activeStructureSeconds(ServerPlayer player) {
+        requireThread();
+        Map<ResourceLocation, Long> seconds = new LinkedHashMap<>();
+        long gameTime = player.level().getGameTime();
+        for (RuntimeSession runtime : sessions.values()) {
+            ParticipantState participant = runtime.participants.get(player.getUUID());
+            if (participant == null || !participant.inside) continue;
+            long elapsed = Math.max(0L, gameTime - participant.enteredAtGameTick) / 20L;
+            seconds.merge(runtime.spec.instance().structureId(), elapsed, Math::max);
+        }
+        return Map.copyOf(seconds);
+    }
+
     public Optional<StructureSessionView> activeSessionForStage(ServerPlayer player, StageId stage) {
         requireThread();
         for (RuntimeSession runtime : sessions.values()) {
@@ -319,7 +335,7 @@ public final class StructureSessionManager {
         if (!acquired.acquired()) return false;
         runtime.visitSequence++;
         ParticipantState participant = new ParticipantState(runtime.visitSequence,
-            player.blockPosition(), acquired.owner());
+            player.level().getGameTime(), player.blockPosition(), acquired.owner());
         runtime.participants.put(player.getUUID(), participant);
         NeoForge.EVENT_BUS.post(new StructureSessionEnterEvent(player,
             view(runtime, participant.visitSequence),

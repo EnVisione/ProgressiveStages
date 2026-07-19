@@ -126,12 +126,15 @@ public final class CompiledRuleEngine {
     private static boolean stageStateMatches(ServerPlayer player, CompiledRule rule) {
         boolean owned = StageManager.getInstance().hasStage(player, rule.ownerStage());
         String configured = String.valueOf(rule.settings().getOrDefault("stage_state", "")).toLowerCase(Locale.ROOT);
+        return stageStateMatches(owned, configured, rule.provenance().section(), rule.effect());
+    }
+
+    static boolean stageStateMatches(boolean owned, String configured, String source, RuleEffect effect) {
         if (configured.equals("always") || configured.equals("any")) return true;
         if (configured.equals("owned") || configured.equals("has")) return owned;
         if (configured.equals("missing") || configured.equals("lacks")) return !owned;
-        String source = rule.provenance().section();
-        if (source.contains("temporary") || source.equals("rules")) return owned;
-        return switch (rule.effect()) {
+        if (source.contains("temporary")) return owned;
+        return switch (effect) {
             case LOCK, DENY, EXCLUDE -> !owned;
             case UNLOCK, ALLOW, MODIFY, REPLACE, PRESENT -> owned;
         };

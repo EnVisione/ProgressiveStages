@@ -1,6 +1,8 @@
 package com.enviouse.progressivestages.server.rehaul;
 
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.api.structure.StructureSessionLeaveEvent;
+import com.enviouse.progressivestages.common.rehaul.condition.ConditionContext;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.rehaul.CompiledSnapshot;
 import com.enviouse.progressivestages.common.rehaul.action.ActionContext;
@@ -49,7 +51,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class RehaulRuntime {
 
     private static final RehaulRuntime INSTANCE = new RehaulRuntime();
-    private static final List<String> METRICS = List.of("death", "respawn", "health_gained", "health_lost",
+    private static final List<String> METRICS = List.of("death", "other_player_death", "respawn", "player_kill", "health_gained", "health_lost",
         "damage_taken", "raw_damage_taken", "damage_dealt", "raw_damage_dealt", "hits_taken", "hits_dealt");
 
     private final ConditionStateStore conditionStates = new ConditionStateStore();
@@ -243,8 +245,16 @@ public final class RehaulRuntime {
     }
 
     private void evaluate(ServerPlayer player, Set<String> dirty) {
+        evaluate(player, dirty, Map.of());
+    }
+
+    private void evaluate(ServerPlayer player, Set<String> dirty, Map<String, Object> additionalValues) {
         if (snapshot.revision() == 0) return;
-        var condition = MinecraftConditionContextFactory.create(player, this, dirty);
+        ConditionContext base = MinecraftConditionContextFactory.create(player, this, dirty);
+        Map<String, Object> values = new LinkedHashMap<>(base.values());
+        values.putAll(additionalValues);
+        var condition = new ConditionContext(base.subjectId(), base.scope(), base.nowMillis(), values,
+            base.dirtyKeys(), base.namedConditions());
         MinecraftActionSubject subject = new MinecraftActionSubject(player, this);
         ActionContext action = new ActionContext(subject, condition.nowMillis(), condition.values(), Map.of());
         lifecycle.evaluate(lifecycleRules, condition, action, dependencies);
@@ -309,11 +319,35 @@ public final class RehaulRuntime {
         if (event.getEntity() instanceof ServerPlayer player) {
             INSTANCE.record(player, "death", 1, now, Map.of("cause", event.getSource().getMsgId()));
             INSTANCE.evaluate(player, Set.of("death"));
+            for (ServerPlayer observer : player.server.getPlayerList().getPlayers()) {
+                if (observer == player) continue;
+                INSTANCE.record(observer, "other_player_death", 1, now,
+                    Map.of("player", player.getUUID().toString(), "cause", event.getSource().getMsgId()));
+                INSTANCE.evaluate(observer, Set.of("other_player_death"));
+            }
         }
         if (event.getSource().getEntity() instanceof ServerPlayer killer) {
             INSTANCE.markCombatSession(killer, event.getEntity(), now);
-            killer.server.execute(() -> INSTANCE.evaluate(killer, Set.of("kill", "boss_session")));
+            if (event.getEntity() instanceof ServerPlayer victim && victim != killer) {
+                INSTANCE.record(killer, "player_kill", 1, now,
+                    Map.of("victim", victim.getUUID().toString()));
+            }
+            killer.server.execute(() -> INSTANCE.evaluate(killer,
+                event.getEntity() instanceof ServerPlayer && event.getEntity() != killer
+                    ? Set.of("kill", "player_kill", "boss_session") : Set.of("kill", "boss_session")));
         }
+    }
+
+    @SubscribeEvent
+    public static void onStructureLeave(StructureSessionLeaveEvent event) {
+        String structure = event.getSession().instance().structureId().toString();
+        String outcome = event.getOutcome().name().toLowerCase(java.util.Locale.ROOT);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("leave_structure", 1D);
+        values.put("leave_structure." + structure, 1D);
+        values.put("structure_leave_outcome", 1D);
+        values.put("structure_leave_outcome." + outcome, 1D);
+        INSTANCE.evaluate(event.getPlayer(), Set.of("leave_structure", "structure_leave_outcome"), values);
     }
 
     @SubscribeEvent

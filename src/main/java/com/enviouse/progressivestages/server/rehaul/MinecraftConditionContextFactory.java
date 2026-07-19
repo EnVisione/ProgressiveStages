@@ -63,6 +63,12 @@ public final class MinecraftConditionContextFactory {
         }
         values.put("structures", structures);
         for (String structure : structures) values.put("structures." + structure, structures);
+        long longestStructureTime = 0L;
+        for (var entry : StructureSessionManager.getInstance().activeStructureSeconds(player).entrySet()) {
+            values.put("structure_time." + entry.getKey(), entry.getValue());
+            longestStructureTime = Math.max(longestStructureTime, entry.getValue());
+        }
+        values.put("structure_time", longestStructureTime);
         for (String objectiveName : player.getScoreboard().getObjectiveNames()) {
             var objective = player.getScoreboard().getObjective(objectiveName);
             var score = objective == null ? null : player.getScoreboard().getPlayerScoreInfo(player, objective);

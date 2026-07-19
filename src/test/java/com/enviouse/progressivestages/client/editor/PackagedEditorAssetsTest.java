@@ -15,6 +15,7 @@ class PackagedEditorAssetsTest {
         String css = resource("app.css");
         String script = resource("app.js");
         String controller = resource("legacy.js");
+        String favicon = resource("favicon.svg");
         assertTrue(script.contains("Easy builder"));
         assertTrue(script.contains("Create stage"));
         assertTrue(script.contains("Player UI layout"));
@@ -28,6 +29,8 @@ class PackagedEditorAssetsTest {
         assertTrue(script.contains("Registry"));
         assertTrue(script.contains("Review and apply"));
         assertTrue(html.contains("app.js"));
+        assertTrue(html.contains("favicon.svg"));
+        assertTrue(favicon.contains("<svg"));
         assertTrue(css.contains("prefers-reduced-motion"));
         assertTrue(controller.contains("Authorization"));
         assertTrue(controller.contains("catalog"));
@@ -65,8 +68,18 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("updateGraphConnections"));
         assertTrue(controller.contains("fitGraphViewport"));
         assertTrue(controller.contains("applyGraphScale"));
-        assertTrue(controller.contains("graph.style.transform"));
+        assertTrue(controller.contains("graph.setAttribute(\"viewBox\""));
+        assertTrue(controller.contains("foreignObject class=\"graph-node-shell\""));
+        assertFalse(controller.contains(".style."));
+        assertFalse(controller.contains("style=\""));
         assertTrue(controller.contains("Apply failed"));
+        assertTrue(controller.contains("How players lose this stage"));
+        assertTrue(controller.contains("Defeat another player"));
+        assertTrue(controller.contains("Another player dies"));
+        assertTrue(controller.contains("Stay inside an assigned structure"));
+        assertTrue(controller.contains("Allow access to structure"));
+        assertTrue(controller.contains("Deny access to structure"));
+        assertTrue(controller.contains("Every online operator received the complete change list"));
         assertTrue(controller.contains("stageIdentity"));
         assertFalse(controller.contains("style.zoom"));
         assertTrue(css.contains("#e3aa32"));
