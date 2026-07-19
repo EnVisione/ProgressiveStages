@@ -58,7 +58,7 @@ public class StageCommand {
             .then(Commands.literal("grant")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.argument("player", EntityArgument.player())
-                    .then(Commands.argument("stage", StringArgumentType.word())
+                    .then(Commands.argument("stage", StringArgumentType.greedyString())
                         .suggests(StageCommand::suggestStages)
                         .executes(StageCommand::grantStage))))
 
@@ -66,7 +66,7 @@ public class StageCommand {
             .then(Commands.literal("revoke")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.argument("player", EntityArgument.player())
-                    .then(Commands.argument("stage", StringArgumentType.word())
+                    .then(Commands.argument("stage", StringArgumentType.greedyString())
                         .suggests(StageCommand::suggestStages)
                         .executes(StageCommand::revokeStage))))
 
@@ -129,7 +129,7 @@ public class StageCommand {
             // v3.0: /stage new <id> — scaffold a stage TOML file
             .then(Commands.literal("new")
                 .requires(source -> source.hasPermission(3))
-                .then(Commands.argument("id", StringArgumentType.word())
+                .then(Commands.argument("id", StringArgumentType.greedyString())
                     .executes(StageCommand::newStage)))
 
             // v3.0: /stage export — write a markdown progression guide
@@ -146,13 +146,13 @@ public class StageCommand {
             // /stage check <player> <stage>
             .then(Commands.literal("check")
                 .then(Commands.argument("player", EntityArgument.player())
-                    .then(Commands.argument("stage", StringArgumentType.word())
+                    .then(Commands.argument("stage", StringArgumentType.greedyString())
                         .suggests(StageCommand::suggestStages)
                         .executes(StageCommand::checkStage))))
 
             // /stage info <stage>
             .then(Commands.literal("info")
-                .then(Commands.argument("stage", StringArgumentType.word())
+                .then(Commands.argument("stage", StringArgumentType.greedyString())
                     .suggests(StageCommand::suggestStages)
                     .executes(StageCommand::stageInfo)))
 
@@ -282,9 +282,9 @@ public class StageCommand {
                 .then(Commands.literal("scan").executes(StageCommand::migrationScan))
                 .then(Commands.literal("plan")
                     .executes(ctx -> migrationPlan(ctx, "all"))
-                    .then(Commands.argument("stage", StringArgumentType.word())
+                    .then(Commands.argument("stage", StringArgumentType.greedyString())
                         .suggests(StageCommand::suggestStages)
-                        .executes(ctx -> migrationPlan(ctx, StringArgumentType.getString(ctx, "stage")))))
+                        .executes(ctx -> migrationPlan(ctx, stageInput(ctx)))))
                 .then(Commands.literal("write")
                     .then(Commands.argument("stage", StringArgumentType.word())
                         .then(Commands.literal("confirm").executes(StageCommand::migrationWrite))))
@@ -296,18 +296,18 @@ public class StageCommand {
             .then(Commands.literal("package")
                 .then(Commands.literal("list").executes(StageCommand::packageList))
                 .then(Commands.literal("inspect")
-                    .then(Commands.argument("stage", StringArgumentType.word())
+                    .then(Commands.argument("stage", StringArgumentType.greedyString())
                         .suggests(StageCommand::suggestStages)
                         .executes(StageCommand::packageInspect)))
                 .then(Commands.literal("scaffold")
                     .requires(source -> source.hasPermission(3))
-                    .then(Commands.argument("id", StringArgumentType.word())
+                    .then(Commands.argument("id", StringArgumentType.greedyString())
                         .executes(StageCommand::newStage))))
 
             .then(Commands.literal("validate")
                 .requires(source -> source.hasPermission(3))
                 .executes(StageCommand::validateStages)
-                .then(Commands.argument("stage", StringArgumentType.word())
+                .then(Commands.argument("stage", StringArgumentType.greedyString())
                     .suggests(StageCommand::suggestStages)
                     .executes(StageCommand::validateSelectedStage)))
             .then(Commands.literal("reload")
@@ -419,7 +419,7 @@ public class StageCommand {
                 .requires(source -> source.hasPermission(3))
                 .then(Commands.literal("reset")
                     .then(Commands.argument("player", EntityArgument.player())
-                        .then(Commands.argument("stage", StringArgumentType.word())
+                        .then(Commands.argument("stage", StringArgumentType.greedyString())
                             .suggests(StageCommand::suggestStages)
                             .executes(StageCommand::resetTrigger)))))
 
@@ -548,7 +548,7 @@ public class StageCommand {
     }
 
     private static int migrationWrite(CommandContext<CommandSourceStack> context) {
-        String requested = StringArgumentType.getString(context, "stage");
+        String requested = stageInput(context);
         var service = migrations();
         int migrated = 0;
         for (var entry : service.scan()) {
@@ -594,7 +594,7 @@ public class StageCommand {
 
     private static int packageInspect(CommandContext<CommandSourceStack> context) {
         try {
-            StageId id = StageId.parse(StringArgumentType.getString(context, "stage"));
+            StageId id = StageId.parse(stageInput(context));
             var stage = StageFileLoader.getInstance().getCompiledSnapshot().stages().get(id);
             if (stage == null) { context.getSource().sendFailure(Component.literal("Stage was not found")); return 0; }
             context.getSource().sendSuccess(() -> Component.literal(stage.id() + ". " + stage.displayName()
@@ -622,7 +622,7 @@ public class StageCommand {
     }
 
     private static int lifecycleProgress(CommandContext<CommandSourceStack> context, ServerPlayer player) {
-        StageId stage = StageId.tryParse(StringArgumentType.getString(context, "stage"));
+        StageId stage = StageId.tryParse(stageInput(context));
         if (stage == null) { context.getSource().sendFailure(Component.literal("Invalid stage id")); return 0; }
         var values = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get()
             .lifecycleProgress(player, Set.of("manual"));
@@ -681,7 +681,7 @@ public class StageCommand {
     }
 
     private static int explainStage(CommandContext<CommandSourceStack> context, ServerPlayer player) {
-        StageId id = StageId.tryParse(StringArgumentType.getString(context, "stage"));
+        StageId id = StageId.tryParse(stageInput(context));
         var stage = id == null ? null : StageFileLoader.getInstance().getCompiledSnapshot().stages().get(id);
         if (stage == null) { context.getSource().sendFailure(Component.literal("Stage was not found")); return 0; }
         boolean owned = StageManager.getInstance().hasStage(player, id);
@@ -978,6 +978,10 @@ public class StageCommand {
      *
      * <p>This ensures suggestions always produce valid StageIds when selected.
      */
+    private static String stageInput(CommandContext<CommandSourceStack> context) {
+        return StringArgumentType.getString(context, "stage").trim();
+    }
+
     private static CompletableFuture<Suggestions> suggestStages(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase(java.util.Locale.ROOT);
 
@@ -1381,7 +1385,7 @@ public class StageCommand {
 
     private static int grantStage(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, "player");
-        String stageName = StringArgumentType.getString(context, "stage");
+        String stageName = stageInput(context);
         StageId stageId = StageId.tryParse(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {
@@ -1468,7 +1472,7 @@ public class StageCommand {
 
     private static int revokeStage(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, "player");
-        String stageName = StringArgumentType.getString(context, "stage");
+        String stageName = stageInput(context);
         StageId stageId = StageId.tryParse(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {
@@ -1545,7 +1549,7 @@ public class StageCommand {
 
     private static int checkStage(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, "player");
-        String stageName = StringArgumentType.getString(context, "stage");
+        String stageName = stageInput(context);
         StageId stageId = StageId.tryParse(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {
@@ -1566,7 +1570,7 @@ public class StageCommand {
     }
 
     private static int stageInfo(CommandContext<CommandSourceStack> context) {
-        String stageName = StringArgumentType.getString(context, "stage");
+        String stageName = stageInput(context);
         StageId stageId = StageId.tryParse(stageName);
 
         Optional<StageDefinition> defOpt = StageOrder.getInstance().getStageDefinition(stageId);
@@ -1845,7 +1849,7 @@ public class StageCommand {
     }
 
     private static int validateSelectedStage(CommandContext<CommandSourceStack> context) {
-        String requested = StringArgumentType.getString(context, "stage");
+        String requested = stageInput(context);
         if (requested.equalsIgnoreCase("all")) return validateStages(context);
         StageId id = StageId.tryParse(requested);
         if (id == null) { context.getSource().sendFailure(Component.literal("Invalid stage id")); return 0; }
@@ -1936,7 +1940,7 @@ public class StageCommand {
      */
     private static int resetTrigger(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, "player");
-        String stageName = StringArgumentType.getString(context, "stage");
+        String stageName = stageInput(context);
         StageId stageId = StageId.tryParse(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {
@@ -2050,7 +2054,7 @@ public class StageCommand {
      * (one-line summary per stage).
      */
     private static int showProgress(CommandContext<CommandSourceStack> context, ServerPlayer target) throws CommandSyntaxException {
-        String stageName = StringArgumentType.getString(context, "stage");
+        String stageName = stageInput(context);
         StageId stageId = StageId.tryParse(stageName);
 
         if (!StageOrder.getInstance().stageExists(stageId)) {

@@ -1248,13 +1248,21 @@
     const lines = nodes.flatMap(node => node.dependencies.map(id => byId[id]
       ? { from: byId[id], to: node } : null).filter(Boolean)).map(({ from, to }) =>
         graphPath(from.stage.key, to.stage.key, from.x + 89, from.y, to.x + 89, to.y + 52)).join("");
+    $("graph").dataset.baseWidth = maxX;
+    $("graph").dataset.baseHeight = maxY;
     $("graph").style.width = `${maxX}px`;
     $("graph").style.height = `${maxY}px`;
-    $("graph").style.zoom = state.graphZoom;
     $("graph").innerHTML = `<svg class="graph-lines" viewBox="0 0 ${maxX} ${maxY}" preserveAspectRatio="none">${lines}</svg>` + nodes.map(node => `<button class="graph-node" data-graph-stage="${escapeHtml(node.stage.key)}" data-map-x="${node.mapX}" data-map-y="${node.mapY}" style="left:${node.x}px;top:${node.y}px" title="Drag to change this icon in the Minecraft progression UI. Click to edit the stage."><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button>`).join("");
+    applyGraphScale();
     if ($("graphStatus")) $("graphStatus").textContent = `${nodes.length} stages shown. ${directIds.size < nodes.length ? `${nodes.length - directIds.size} prerequisite paths included. ` : ""}Dragging saves player map coordinates. Arrange and save stores every automatic position.`;
     qa("[data-graph-stage]", $("graph")).forEach(node => {
-      node.onclick = () => selectStage(node.dataset.graphStage);
+      node.onclick = () => {
+        if (node.dataset.dragged === "true") {
+          node.dataset.dragged = "false";
+          return;
+        }
+        selectStage(node.dataset.graphStage);
+      };
       node.onpointerdown = event => dragGraphNode(event, node);
     });
   }
@@ -1292,8 +1300,20 @@
 
   function setGraphZoom(value) {
     state.graphZoom = Math.max(0.2, Math.min(1.5, Math.round(value * 20) / 20));
-    if ($("graph")) $("graph").style.zoom = state.graphZoom;
+    applyGraphScale();
     if ($("graphZoomValue")) $("graphZoomValue").textContent = `${Math.round(state.graphZoom * 100)}%`;
+  }
+
+  function applyGraphScale() {
+    const graph = $("graph");
+    const sizer = $("graphSizer");
+    const viewport = $("graphViewport");
+    if (!graph || !sizer || !viewport) return;
+    const width = Math.max(1, Number(graph.dataset.baseWidth) || parseFloat(graph.style.width) || 1);
+    const height = Math.max(1, Number(graph.dataset.baseHeight) || parseFloat(graph.style.height) || 1);
+    graph.style.transform = `scale(${state.graphZoom})`;
+    sizer.style.width = `${Math.max(viewport.clientWidth, Math.ceil(width * state.graphZoom))}px`;
+    sizer.style.height = `${Math.max(viewport.clientHeight, Math.ceil(height * state.graphZoom))}px`;
   }
 
   function changeGraphZoom(amount) {
@@ -1351,13 +1371,18 @@
 
   function dragGraphNode(event, node) {
     if (event.button !== 0) return;
+    event.preventDefault();
     const startX = event.clientX;
     const startY = event.clientY;
     const left = parseInt(node.style.left);
     const top = parseInt(node.style.top);
     const scale = state.graphZoom || 1;
+    node.dataset.dragged = "false";
     node.setPointerCapture(event.pointerId);
     node.onpointermove = move => {
+      if (Math.abs(move.clientX - startX) >= 3 || Math.abs(move.clientY - startY) >= 3) {
+        node.dataset.dragged = "true";
+      }
       node.style.left = Math.max(0, Math.round(left + (move.clientX - startX) / scale)) + "px";
       node.style.top = Math.max(0, Math.round(top + (move.clientY - startY) / scale)) + "px";
       updateGraphConnections();
@@ -1365,15 +1390,31 @@
     node.onpointerup = async move => {
       node.onpointermove = null;
       node.onpointerup = null;
+      node.onpointercancel = null;
+      if (node.hasPointerCapture(move.pointerId)) node.releasePointerCapture(move.pointerId);
       if (Math.abs(move.clientX - startX) < 3 && Math.abs(move.clientY - startY) < 3) return;
       const stage = stagePackages().find(value => value.key === node.dataset.graphStage);
+      if (!stage) return;
       let content = state.boot.draft.files[stage.stagePath] || "";
       const mapX = Math.max(0, Math.round((parseInt(node.style.left) - GRAPH_PREVIEW_LEFT) / GRAPH_PREVIEW_X));
       const mapY = Math.max(0, Math.round((parseInt(node.style.top) - GRAPH_PREVIEW_TOP) / GRAPH_PREVIEW_Y));
       content = upsertToml(content, "display.x", mapX);
       content = upsertToml(content, "display.y", mapY);
-      await mutate(stage.stagePath, content);
-      toast(`Player UI position saved at X ${mapX} and Y ${mapY}`);
+      try {
+        await mutate(stage.stagePath, content);
+        toast(`Player UI position saved at X ${mapX} and Y ${mapY}`);
+      } catch (error) {
+        toast(`The player UI position was not saved. ${error.message}`);
+      }
+    };
+    node.onpointercancel = cancel => {
+      node.onpointermove = null;
+      node.onpointerup = null;
+      node.onpointercancel = null;
+      node.style.left = `${left}px`;
+      node.style.top = `${top}px`;
+      updateGraphConnections();
+      if (node.hasPointerCapture(cancel.pointerId)) node.releasePointerCapture(cancel.pointerId);
     };
   }
 
@@ -1419,33 +1460,29 @@
 
   async function createStage(event) {
     event.preventDefault();
-    const name = $("newStageName").value.trim();
-    const namespace = slug($("newStageNamespace").value) || "pack";
-    const path = slug(name);
-    if (!name || !path) return toast("Enter a stage name with at least one letter or number");
-    const id = `${namespace}:${path}`;
+    const identity = stageIdentity($("newStageName").value, $("newStageNamespace").value);
+    if (!identity.name || !identity.path) return toast("Enter a stage name with at least one letter or number");
     try {
-      const result = await api({ action: "scaffold", stage: id, revision: state.boot.draft.revision });
+      const result = await api({ action: "scaffold", stage: identity.id, revision: state.boot.draft.revision });
       state.boot.draft.revision = result.revision;
       state.boot.draft.files = result.files;
       state.boot.draft.diff = result.diff;
-      const created = stagePackages().find(stage => stage.id === id);
+      const created = stagePackages().find(stage => stage.id === identity.id);
       if (!created) throw new Error("The stage package was created but could not be selected");
       let content = state.boot.draft.files[created.stagePath];
-      content = upsertToml(content, "stage.display_name", name);
+      content = upsertToml(content, "stage.display_name", identity.name);
       content = upsertToml(content, "stage.icon", "minecraft:stone");
       await mutate(created.stagePath, content);
       $("newStagePanel").classList.add("hidden");
       $("newStageName").value = "";
       selectStage(created.key);
-      toast(`${name} was created. Add details and rules when you are ready.`);
+      toast(`${identity.name} was created as ${identity.id}. Add details and rules when you are ready.`);
     } catch (error) { toast(error.message); }
   }
 
   function updateNewStagePreview() {
-    const namespace = slug($("newStageNamespace").value) || "pack";
-    const stage = slug($("newStageName").value) || "new_stage";
-    $("newStagePreview").textContent = `Saved as ${namespace}:${stage}`;
+    const identity = stageIdentity($("newStageName").value || "new stage", $("newStageNamespace").value);
+    $("newStagePreview").textContent = `Saved as ${identity.id}`;
   }
 
   function currentFolder() {
@@ -1460,11 +1497,12 @@
   }
 
   function askForStageIdentity(titleText, defaultName, submitLabel, handler) {
-    openModal(`<h2 id="modalTitle">${escapeHtml(titleText)}</h2><p>Use a simple name. The pack namespace is added for you.</p><form id="identityForm"><div class="modal-grid"><label>Stage name<input id="identityName" value="${escapeHtml(defaultName)}" required></label><label>Pack name<input id="identityNamespace" value="${escapeHtml(selectedStage()?.id.split(":")[0] || "pack")}" required></label></div><div class="modal-actions"><button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">${escapeHtml(submitLabel)}</button></div></form>`, () => {
+    openModal(`<h2 id="modalTitle">${escapeHtml(titleText)}</h2><p>Choose any stage namespace. For example, namespace wizard can contain wizard:wizard and wizard:warlock. You may also type a complete ID in the stage name field.</p><form id="identityForm"><div class="modal-grid"><label>Stage name or complete ID<input id="identityName" value="${escapeHtml(defaultName)}" required></label><label>Stage namespace<input id="identityNamespace" value="${escapeHtml(selectedStage()?.id.split(":")[0] || "pack")}" required></label></div><div class="modal-actions"><button type="button" data-close-modal class="ghost">Cancel</button><button type="submit" class="primary">${escapeHtml(submitLabel)}</button></div></form>`, () => {
       $("identityForm").onsubmit = async event => {
         event.preventDefault();
-        const id = `${slug($("identityNamespace").value) || "pack"}:${slug($("identityName").value)}`;
-        try { await handler(id); closeModal(); } catch (error) { toast(error.message); }
+        const identity = stageIdentity($("identityName").value, $("identityNamespace").value);
+        if (!identity.path) return toast("Enter a valid stage name");
+        try { await handler(identity.id); closeModal(); } catch (error) { toast(error.message); }
       };
     });
   }
@@ -1712,20 +1750,46 @@
   async function review() {
     const review = await api({ action: "review" });
     const diff = review.diff.map(entry => `<div class="diff"><strong class="change-${entry.change}">${entry.change}</strong><span>${escapeHtml(entry.path)}</span><small>${entry.beforeBytes} → ${entry.afterBytes} bytes</small></div>`).join("");
-    openDrawer(`${validationHtml(review.validation)}<h3>Stage file changes</h3>${diff || "<p>No changes.</p>"}<div class="source-actions"><button id="confirmApply" class="primary" ${review.validation.valid ? "" : "disabled"}>Confirm and apply to server</button></div>`);
-    q("#confirmApply")?.addEventListener("click", apply);
+    openDrawer(`${validationHtml(review.validation)}<h3>Stage file changes</h3>${diff || "<p>No changes.</p>"}<div id="applyStatus" aria-live="polite"></div><div class="source-actions"><button id="confirmApply" class="primary" ${review.validation.valid ? "" : "disabled"}>Confirm and apply to server</button></div>`);
+    q("#confirmApply")?.addEventListener("click", () => apply());
   }
 
   async function apply() {
-    const result = await api({ action: "apply", confirmed: true });
-    if (!result.success) throw new Error(result.explanation);
-    toast("Applied and synchronized to every client");
-    openDrawer(`<div class="validation-ok"><strong>Applied</strong><p>Transaction ${escapeHtml(result.transactionId)}. Server revision ${result.configurationRevision}.</p><button id="rollback">Rollback this transaction</button></div>`);
-    $("rollback").onclick = async () => {
-      if (!confirm("Rollback this applied transaction")) return;
-      const back = await api({ action: "rollback", transaction: result.transactionId, confirmed: true });
-      toast(back.explanation);
-    };
+    const button = $("confirmApply");
+    const status = $("applyStatus");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Applying to the server";
+    }
+    if (status) status.innerHTML = `<div class="validation-ok"><strong>Applying</strong><p>The server is validating, reloading, and synchronizing every connected player. Large modpacks can take a little while.</p></div>`;
+    try {
+      const result = await api({ action: "apply", confirmed: true });
+      if (!result.success) throw new Error(result.explanation || "The server rejected the draft");
+      state.boot.session.baseConfigurationRevision = result.configurationRevision;
+      state.boot.draft.diff = [];
+      state.boot.draft.canUndo = false;
+      state.boot.draft.canRedo = false;
+      renderAll();
+      toast("Applied and synchronized to every client");
+      const rollback = result.transactionId ? `<button id="rollback">Rollback this transaction</button>` : "";
+      openDrawer(`<div class="validation-ok"><strong>Applied</strong><p>Server revision ${result.configurationRevision}.</p>${rollback}</div>`);
+      if (result.transactionId) {
+        $("rollback").onclick = async () => {
+          if (!confirm("Rollback this applied transaction")) return;
+          try {
+            const back = await api({ action: "rollback", transaction: result.transactionId, confirmed: true });
+            toast(back.explanation);
+          } catch (error) { toast(error.message); }
+        };
+      }
+    } catch (error) {
+      if (status) status.innerHTML = `<div class="validation-error"><strong>Apply failed</strong><p>${escapeHtml(error.message)}</p><p>Your draft is still safe. Correct the reported problem and try again.</p></div>`;
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Confirm and apply to server";
+      }
+      toast(`Apply failed. ${error.message}`);
+    }
   }
 
   function openDrawer(html) {
@@ -2008,6 +2072,16 @@
 
   function slug(value) {
     return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "");
+  }
+
+  function stageIdentity(nameValue, namespaceValue) {
+    const raw = String(nameValue || "").trim();
+    const separator = raw.indexOf(":");
+    const complete = separator > 0;
+    const namespace = slug(complete ? raw.slice(0, separator) : namespaceValue) || "pack";
+    const rawPath = complete ? raw.slice(separator + 1) : raw;
+    const path = slug(rawPath);
+    return { namespace, path, id: `${namespace}:${path}`, name: complete ? title(path) : raw };
   }
 
   function title(value) {

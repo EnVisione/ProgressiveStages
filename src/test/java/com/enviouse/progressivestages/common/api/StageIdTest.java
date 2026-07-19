@@ -13,6 +13,7 @@ class StageIdTest {
     void parsesNamespacedAndDefaultIdentifiers() {
         assertEquals("progressivestages:iron_age", StageId.parse("iron_age").toString());
         assertEquals("example:iron_age", StageId.parse("example:iron_age").toString());
+        assertEquals("wizard:warlock", StageId.parse("  wizard:warlock   ").toString());
     }
 
     @Test

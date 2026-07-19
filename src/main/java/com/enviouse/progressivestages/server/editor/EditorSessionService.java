@@ -363,7 +363,13 @@ public final class EditorSessionService {
 
     private EditorApplyResult apply(MinecraftServer server, UUID actor, EditorDraft draft, JsonObject request) {
         long current = StageFileLoader.getInstance().getCompiledSnapshot().revision();
-        return applyService.apply(server, actor, draft, current, bool(request, "confirmed", false));
+        EditorApplyResult result = applyService.apply(server, actor, draft, current,
+            bool(request, "confirmed", false));
+        if (result.success()) {
+            draft.acceptApplied(result.configurationRevision());
+            persist(draft);
+        }
+        return result;
     }
 
     private Session authorize(ServerPlayer operator, UUID sessionId, String secret) {
@@ -392,7 +398,7 @@ public final class EditorSessionService {
                 try (var paths = Files.walk(stages)) {
                     for (Path path : paths.filter(Files::isRegularFile)
                             .filter(path -> path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".toml"))
-                            .filter(path -> !path.toString().contains("/.migration-")).toList()) {
+                            .filter(path -> !EditorPaths.isMigrationPath(root, path)).toList()) {
                         files.put(root.relativize(path).toString().replace('\\', '/'), Files.readString(path));
                     }
                 }

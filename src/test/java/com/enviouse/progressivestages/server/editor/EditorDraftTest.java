@@ -37,6 +37,21 @@ class EditorDraftTest {
     }
 
     @Test
+    void appliedDraftBecomesTheNewCleanBase() {
+        UUID owner = UUID.randomUUID();
+        EditorDraft draft = new EditorDraft(UUID.randomUUID(), owner, 5, 8,
+            Map.of("stages/test/stage.toml", "old"));
+        draft.mutate(owner, 0, "stages/test/stage.toml", "new");
+
+        draft.acceptApplied(6);
+
+        assertEquals(6, draft.baseConfigurationRevision());
+        assertEquals("new", draft.baseFiles().get("stages/test/stage.toml"));
+        assertTrue(draft.diff().isEmpty());
+        assertTrue(!draft.canUndo());
+    }
+
+    @Test
     void validatesACompleteThreeFileDraft() {
         Map<String, String> files = Map.of(
             "stages/test/stage.toml", "[schema]\nversion = 4\n[stage]\nid = \"test:editor\"\ndisplay_name = \"Editor\"\n",

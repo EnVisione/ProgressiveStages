@@ -23,6 +23,8 @@ class PackagedEditorAssetsTest {
         assertTrue(script.contains("graphCategory"));
         assertTrue(script.contains("graphZoomOut"));
         assertTrue(script.contains("Fit graph"));
+        assertTrue(script.contains("graphSizer"));
+        assertTrue(script.contains("Stage namespace"));
         assertTrue(script.contains("Registry"));
         assertTrue(script.contains("Review and apply"));
         assertTrue(html.contains("app.js"));
@@ -62,6 +64,11 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("resetGraphLayout"));
         assertTrue(controller.contains("updateGraphConnections"));
         assertTrue(controller.contains("fitGraphViewport"));
+        assertTrue(controller.contains("applyGraphScale"));
+        assertTrue(controller.contains("graph.style.transform"));
+        assertTrue(controller.contains("Apply failed"));
+        assertTrue(controller.contains("stageIdentity"));
+        assertFalse(controller.contains("style.zoom"));
         assertTrue(css.contains("#e3aa32"));
         assertTrue(css.contains("#101114"));
         assertTrue(css.contains("dependency-visualizer"));

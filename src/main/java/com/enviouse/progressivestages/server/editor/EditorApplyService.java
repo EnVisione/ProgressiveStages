@@ -15,6 +15,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,9 +38,9 @@ final class EditorApplyService {
         List<DraftDiffEntry> diff = draft.diff();
         DraftValidation validation = EditorDraftValidator.validate(draft.files(), draft.revision());
         if (!validation.valid()) return result(false, "", currentRevision, diff, validation, "validation_failed", "The draft is invalid");
-        if (draft.baseConfigurationRevision() != currentRevision) {
+        if (draft.baseConfigurationRevision() != currentRevision && !liveFilesMatch(draft.baseFiles())) {
             return result(false, "", currentRevision, diff, validation, "configuration_conflict",
-                "The live configuration changed after this draft opened");
+                "The live configuration files changed after this draft opened");
         }
         if (diff.isEmpty()) return result(true, "", currentRevision, diff, validation, "no_changes", "The draft has no changes");
         if (!confirmed) return result(false, "", currentRevision, diff, validation, "confirmation_required", "Review and confirm the semantic diff before apply");
@@ -125,6 +126,28 @@ final class EditorApplyService {
                 if (old == null) Files.deleteIfExists(target);
                 else { Files.createDirectories(target.getParent()); Files.writeString(target, old); }
             } catch (IOException error) { throw new IllegalStateException("Could not restore " + entry.path(), error); }
+        }
+    }
+
+    boolean liveFilesMatch(Map<String, String> expected) {
+        Map<String, String> current = new LinkedHashMap<>();
+        try {
+            Path main = root.resolve("progressivestages.toml");
+            if (Files.isRegularFile(main)) current.put("progressivestages.toml", Files.readString(main));
+            Path stages = root.resolve("stages");
+            if (Files.isDirectory(stages)) {
+                try (var paths = Files.walk(stages)) {
+                    for (Path path : paths.filter(Files::isRegularFile)
+                            .filter(path -> path.getFileName().toString().toLowerCase(java.util.Locale.ROOT)
+                                .endsWith(".toml"))
+                            .filter(path -> !EditorPaths.isMigrationPath(root, path)).toList()) {
+                        current.put(root.relativize(path).toString().replace('\\', '/'), Files.readString(path));
+                    }
+                }
+            }
+            return current.equals(expected);
+        } catch (IOException error) {
+            return false;
         }
     }
 

@@ -13,9 +13,10 @@ function App() {
         <div class="panel-title"><div><span>Stages</span><small>Choose what players unlock</small></div><button id="newStage" class="icon-button" aria-label="Create a stage">＋</button></div>
         <form id="newStagePanel" class="new-stage-panel hidden">
           <strong>Create a stage</strong>
-          <label>Stage name<input id="newStageName" autocomplete="off" placeholder="Iron Age" required /></label>
-          <details><summary>Pack name</summary><label>Namespace<input id="newStageNamespace" value="pack" pattern="[a-z0-9_.-]+" /></label></details>
-          <small id="newStagePreview">Saved as pack:iron_age</small>
+          <label>Stage name<input id="newStageName" autocomplete="off" placeholder="Wizard" required /></label>
+          <label>Stage namespace<input id="newStageNamespace" value="pack" pattern="[a-z0-9_.-]+" /></label>
+          <small>Use the same namespace for one progression path. For example, namespace wizard creates wizard:wizard and wizard:warlock.</small>
+          <small id="newStagePreview">Saved as pack:wizard</small>
           <div class="inline-actions"><button type="button" id="cancelStage" class="ghost">Cancel</button><button type="submit" class="primary">Create stage</button></div>
         </form>
         <input id="fileSearch" type="search" placeholder="Search stages" aria-label="Search stages" />
@@ -38,7 +39,7 @@ function App() {
         <div class="tabs"><button data-view="form" class="active">Easy builder</button><button data-view="graph">Player UI layout</button><button data-view="source">TOML source</button></div>
         <div id="breadcrumb" class="breadcrumb"></div>
         <div id="formView" class="view"></div>
-        <div id="graphView" class="view hidden"><div class="graph-help"><div><strong>Player progression UI layout.</strong><span> Drag every icon exactly where it should appear in Minecraft. Beginner paths start at the bottom.</span></div><div class="graph-controls"><select id="graphCategory" aria-label="Graph category"><option value="">All categories</option></select><input id="graphSearch" placeholder="Find a stage" aria-label="Find a stage"/><span class="graph-zoom"><button id="graphZoomOut" class="ghost" aria-label="Zoom out">−</button><output id="graphZoomValue">100%</output><button id="graphZoomIn" class="ghost" aria-label="Zoom in">+</button></span><button id="fitGraph" class="ghost">Fit graph</button><button id="resetGraphLayout" class="ghost">Use automatic layout</button><button id="autoArrangeGraph" class="ghost">Arrange and save</button></div></div><div id="graphStatus" class="graph-status"></div><div id="graphViewport" class="graph-viewport"><div id="graph" class="graph"></div></div></div>
+        <div id="graphView" class="view hidden"><div class="graph-help"><div><strong>Player progression UI layout.</strong><span> Drag every icon exactly where it should appear in Minecraft. Beginner paths start at the bottom.</span></div><div class="graph-controls"><select id="graphCategory" aria-label="Graph category"><option value="">All categories</option></select><input id="graphSearch" placeholder="Find a stage" aria-label="Find a stage"/><span class="graph-zoom"><button id="graphZoomOut" class="ghost" aria-label="Zoom out">−</button><output id="graphZoomValue">100%</output><button id="graphZoomIn" class="ghost" aria-label="Zoom in">+</button></span><button id="fitGraph" class="ghost">Fit graph</button><button id="resetGraphLayout" class="ghost">Use automatic layout</button><button id="autoArrangeGraph" class="ghost">Arrange and save</button></div></div><div id="graphStatus" class="graph-status"></div><div id="graphViewport" class="graph-viewport"><div id="graphSizer" class="graph-sizer"><div id="graph" class="graph"></div></div></div></div>
         <div id="sourceView" class="view source-view hidden"><div id="sourceFiles" class="source-file-tabs"></div><textarea id="source" spellcheck={false} aria-label="TOML source"></textarea><div class="source-actions"><span id="dirty" class="muted"></span><button id="saveSource" class="primary">Save source to draft</button></div></div>
       </section>
       <aside class="inspector panel">

@@ -10,7 +10,7 @@ import java.util.UUID;
 public final class EditorDraft {
     private final UUID id;
     private final UUID owner;
-    private final long baseConfigurationRevision;
+    private long baseConfigurationRevision;
     private final long baseCatalogRevision;
     private final Map<String, String> baseFiles;
     private final Map<String, String> files;
@@ -26,7 +26,7 @@ public final class EditorDraft {
         this.owner = owner;
         this.baseConfigurationRevision = baseConfigurationRevision;
         this.baseCatalogRevision = baseCatalogRevision;
-        this.baseFiles = Map.copyOf(sourceFiles);
+        this.baseFiles = new LinkedHashMap<>(sourceFiles);
         this.files = new LinkedHashMap<>(sourceFiles);
         this.updatedAt = System.currentTimeMillis();
     }
@@ -101,7 +101,7 @@ public final class EditorDraft {
     }
 
     public synchronized Map<String, String> files() { return Map.copyOf(files); }
-    public synchronized Map<String, String> baseFiles() { return baseFiles; }
+    public synchronized Map<String, String> baseFiles() { return Map.copyOf(baseFiles); }
     public synchronized List<DraftOperation> operations() { return List.copyOf(operations.subList(0, cursor)); }
     public synchronized long revision() { return revision; }
     public UUID id() { return id; }
@@ -114,6 +114,15 @@ public final class EditorDraft {
     public synchronized Set<UUID> collaborators() { return Set.copyOf(collaborators); }
     public synchronized void addCollaborator(UUID actor, UUID collaborator) { authorizeOwner(actor); collaborators.add(collaborator); }
     public synchronized void removeCollaborator(UUID actor, UUID collaborator) { authorizeOwner(actor); collaborators.remove(collaborator); }
+
+    synchronized void acceptApplied(long configurationRevision) {
+        baseConfigurationRevision = configurationRevision;
+        baseFiles.clear();
+        baseFiles.putAll(files);
+        operations.clear();
+        cursor = 0;
+        updatedAt = System.currentTimeMillis();
+    }
 
     private void apply(DraftOperation operation, boolean forward) {
         String value = forward ? operation.after() : operation.before();

@@ -73,7 +73,6 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 9px; bac
 .stage-count { border-radius: 999px; padding: 3px 7px; background: var(--panel3); color: var(--muted); font-size: 11px; }
 .new-stage-panel { margin: 10px; padding: 13px; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-soft); animation: rise .18s ease; }
 .new-stage-panel label { display: grid; gap: 5px; margin-top: 10px; font-size: 12px; font-weight: 700; }
-.new-stage-panel details { margin-top: 8px; }
 .new-stage-panel summary, .stage-tools summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .new-stage-panel > small { display: block; margin-top: 8px; color: var(--muted); }
 .inline-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 11px; }
@@ -180,10 +179,11 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 9px; bac
 .graph-zoom output { min-width: 46px; color: var(--muted); font-size: 11px; text-align: center; }
 .graph-status { min-height: 22px; padding: 0 2px 8px; color: var(--muted); font-size: 12px; }
 .graph-viewport { width: 100%; height: calc(100vh - 245px); min-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: radial-gradient(circle, var(--line) 1px, transparent 1px); background-size: 24px 24px; }
-.graph { position: relative; display: block; min-width: 100%; min-height: 100%; }
-.graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+.graph-sizer { position: relative; min-width: 100%; min-height: 100%; }
+.graph { position: absolute; left: 0; top: 0; display: block; transform-origin: left top; }
+.graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 0; }
 .graph-lines path { fill: none; stroke: color-mix(in srgb, var(--accent) 62%, var(--line)); stroke-width: 3; stroke-linecap: round; }
-.graph-node { position: absolute; display: flex; align-items: center; width: 178px; min-height: 52px; touch-action: none; cursor: grab; text-align: left; }
+.graph-node { position: absolute; display: flex; align-items: center; width: 178px; min-height: 52px; touch-action: none; cursor: grab; text-align: left; z-index: 1; user-select: none; }
 .graph-node::before { content: "◆"; color: var(--accent); margin-right: 7px; }
 .graph-node:active { cursor: grabbing; }
 .graph-node span { min-width: 0; }
