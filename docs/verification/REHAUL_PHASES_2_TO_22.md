@@ -21,9 +21,9 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 | 15 | Immutable Java API plus KubeJS registrations, typed metadata, callbacks, catalogs, and capabilities | API and metadata codec tests in the complete suite |
 | 16 | Migration scan, plan, split, write, checksum, semantic verify, rollback, and path containment | `LegacyMigrationServiceTest` |
 | 17 | Revisioned permission-filtered compressed chunked client snapshot, safe deltas, exact base verification, decompression bounds, checksum, atomic activation, request, and acknowledgement | `ClientSnapshotAssemblerTest`, client cache tests |
-| 18 | Integrated and dedicated server operator authorization, expiring secrets, client loopback bridge, CSP, host and origin checks, limits, and cleanup | `EditorAvailabilityTest`, `PackagedEditorAssetsTest`, and bridge security inspection |
+| 18 | Integrated and dedicated server operator authorization, expiring secrets, client loopback bridge, CSP, loopback aware host and origin checks, browser header fallback, limits, and cleanup | `EditorAvailabilityTest`, `LoopbackRequestGuardTest`, `PackagedEditorAssetsTest`, and bridge security inspection |
 | 19 | Server drafts, revisions, undo, redo, recovery, collaboration, diff, validation, conflict, atomic apply, backup, audit, and rollback | `EditorDraftTest` and editor apply tests |
-| 20 | Packaged React and TypeScript stage studio, real mod logo, dark gray and gold design system, overview dashboard, focused stage tabs, contextual inspector, plain name creation, interchangeable namespaces, visual all, any, and minimum dependency policies, cycle prevention, slot limits, every rule category, prefixes, live registries, mod filters, JEI and EMI controls, priorities, exceptions, temporary conditions, grants, revokes, purchases, rewards, abilities, attributes, item modifiers, drop modifiers, challenges, variables, formulas, states, profiles, templates, optional source, settings, extensions, collaboration, simulation, movable and zoomable player layout, direct branch creation and removal, validation, review, apply, and rollback | `npm run check`, `npm test`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
+| 20 | Packaged React and TypeScript stage editor, real mod logo, restrained dark gray and gold design, one navigation bar, two column stage editing, focused stage tabs, plain name creation, interchangeable namespaces, visual all, any, and minimum dependency policies, cycle prevention, slot limits, every rule category, prefixes, live registries, mod filters, JEI and EMI controls, priorities, exceptions, temporary conditions, grants, revokes, purchases, rewards, abilities, attributes, item modifiers, drop modifiers, challenges, variables, formulas, states, profiles, templates, optional source, settings, extensions, collaboration, simulation, movable and zoomable player layout, direct branch creation and removal, validation, review, apply, and rollback | `npm run check`, `npm test`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
 | 21 | Advancement style player screen, centered upward automatic layout, author coordinates, panning, scroll, layering, background, triggers, why, readable pluralized purchase costs, live challenge HUD, effective held-item modifier and affinity preview, history, docs, and tested starter, Diamond, mage, knight, structure, End, Wither, migration, KubeJS, and Java examples | `StageTreeLayoutTest`, `NetworkCostSummaryTest`, UI regression tests, `RehaulExamplesTest`, `RehaulDocumentationTest` |
 | 22 | Restart saved data, dependency audit, fifty stage and one hundred fifty file first-launch showcase validation, stage slot runtime validation, full unit suite, clean build, and JAR inspection | `RehaulStateCodecTest`, `DefaultShowcaseStagesTest`, `StageSlotResolverTest`, and final evidence below |
 
@@ -43,8 +43,8 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 
 ### Java and dedicated server
 
-- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in fifteen seconds.
-- The clean suite ran 148 tests with zero failures, zero errors, and zero
+- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in twelve seconds.
+- The clean suite ran 150 tests with zero failures, zero errors, and zero
   skipped tests.
 - `DefaultShowcaseStagesTest` wrote all one hundred fifty generated files into an empty temporary
   stages directory, discovered fifty packages, parsed and compiled every package, validated the
@@ -56,8 +56,11 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
   `NetworkCostSummaryTest` verifies readable singular, plural, and uncountable payment names.
 - `StageSlotResolverTest`, `StageFileParserTest`, and `StageOrderTest` verify unlimited stacking,
   denial, oldest and priority replacement, schema parsing, and consistent group validation.
-- `PackagedEditorAssetsTest` verifies direct graph connection creation and removal controls, CSP
-  safe branch hit areas, and change only operator chat language. `EditorApplyChatTest` verifies
+- `LoopbackRequestGuardTest` verifies single player browser host aliases, absent and opaque origin headers,
+  both supported session headers, the active random port, remote origin rejection, remote host
+  rejection, and incorrect token rejection. `PackagedEditorAssetsTest` verifies the simple stage
+  first shell, direct graph connection creation and removal controls, CSP safe branch hit areas,
+  and change only operator chat language. `EditorApplyChatTest` verifies
   gold headings, green additions, yellow modifications, green synchronization results, and silence
   when no file changed. `AbilityEnforcerTest` verifies that jump, elytra, sprint, swim, and climb
   all remain in the authoritative enforcement set. `ClientAbilityStateTest` verifies normalized,
@@ -73,8 +76,8 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 ### Release artifact
 
 - Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,719,105 bytes.
-- SHA-256: `c6c24daa3f3c20ced3b16b738e33a14e28228a1cfa85f632730eebd71da904f5`.
+- Size: 1,716,314 bytes.
+- SHA-256: `229bf15fbd9e00e7ce62e25b350fbe095e314e9c4574991358cc3b8b931520b8`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
   logo, `assets/progressivestages/lang/en_us.json`, and all four production React editor assets.
 - The source logo SHA-256 is

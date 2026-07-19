@@ -13,8 +13,15 @@ export class EditorApiError extends Error {
 }
 
 function consumeSecret(): string {
-  const value = decodeURIComponent(window.location.hash.slice(1));
-  window.history.replaceState(null, "", window.location.pathname);
+  let value = "";
+  try {
+    value = decodeURIComponent(window.location.hash.slice(1));
+    if (value) window.sessionStorage.setItem("progressivestages.editor.secret", value);
+    else value = window.sessionStorage.getItem("progressivestages.editor.secret") || "";
+  } catch {
+    value = window.location.hash.slice(1);
+  }
+  if (window.location.hash) window.history.replaceState(null, "", window.location.pathname);
   return value;
 }
 
@@ -26,12 +33,15 @@ export class EditorApi {
   }
 
   async request<T>(payload: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+    if (!this.secret) throw new EditorApiError("missing_session",
+      "This tab does not have a Minecraft editor session. Close it, return to Minecraft, and open the editor again.", {});
     let response: Response;
     try {
       response = await fetch("/api/request", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.secret}`,
+          "X-ProgressiveStages-Token": this.secret,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(payload),
@@ -50,7 +60,10 @@ export class EditorApi {
     }
     if (!response.ok || data.error) {
       const code = String(data.error || `http_${response.status}`);
-      throw new EditorApiError(code, String(data.explanation || "The server rejected the request."), data);
+      const fallback = code === "forbidden"
+        ? "This editor tab could not prove that Minecraft opened it. Close this tab, return to Minecraft, and open the editor again."
+        : "The server rejected the request.";
+      throw new EditorApiError(code, String(data.explanation || fallback), data);
     }
     return data as T;
   }

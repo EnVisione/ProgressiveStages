@@ -23,7 +23,7 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 - **Using schema 4 or the localhost editor:** follow the
   [Schema 4 and Editor Rehaul Guide](REHAUL_GUIDE.md), including all thirty feature groups and
   machine-tested three-file examples. The editor works for permission level 3 operators in
-  single-player worlds and on dedicated servers. Its gold stage-first easy builder creates a stage
+  single-player worlds and on dedicated servers. Its simple stage first editor creates a stage
   from a normal name, searches the live modpack registries by category and mod, builds lock,
   allowance, priority, exception, temporary-condition, progression, reward, and cost cards, and
   keeps the three TOML files in an optional advanced source view. Required stages use a visual
@@ -172,7 +172,7 @@ schema 4 showcase now demonstrates the editor and class tree directly.
 2. Drop the jar into `mods/`.
 3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
 4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and fifty schema 4 showcase packages under `config/progressivestages/stages/` when that folder is empty.
-5. Run `/pstages editor` as a permission level 3 operator to open the local React stage studio. Use Overview, the guided stage workspace, the movable and zoomable Player layout, live Registry, schema generated Main settings, or Extensions without touching a file. Direct TOML remains available. Reload at runtime with `/pstages reload`.
+5. Run `/pstages editor` as a permission level 3 operator to open the local React stage editor. It opens directly on the stage list. Use the guided stage workspace, the movable and zoomable Player UI, Registry, Settings, or Extensions without touching a file. Direct TOML remains available under Source. Reload at runtime with `/pstages reload`.
 
 ---
 

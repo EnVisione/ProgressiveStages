@@ -1,4 +1,4 @@
-export type PageId = "overview" | "stages" | "layout" | "settings" | "registry" | "extensions";
+export type PageId = "stages" | "layout" | "settings" | "registry" | "extensions";
 export type StageTab = "essentials" | "rules" | "progression" | "effects" | "advanced" | "source";
 
 export interface DraftDiffEntry {

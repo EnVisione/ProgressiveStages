@@ -80,12 +80,12 @@ public final class LoopbackEditorBridge {
 
     private void api(HttpExchange exchange) throws IOException {
         if (!exchange.getRequestMethod().equals("POST")) { send(exchange, 405, "{\"error\":\"method\"}", "application/json"); return; }
-        String host = exchange.getRequestHeaders().getFirst("Host");
-        String expectedHost = "127.0.0.1:" + server.getAddress().getPort();
-        String requestOrigin = exchange.getRequestHeaders().getFirst("Origin");
-        String authorization = exchange.getRequestHeaders().getFirst("Authorization");
-        if (!expectedHost.equals(host) || !origin.equals(requestOrigin)
-                || !MessageSecrets.matches(authorization, open.secret())) {
+        if (!LoopbackRequestGuard.allows(
+                exchange.getRequestHeaders().getFirst("Host"),
+                exchange.getRequestHeaders().getFirst("Origin"),
+                exchange.getRequestHeaders().getFirst("Authorization"),
+                exchange.getRequestHeaders().getFirst("X-ProgressiveStages-Token"),
+                server.getAddress().getPort(), open.secret())) {
             send(exchange, 403, "{\"error\":\"forbidden\"}", "application/json");
             return;
         }
@@ -154,13 +154,5 @@ public final class LoopbackEditorBridge {
         exchange.getResponseHeaders().set("Content-Type", contentType);
         exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
-    }
-
-    private static final class MessageSecrets {
-        static boolean matches(String authorization, String secret) {
-            if (authorization == null || !authorization.startsWith("Bearer ")) return false;
-            return java.security.MessageDigest.isEqual(authorization.substring(7).getBytes(StandardCharsets.UTF_8),
-                secret.getBytes(StandardCharsets.UTF_8));
-        }
     }
 }

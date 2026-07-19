@@ -355,21 +355,22 @@ keeps an experimental rule from changing the production Diamond Age unexpectedly
 
 ### 3.2 No code localhost stage editor
 
-An operator at permission level 3 may run `/pstages editor` in an integrated single-player world
+An operator at permission level 3 may run `/pstages editor` in an integrated single player world
 or while connected to a dedicated server. The client opens a private loopback website. It does not
 expose a public server port, and no configuration is sent to a hosted editing service.
 
-The editor is a React application designed around complete tasks instead of config files. The
-header always shows the real mod logo, connection state, draft revision, live server revision,
-undo, redo, validation, and review controls. The first navigation column opens Overview, Stages,
-Player layout, Main settings, Registry, and Extensions. The stage library appears only while the
-Stages page is open, which leaves the other tools enough room to explain their purpose.
+The editor is a React application designed around complete tasks instead of config files. It opens
+directly on Stages. One small top bar contains the mod logo, five page choices, undo, redo, current
+save state, and Apply changes. The Stages page has only two columns. The left column selects a
+stage. The right column edits it. There is no dashboard, second navigation rail, permanent
+inspector, or decorative information panel competing with the form.
 
-Overview shows active stage, rule, trigger, and changed file totals. Stages opens one focused
-workspace with Essentials, Rules, Progression, Rewards and effects, Advanced, and TOML source tabs.
-Player layout edits both icon positions and dependency branches. Main settings is generated from
-the connected server schema. Registry searches installed content by type, mod, identifier, tag, or
-name. Extensions lists the Java and KubeJS capabilities advertised by the running server.
+The stage workspace has Setup, Rules, Progression, Rewards, Advanced, and Source tabs. Common work
+stays in the first four tabs. Advanced systems and direct TOML stay out of the way until the
+operator chooses them. Player UI edits both icon positions and dependency branches. Settings is
+generated from the connected server schema. Registry searches installed content by type, mod,
+identifier, tag, or name. Extensions lists the Java and KubeJS capabilities advertised by the
+running server.
 
 A schema 4 stage may use `stage.toml`, `rules.toml`, and `progression.toml` internally. Those
 filenames only appear in the optional `TOML source` tab and the final change review. The visual
@@ -377,13 +378,13 @@ forms preserve unknown sections and extension values.
 
 To create a stage without knowing TOML:
 
-1. Open Overview and click `Create a stage`, or open Stages and click `New` in the stage library.
+1. Open Stages and click `New` at the top of the stage list.
 2. Type `Iron Age` in `Stage name`. Do not type `pack:` and do not add `.toml`.
 3. Leave Namespace at `pack`, or change it to the modpack namespace. A namespace may be anything
    valid, such as `wizard`. This permits `wizard:wizard` and `wizard:warlock` without forcing a
    literal `pack` prefix.
 4. Confirm the preview, such as `pack:iron_age`, and click `Create stage`.
-5. Open Essentials. Fill out the stage name, description, icon, required stages, stage slots, team or server ownership, map
+5. Open Setup. Fill out the stage name, description, icon, required stages, stage slots, team or server ownership, map
    category, color, frame, reveal policy, advancement background, and optional player UI position.
    `Required stages` is a visual branch builder. It lists existing stages as selectable cards,
    explains each card's parents, prevents dependency cycles, and previews selected paths flowing
@@ -418,20 +419,20 @@ To create a stage without knowing TOML:
    Choose **Set up purchase**, search the live item registry, click payment items, and set each
    amount plus optional XP, cooldown, refund, and trigger bypass. Use reward cards for items,
    effects, commands, teleportation, and XP granted after ownership changes.
-10. Open Rewards and effects. Configure items, effects, commands, teleportation, and experience
+10. Open Rewards. Configure items, effects, commands, teleportation, and experience
     granted after ownership changes. Choose ability restrictions for jump, sprint, swim, climb,
     elytra, or abilities registered by an extension. Add a stage attribute or an item modifier that
     depends on item context, owned stages, missing stages, a condition, aggregation, stack limit,
     and priority. Choose **Add drop modifier** to select a broken block, final output item, optional tool,
     optional enchantment and level, owned stages, missing stages, condition, multiplier, addition,
     minimum, maximum, priority, and exclusive stacking. This
-    creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates 32-diamond purchase
-    plus a Fortune-only double-diamond rule.
+    creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates a purchase for 32
+    diamonds plus a Fortune only double diamond rule.
 11. Open Advanced for guided challenge, variable, formula, lifecycle state, affinity profile, and
     reusable template builders. A challenge can define start, success, and end conditions, retries,
     timeout, hit limit, measured budget, ordered step, and detailed HUD presentation. Registered
     Java and KubeJS data remains available through Extensions and the exact source tab.
-12. Open `Player layout`, filter by category, search, zoom, fit the complete graph, or drag nodes to
+12. Open `Player UI`, filter by category, search, zoom, fit the complete graph, or drag nodes to
     save their in game coordinates. Drag empty graph space to pan. Scroll to zoom around the mouse
     pointer. Curved connectors follow at every zoom.
     Click `Connect stages` to edit progression directly on the graph. Select the prerequisite stage
@@ -443,10 +444,11 @@ To create a stage without knowing TOML:
     available when a stage needs an `all`, `any`, or `at_least` dependency policy.
     Automatic layout puts beginner stages at
     the bottom, reduces crossings, and places evolutions above them. `Arrange and save` writes the
-    complete crossing-reduced layout. `Use automatic layout` removes every manual position. The
-    Stage details card also has `Edit player UI position` for exact X and Y values or a one-stage
+    complete layout with fewer crossing lines. `Use automatic layout` removes every manual position. The
+    Stage details card also has `Edit player UI position` for exact X and Y values or a one stage
     reset. The browser scales cards for editing but stores the compact coordinates Minecraft uses.
-13. Click `Check my work`. Then click `Review and apply`, inspect every file in the diff, and confirm.
+13. Click `Apply changes`. This action validates every stage before it opens the review. Inspect
+    every file in the diff, then confirm.
     After the server validates, writes, reloads, and synchronizes the result, every online operator
     receives the complete file change list in Minecraft chat. Added files appear in green. Modified
     files appear in yellow. Removed files appear in red. The heading appears in gold and the final
@@ -454,8 +456,23 @@ To create a stage without knowing TOML:
     these editor reports. If no file changed, nobody receives a chat message. The browser keeps the
     same applied file list visible so the operator can compare both reports.
 
+If the browser reports `403 Forbidden`, close that editor tab and open the editor from Minecraft
+again. Each tab belongs to one private editor session, so a tab from an older world or an earlier
+editor launch cannot be reused. Current versions accept the normal loopback header variations used
+by standalone browsers, integrated single player, and browser webviews, including webviews that
+send an absent or opaque origin. They still require the exact random session token, the current
+random port, and a loopback host. An explicit origin from a different site is rejected.
+The session stays in that tab while it is open, so refreshing the current page does not lose the
+token. Closing the tab removes its browser session copy.
+
+An error from `vendor.js` that mentions `tabs:outgoing.message.ready` is not emitted by the packaged
+ProgressiveStages editor. The editor JAR serves `app.js` and does not contain `vendor.js`. That
+message normally comes from a browser extension or browser supplied script. It may be ignored when
+the editor works. If it keeps interrupting the page, open the Minecraft supplied address in a
+browser profile with extensions disabled.
+
 The easy builder writes the same schema that a TOML expert would write. There is no reduced
-runtime, separate simple-rule engine, or client-only shortcut. Priority, exclusions, temporary
+runtime, separate simple rule engine, or client only shortcut. Priority, exclusions, temporary
 conditions, registry prefixes, viewer policy, server validation, transaction backup, reload, and
 client synchronization all use the normal authoritative implementation.
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Field, Section, Toggle } from "../components/ui";
+import { Button, Field, Section, Toggle } from "../components/ui";
 import { title } from "../lib/model";
 import { booleanValue, lineValues, parseSimpleArray, readTomlValue, stringValue, upsertToml } from "../lib/toml";
 import { useEditor } from "../store/EditorContext";
@@ -29,5 +29,5 @@ export function SettingsPage() {
   const { boot, validate } = useEditor();
   const schemas = boot?.schemas.filter(schema => schema.file === "progressivestages.toml") || [];
   const groups = useMemo(() => { const result = new Map<string, FieldSchema[]>(); for (const schema of schemas) { const group = schema.path.split(".")[0] || "general"; result.set(group, [...(result.get(group) || []), schema]); } return result; }, [schemas]);
-  return <div className="page-stack"><header className="page-heading"><div><span className="eyebrow">Global configuration</span><h1>Main settings</h1><p>Controls are generated from the running server schema. Nothing in this page is a guessed or hardcoded config list.</p></div><div><Badge tone="gold">{schemas.length} registered options</Badge><Button onClick={() => void validate()}>Validate configuration</Button></div></header>{[...groups.entries()].map(([group, fields]) => <Section key={group} title={title(group)} description="Server configuration options supplied by the current runtime schema."><div className="form-grid">{fields.map(schema => <SettingControl key={schema.id} schema={schema}/>)}</div></Section>)}</div>;
+  return <div className="page-stack"><header className="page-heading"><div><h1>Settings</h1><p>These options come from the connected server.</p></div><div><Button onClick={() => void validate()}>Validate settings</Button></div></header>{[...groups.entries()].map(([group, fields]) => <Section key={group} title={title(group)} description="Server configuration options supplied by the current runtime schema."><div className="form-grid">{fields.map(schema => <SettingControl key={schema.id} schema={schema}/>)}</div></Section>)}</div>;
 }

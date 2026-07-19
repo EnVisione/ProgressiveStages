@@ -63,7 +63,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   if (!apiRef.current) apiRef.current = new EditorApi();
   const api = apiRef.current;
   const [boot, setBoot] = useState<Bootstrap | null>(null);
-  const [page, setPageState] = useState<PageId>("overview");
+  const [page, setPageState] = useState<PageId>("stages");
   const [stageTab, setStageTab] = useState<StageTab>("essentials");
   const [selectedStageKey, setSelectedStageKey] = useState("");
   const [busy, setBusy] = useState("Connecting to Minecraft");

@@ -119,10 +119,9 @@ export const EFFECTS = [
 ];
 
 export const NAVIGATION = [
-  { id: "overview", label: "Overview", detail: "Draft health and recent work", icon: "home" },
-  { id: "stages", label: "Stages", detail: "Build progression and rules", icon: "stages" },
-  { id: "layout", label: "Player layout", detail: "Arrange and connect stages", icon: "layout" },
-  { id: "settings", label: "Main settings", detail: "Server configuration", icon: "settings" },
-  { id: "registry", label: "Registry", detail: "Search installed content", icon: "search" },
-  { id: "extensions", label: "Extensions", detail: "Java and KubeJS features", icon: "extensions" }
+  { id: "stages", label: "Stages", icon: "stages" },
+  { id: "layout", label: "Player UI", icon: "layout" },
+  { id: "settings", label: "Settings", icon: "settings" },
+  { id: "registry", label: "Registry", icon: "search" },
+  { id: "extensions", label: "Extensions", icon: "extensions" }
 ] as const;
