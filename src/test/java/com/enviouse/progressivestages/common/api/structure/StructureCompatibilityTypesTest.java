@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ChunkPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -36,6 +37,17 @@ class StructureCompatibilityTypesTest {
 
         assertEquals(id, StructureSessionId.parse(id.toString()));
         assertThrows(NullPointerException.class, () -> new StructureSessionId(null));
+    }
+
+    @Test
+    void generatedInstanceUsesTheCanonicalStartChunkPosition() {
+        ResourceKey<Level> dimension = ResourceKey.create(
+            net.minecraft.core.registries.Registries.DIMENSION,
+            ResourceLocation.parse("minecraft:overworld"));
+        StructureInstanceKey key = StructureInstanceKey.fromStartChunk(dimension,
+            ResourceLocation.parse("minecraft:stronghold"), new ChunkPos(3, -2));
+
+        assertEquals(new BlockPos(48, 0, -32), key.startPosition());
     }
 
     @Test

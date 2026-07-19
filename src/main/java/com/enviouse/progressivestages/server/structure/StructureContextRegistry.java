@@ -171,7 +171,8 @@ public final class StructureContextRegistry {
         if (provider == null) return Optional.empty();
         try {
             Optional<StructureSessionSpec> supplied = provider.session(sessionId);
-            return supplied.filter(spec -> providerId.equals(spec.providerId()));
+            return supplied.filter(spec -> providerId.equals(spec.providerId())
+                && sessionId.equals(spec.sessionId()));
         } catch (RuntimeException error) {
             logProviderError(providerId, "session lookup", error);
             return knownSessions.getOrDefault(providerId, Map.of()).values().stream()

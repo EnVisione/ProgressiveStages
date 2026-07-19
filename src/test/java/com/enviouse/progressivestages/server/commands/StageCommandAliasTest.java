@@ -34,6 +34,9 @@ class StageCommandAliasTest {
         assertTrue(source.contains("Commands.literal(\"sessions\")"));
         assertTrue(source.contains("Commands.literal(\"reconcile\")"));
         assertTrue(source.contains("Commands.literal(\"close\")"));
+        assertTrue(source.contains("session.instance().startPosition()"));
+        assertTrue(source.contains("session.bounds()"));
+        assertTrue(source.contains("session.participants().stream()"));
         assertTrue(source.contains("Commands.argument(\"stage\", StringArgumentType.greedyString())"));
     }
 

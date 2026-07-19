@@ -2209,6 +2209,13 @@ quest mods. A companion mod registers a `StructureContextProvider`; ProgressiveS
 only authority that grants or revokes stages, rejects actions, repels players, and commits enter,
 completion, or leave events. ProgressiveStages does not depend on the companion mod.
 
+Generated instances use the structure start chunk world position, with Y set to zero, as their
+stable start identity. When Minecraft reports a generated candidate, ProgressiveStages compares
+the complete dimension, structure registry ID, and start position before accepting a provider
+permit. It also consults providers even when an ordinary stage rule already denies access, then
+arbitrates both results so a permit cannot bypass the ordinary rule and a provider denial cannot
+be bypassed by owning the ordinary stage.
+
 Use ordinary `[structures]` for the broad access gate. Use an optional in-progress stage as a
 team-safe lease while the participant is inside the provider's exact bounds. Use `[active_locks]`
 when an owned in-progress stage should block item use only inside its matching session.
@@ -2996,7 +3003,7 @@ permission level 2; authoring/reload/validation operations require level 3.
 | `/pstages rule clear <player> <rule>` | Stop one active triggered rule. Requires permission 2. |
 | `/pstages rule clearall <player>` | Stop all active triggered rules. Requires permission 2. |
 | `/pstages structure providers` | List registered structure context providers and cached session counts. Requires permission 2. |
-| `/pstages structure sessions [player]` | Show exact instance, owner, stages, completion, visit, participants, and pending exit. Another player requires permission 2. |
+| `/pstages structure sessions [player]` | Show exact start and bounds, owner, scope, stages, availability, cleanup, visit, participants, and pending exit. Another player requires permission 2. |
 | `/pstages structure reconcile <player>` | Refresh provider data and repair session leases without a fake gameplay enter. Requires permission 2. |
 | `/pstages structure close <player> <session> <outcome> confirm` | Explicit operator recovery close. Requires permission 3 and a final confirmation literal. |
 

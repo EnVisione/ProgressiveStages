@@ -766,16 +766,27 @@ public class StageCommand {
             + player.getName().getString() + ". " + sessions.size()), false);
         for (var session : sessions) {
             String inProgress = session.inProgressStage().map(Object::toString).orElse("none");
+            var start = session.instance().startPosition();
+            var bounds = session.bounds();
+            String participantIds = session.participants().stream().map(UUID::toString)
+                .sorted().collect(java.util.stream.Collectors.joining(", "));
+            String participants = participantIds.isEmpty() ? "none" : participantIds;
             context.getSource().sendSuccess(() -> Component.literal(
                 session.sessionId() + ". Provider " + session.providerId()
                     + ". Instance " + session.instance().structureId()
                     + ". Dimension " + session.instance().dimension().location()
+                    + ". Start " + start.getX() + ", " + start.getY() + ", " + start.getZ()
+                    + ". Bounds " + bounds.minX() + ", " + bounds.minY() + ", " + bounds.minZ()
+                    + " to " + bounds.maxX() + ", " + bounds.maxY() + ", " + bounds.maxZ()
                     + ". Owner " + session.assignmentOwner()
+                    + ". Scope " + session.ownershipScope()
                     + ". Access " + session.accessStage()
                     + ". In progress " + inProgress
                     + ". Complete " + session.complete()
+                    + ". Availability " + session.availability()
+                    + ". Cleanup " + session.cleanupPolicy()
                     + ". Visit " + session.visitSequence()
-                    + ". Participants " + session.participants().size()
+                    + ". Participants " + session.participants().size() + ". Ids " + participants
                     + ". Exit pending " + session.exitPending()), false);
         }
         return sessions.size();

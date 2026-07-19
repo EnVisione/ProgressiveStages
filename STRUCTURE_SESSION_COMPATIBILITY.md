@@ -82,6 +82,17 @@ Do not create a new ID every time `sessionsFor` is called.
 
 Two Strongholds in the same dimension must have different instance keys.
 
+For a generated Minecraft structure, use the world position of the structure start chunk. Its Y
+coordinate is zero. ProgressiveStages uses the same value when it discovers a candidate through
+Minecraft, so the dimension, registry ID, and complete start position compare exactly. A bounding
+box corner is not a stable structure identity because different structure layouts can move that
+corner while retaining the same start chunk.
+
+```java
+StructureInstanceKey instance = StructureInstanceKey.fromStartChunk(
+    level.dimension(), structureId, structureStart.getChunkPos());
+```
+
 ### 4.2 Bounds
 
 `StructureBounds` stores normalized minimum and maximum coordinates. Reversed constructor
@@ -149,6 +160,11 @@ may return an empty immutable list.
 `session` performs a direct lookup by stable session ID. It may return empty for a deleted or
 unknown session.
 
+ProgressiveStages normally resolves a permitted session from the latest player session cache. If
+the session was created after that cache was built, it calls `session` as a direct fallback. The
+returned provider ID and session ID must both match the requested values. A mismatched result is
+rejected as closed instead of being attached to the wrong assignment.
+
 ### 5.1 Request actions
 
 `StructureAccessRequest.action` is one of:
@@ -163,6 +179,12 @@ unknown session.
 
 The request includes the player, server level, immutable block position, and an optional candidate
 structure instance found by the normal structure gate.
+
+When at least one provider is registered, ProgressiveStages can also discover the generated
+structure at the requested position even when no ordinary structure lock names it. Discovery
+checks Minecraft structure references and then confirms exact bounding box membership. This lets
+a provider recognize a managed structure from the candidate registry ID while leaving unclaimed
+positions available for `PASS`.
 
 ### 5.2 Three-way decisions
 
@@ -189,8 +211,14 @@ them for feedback, diagnostics, events, and safe repelling.
 
 ## 6. Arbitration rules
 
-ProgressiveStages applies normal static and conditional structure rules first, then asks every
-registered provider. Final behavior follows this table.
+ProgressiveStages applies normal static and conditional structure rules first, then asks registered
+providers in registration order. Evaluation stops when a provider denies because denial is already
+the final result. Final behavior follows this table.
+
+Calculating the static result does not end evaluation. Providers are still consulted when the
+static result is deny, which lets them report exact owner, instance, availability, and assignment
+diagnostics. Arbitration happens only after both results exist. A provider denial is preserved as
+the final reason, while a provider permit still cannot bypass the static denial.
 
 | Static result | Provider result | Final result |
 |---|---|---|
@@ -202,6 +230,13 @@ registered provider. Final behavior follows this table.
 | Deny | `DENY` | Deny. |
 
 Any provider denial wins. One provider permit cannot erase another provider denial.
+
+Before accepting `PERMIT`, ProgressiveStages resolves the referenced session and independently
+checks the effective owner, current dimension, exact bounds, availability, and access stage. When
+Minecraft reports a generated candidate for the session structure, ProgressiveStages also compares
+the full instance key, including the stable start position. Matching only the dimension and
+structure registry ID is not sufficient for a generated candidate. A provider can still represent
+a virtual arena that has exact saved bounds but no generated Minecraft structure candidate.
 
 If a provider throws while evaluating a position inside one of its cached known session bounds,
 ProgressiveStages returns `PROVIDER_ERROR` and denies the action. If it throws for a position it
@@ -559,8 +594,9 @@ another mod owns a shorter alias.
 
 `providers` lists the provider ID, implementation class, and cached session count.
 
-`sessions` lists provider, session ID, structure, dimension, owner, access stage, in-progress
-stage, completion, visit sequence, participant count, and pending-exit state.
+`sessions` lists provider, session ID, structure, dimension, stable start coordinates, exact bounds,
+owner, ownership scope, access stage, in progress stage, completion, availability, cleanup policy,
+visit sequence, participant UUIDs, and pending exit state.
 
 `reconcile` refreshes provider sessions and repairs participant leases without fabricating a
 gameplay enter event.

@@ -10,7 +10,6 @@ import com.enviouse.progressivestages.common.api.structure.StructureBounds;
 import com.enviouse.progressivestages.common.api.structure.StructureInstanceKey;
 import com.enviouse.progressivestages.common.api.structure.StructureSessionId;
 import com.enviouse.progressivestages.common.api.structure.StructureOwnershipScope;
-import com.enviouse.progressivestages.common.api.structure.StructureSessionAvailability;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
@@ -63,8 +62,9 @@ public final class StructureEnforcer {
                            double x, double y, double z) {}
     private record LookupKey(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
                              BlockPos position, ResourceLocation structureId, long tick) {}
+    private record LocatedStructure(StructureInstanceKey instance, StructureBounds bounds) {}
     private static final Map<UUID, SafePos> SAFE_POS = new ConcurrentHashMap<>();
-    private static final Map<LookupKey, Optional<StructureBounds>> LOOKUP_CACHE = new ConcurrentHashMap<>();
+    private static final Map<LookupKey, Optional<LocatedStructure>> LOOKUP_CACHE = new ConcurrentHashMap<>();
     private static final Map<String, Long> DENIAL_EVENT_TICKS = new ConcurrentHashMap<>();
     private static long lookupCacheTick = Long.MIN_VALUE;
 
@@ -108,16 +108,17 @@ public final class StructureEnforcer {
         Registry<Structure> registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
         EvaluationResult staticDenial = null;
         StructureInstanceKey candidate = null;
+        StructureBounds candidateBounds = null;
 
         if (StageConfig.isBlockStructureEntry()) {
             for (ResourceLocation structureId : candidateStructures(registry, aggregate)) {
                 Structure structure = registry.get(structureId);
                 if (structure == null) continue;
-                Optional<StructureBounds> foundBounds = cachedBounds(level, pos, structureId, structure);
-                if (foundBounds.isEmpty()) continue;
-                StructureBounds bounds = foundBounds.get();
-                candidate = new StructureInstanceKey(level.dimension(), structureId,
-                    new BlockPos(bounds.minX(), bounds.minY(), bounds.minZ()));
+                Optional<LocatedStructure> found = cachedStructure(level, pos, structureId, structure);
+                if (found.isEmpty()) continue;
+                StructureBounds bounds = found.get().bounds();
+                candidate = found.get().instance();
+                candidateBounds = bounds;
                 Optional<StageId> missing = firstMissing(player,
                     aggregate.lockedEntry.getOrDefault(structureId, Set.of()));
                 ConditionalLockEngine.Decision conditional = ConditionalLockEngine.resolve(player,
@@ -133,20 +134,31 @@ public final class StructureEnforcer {
             }
         }
 
+        if (candidate == null && StructureContextRegistry.getInstance().hasProviders()) {
+            Optional<LocatedStructure> discovered = discoverCandidate(level, pos, registry);
+            if (discovered.isPresent()) {
+                candidate = discovered.get().instance();
+                candidateBounds = discovered.get().bounds();
+            }
+        }
+
         StructureAccessRequest request = new StructureAccessRequest(player, level, pos, action,
             Optional.ofNullable(candidate));
-        if (staticDenial != null) {
-            StructureAccessDecision decision = StructureAccessDecision.deny(staticDenial.reason(),
-                staticDenial.displayStage(), null, staticDenial.bounds());
-            postDenied(request, decision, null);
-            return staticDenial;
-        }
         StructureContextRegistry.Evaluation provider = StructureContextRegistry.getInstance().evaluate(request);
         StructureAccessDecision.Result finalResult = StructureAccessArbitration.combine(
-            false, provider.decision().result());
-        if (finalResult == StructureAccessDecision.Result.DENY
-                && provider.decision().result() == StructureAccessDecision.Result.DENY) {
-            StructureAccessDecision decision = provider.decision();
+            staticDenial != null, provider.decision().result());
+        if (finalResult == StructureAccessDecision.Result.DENY) {
+            if (provider.decision().result() != StructureAccessDecision.Result.DENY) {
+                StructureAccessDecision decision = StructureAccessDecision.deny(staticDenial.reason(),
+                    staticDenial.displayStage(), null, staticDenial.bounds());
+                postDenied(request, decision, null);
+                return staticDenial;
+            }
+            StructureAccessDecision supplied = provider.decision();
+            StructureAccessDecision decision = StructureAccessDecision.deny(supplied.reason(),
+                supplied.displayStage().orElse(staticDenial == null ? null : staticDenial.displayStage()),
+                supplied.sessionId().orElse(null),
+                supplied.bounds().orElse(staticDenial == null ? candidateBounds : staticDenial.bounds()));
             EvaluationResult denied = new EvaluationResult(false, decision.reason(),
                 decision.displayStage().orElse(null), decision.bounds().orElse(null),
                 decision.sessionId().orElse(null), provider.providerId(), candidate);
@@ -155,43 +167,42 @@ public final class StructureEnforcer {
         }
         if (finalResult == StructureAccessDecision.Result.PERMIT) {
             var known = provider.decision().sessionId().flatMap(sessionId ->
-                StructureContextRegistry.getInstance().knownSession(player, provider.providerId(), sessionId));
+                StructureContextRegistry.getInstance().knownSession(player, provider.providerId(), sessionId)
+                    .or(() -> StructureContextRegistry.getInstance().session(provider.providerId(), sessionId)));
             if (known.isEmpty()) {
                 StructureAccessDecision deniedDecision = StructureAccessDecision.deny(
                     StructureAccessDecision.Reason.SESSION_CLOSED,
                     provider.decision().displayStage().orElse(null),
                     provider.decision().sessionId().orElse(null),
-                    provider.decision().bounds().orElse(null));
+                    provider.decision().bounds().orElse(candidateBounds));
                 postDenied(request, deniedDecision, provider.providerId());
                 return new EvaluationResult(false, StructureAccessDecision.Reason.SESSION_CLOSED,
                     provider.decision().displayStage().orElse(null),
-                    provider.decision().bounds().orElse(null),
+                    provider.decision().bounds().orElse(candidateBounds),
                     provider.decision().sessionId().orElse(null), provider.providerId(), candidate);
             }
             if (known.isPresent()) {
                 var spec = known.get();
                 UUID effectiveOwner = spec.ownershipScope() == StructureOwnershipScope.PLAYER
                     ? player.getUUID() : TeamProvider.getInstance().getTeamId(player);
-                StructureAccessDecision.Reason coreReason = null;
-                if (!effectiveOwner.equals(spec.assignmentOwner())) {
-                    coreReason = StructureAccessDecision.Reason.WRONG_OWNER;
-                } else if (!spec.instance().dimension().equals(level.dimension())
-                        || !spec.bounds().contains(pos)
-                        || request.candidateInstance().isPresent()
-                            && (!request.candidateInstance().get().dimension().equals(spec.instance().dimension())
-                                || !request.candidateInstance().get().structureId()
-                                    .equals(spec.instance().structureId()))) {
-                    coreReason = StructureAccessDecision.Reason.WRONG_INSTANCE;
-                } else if (spec.availability() != StructureSessionAvailability.AVAILABLE) {
-                    coreReason = StructureAccessDecision.Reason.UNAVAILABLE;
-                } else if (!StageManager.getInstance().hasStage(player, spec.accessStage())) {
-                    coreReason = StructureAccessDecision.Reason.MISSING_ACCESS_STAGE;
+                Optional<StructureInstanceKey> sessionCandidate = request.candidateInstance()
+                    .filter(instance -> instance.structureId().equals(spec.instance().structureId()));
+                if (sessionCandidate.isEmpty()) {
+                    Structure sessionStructure = registry.get(spec.instance().structureId());
+                    if (sessionStructure != null) {
+                        sessionCandidate = cachedStructure(level, pos, spec.instance().structureId(),
+                            sessionStructure).map(LocatedStructure::instance);
+                    }
                 }
-                if (coreReason != null) {
-                    StructureAccessDecision deniedDecision = StructureAccessDecision.deny(coreReason,
+                Optional<StructureAccessDecision.Reason> coreReason =
+                    StructureSessionAccessPolicy.validatePermit(effectiveOwner, level.dimension(), pos,
+                        sessionCandidate, spec,
+                        StageManager.getInstance().hasStage(player, spec.accessStage()));
+                if (coreReason.isPresent()) {
+                    StructureAccessDecision deniedDecision = StructureAccessDecision.deny(coreReason.get(),
                         spec.accessStage(), spec.sessionId(), spec.bounds());
                     postDenied(request, deniedDecision, provider.providerId());
-                    return new EvaluationResult(false, coreReason, spec.accessStage(), spec.bounds(),
+                    return new EvaluationResult(false, coreReason.get(), spec.accessStage(), spec.bounds(),
                         spec.sessionId(), provider.providerId(), spec.instance());
                 }
                 return new EvaluationResult(true, StructureAccessDecision.Reason.NONE,
@@ -309,9 +320,9 @@ public final class StructureEnforcer {
         return ids;
     }
 
-    private static Optional<StructureBounds> cachedBounds(ServerLevel level, BlockPos position,
-                                                          ResourceLocation structureId,
-                                                          Structure structure) {
+    private static Optional<LocatedStructure> cachedStructure(ServerLevel level, BlockPos position,
+                                                               ResourceLocation structureId,
+                                                               Structure structure) {
         long tick = level.getGameTime();
         if (lookupCacheTick != tick) {
             LOOKUP_CACHE.clear();
@@ -323,8 +334,25 @@ public final class StructureEnforcer {
             if (start == StructureStart.INVALID_START || !start.getBoundingBox().isInside(position)) {
                 return Optional.empty();
             }
-            return Optional.of(StructureBounds.of(start.getBoundingBox()));
+            StructureInstanceKey instance = StructureInstanceKey.fromStartChunk(
+                level.dimension(), structureId, start.getChunkPos());
+            return Optional.of(new LocatedStructure(instance, StructureBounds.of(start.getBoundingBox())));
         });
+    }
+
+    private static Optional<LocatedStructure> discoverCandidate(ServerLevel level, BlockPos position,
+                                                                 Registry<Structure> registry) {
+        return level.structureManager().getAllStructuresAt(position).keySet().stream()
+            .map(registry::getKey)
+            .filter(java.util.Objects::nonNull)
+            .sorted(java.util.Comparator.comparing(ResourceLocation::toString))
+            .map(id -> {
+                Structure structure = registry.get(id);
+                return structure == null ? Optional.<LocatedStructure>empty()
+                    : cachedStructure(level, position, id, structure);
+            })
+            .flatMap(Optional::stream)
+            .findFirst();
     }
 
     private static java.util.Optional<StageId> firstMissing(ServerPlayer player,
