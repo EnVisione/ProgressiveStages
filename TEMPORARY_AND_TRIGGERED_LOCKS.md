@@ -115,13 +115,18 @@ abilities = []
 
 Items, blocks, fluids, and entities accept the complete selector language:
 
+- `all:*` for every registered entry in that category.
 - `id:minecraft:bow` or `minecraft:bow` for one exact id.
 - `mod:examplemod` for a namespace.
 - `tag:mypack:weapons` or `#mypack:weapons` for a tag.
 - `name:sword` for ids containing a word.
 
-Recipes, dimensions, structures, and abilities accept `id:`, an exact id without the prefix,
-`mod:`, and `name:`. Tags are not accepted for those four categories.
+Recipes, dimensions, structures, and abilities accept `all:*`, `id:`, an exact id without the
+prefix, `mod:`, and `name:`. Tags are not accepted for those four categories.
+
+`all:*` never crosses category boundaries. In an entity target it means every registered entity.
+In a structure target it means every registered structure. Put narrower entries in the rule's
+`.except` table or create a higher priority allow rule to keep selected targets available.
 
 Supported ability ids are `jump`, `elytra`, `sprint`, `swim`, and `climb`.
 

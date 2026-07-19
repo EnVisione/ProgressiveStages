@@ -132,7 +132,7 @@ The stage workspace uses focused tabs.
 | Identity and display | Essentials | Cover all stage and display metadata, including exact map coordinates. |
 | Dependencies | Essentials and Player layout | Support `all`, `any`, and `at_least`, show ancestry, prevent loops, draw branches, and remove branches. |
 | Stage slots | Essentials | Cover group, limit, deny, oldest replacement, priority replacement, all replacement, and group application. |
-| Permanent rules | Rules | Cover every target category, selector prefix, action, result, priority, viewer policy, and exception. |
+| Permanent rules | Rules | Cover every target category, the `all:*`, exact ID, mod, tag, and name selectors, every action, result, priority, viewer policy, and exception. |
 | Temporary and triggered rules | Rules | Cover conditions, duration, session, schedule, latch, priority, exclusions, and conditional allow or deny behavior. |
 | Registry autocomplete | Rules and Registry | Query the correct server catalog, support mod filters, prefixes, pagination, and understandable labels. |
 | Grants and revokes | Progression | Use the complete condition library for both directions with target, count, repeat, scope, priority, and cooldown. |

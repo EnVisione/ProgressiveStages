@@ -18,8 +18,8 @@ challenge, equipment, and history panels.
 
 The editor is stage-first and designed for authors who have never written TOML. Type `Iron Age`,
 and it creates the namespaced three-file stage package behind one stage card. Guided rule cards ask
-what category to affect, what action to gate, whether to lock or allow, how to select an exact ID,
-whole mod, tag, or name, which mod to search, what priority wins, what exception applies, whether
+what category to affect, what action to gate, whether to lock or allow, how to select everything,
+an exact ID, a whole mod, a tag, or a name, which mod to search, what priority wins, what exception applies, whether
 JEI or EMI should show it, and which live or triggered condition activates it. The live server
 catalog only shows relevant items, blocks, entities, fluids, structures, professions, or other
 registry entries. Progression, rewards, costs, stage appearance, and dependency layout have guided
@@ -76,10 +76,10 @@ Each category can be enabled globally and customized inside individual stage fil
 - Crops. Gate planting, growth, bonemeal, and harvesting.
 - Dimensions. Stop portal and teleport travel with a post travel safety check.
 - Enchantments. Gate enchanting, anvils, trades, and existing enchanted gear. Optional maximum levels support partial progression.
-- Entities. Gate attacks and interactions.
+- Entities. Gate presence, attacks, interactions, and mounting. In mixed multiplayer, a denied mob is concealed from the affected player and becomes pacifist toward that player without removing it for allowed players.
 - Fine grained interactions. Gate item on block, item on entity, and block right click combinations.
 - Loot. Filter chest, fishing, archaeology, mob, block, and Lootr rolls.
-- Mob spawns. Cancel a locked spawn or replace it with another entity.
+- Mob spawns. Cancel a locked spawn when every player in simulation distance is denied it, conceal it per player when access is mixed, or replace it with another entity.
 - Pets. Gate taming, breeding, commanding, and riding.
 - Screens. Gate block menus and held item menus such as backpacks.
 - Villager trades and professions. Hide individual offers or block a profession's entire trading screen.
@@ -132,6 +132,7 @@ Lock lists share the same readable prefixes.
 
 | Entry | Meaning | Example |
 |---|---|---|
+| `all:*` | Every registered entry in the current category | `all:*` |
 | `id:` | One exact registry ID | `id:minecraft:diamond` |
 | no prefix | Shorthand for `id:` | `minecraft:diamond` |
 | `mod:` | An entire mod namespace | `mod:mekanism` |
@@ -146,6 +147,8 @@ Broad rules can keep exact exceptions:
 locked = ["mod:mekanism"]
 always_unlocked = ["mekanism:configurator"]
 ```
+
+`all:*` is category aware. Under items it means every registered item. Under structures it means every registered structure. Exceptions and higher priority allow rules can carve out the entries that should remain available.
 
 ---
 

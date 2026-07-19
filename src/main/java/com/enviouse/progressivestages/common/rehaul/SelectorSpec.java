@@ -18,6 +18,7 @@ public record SelectorSpec(
         String label,
         ConfigProvenance provenance) {
 
+    public static final ResourceLocation ALL = ResourceLocation.fromNamespaceAndPath("progressivestages", "all");
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("progressivestages", "id");
     public static final ResourceLocation MOD = ResourceLocation.fromNamespaceAndPath("progressivestages", "mod");
     public static final ResourceLocation TAG = ResourceLocation.fromNamespaceAndPath("progressivestages", "tag");
@@ -43,6 +44,7 @@ public record SelectorSpec(
     public static SelectorSpec fromPrefix(PrefixEntry prefix) {
         Objects.requireNonNull(prefix, "prefix");
         SelectorSpec parsed = switch (prefix.kind()) {
+            case ALL -> new SelectorSpec(ALL, prefix.raw(), "*", null);
             case ID -> new SelectorSpec(ID, prefix.raw(), prefix.value(), prefix.id());
             case MOD -> new SelectorSpec(MOD, prefix.raw(), prefix.value().toLowerCase(Locale.ROOT), null);
             case TAG -> new SelectorSpec(TAG, prefix.raw(), prefix.value(), prefix.id());
@@ -54,6 +56,7 @@ public record SelectorSpec(
 
     public boolean matchesIdOnly(ResourceLocation candidate) {
         if (candidate == null) return false;
+        if (matcherId.equals(ALL)) return true;
         if (matcherId.equals(ID)) return candidate.equals(resourceId);
         if (matcherId.equals(MOD)) return candidate.getNamespace().equalsIgnoreCase(value);
         if (matcherId.equals(NAME)) return candidate.toString().toLowerCase(Locale.ROOT).contains(value);

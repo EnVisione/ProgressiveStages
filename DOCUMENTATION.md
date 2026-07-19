@@ -396,7 +396,8 @@ To create a stage without knowing TOML:
    offers entry, block breaking, block placement, container access, item use, block interaction,
    and entity interaction. Its result choices use plain phrases such as `Allow access to structure`
    and `Deny access to structure`.
-7. Choose Exact ID, Whole mod, Tag, or Name match. Choose the result, then read the explanation that
+7. Choose Everything in this category, Exact ID, Whole mod, Tag, or Name match. Everything in this
+   category writes `all:*`, which matches every registered entry in the selected category. Choose the result, then read the explanation that
    the form generates below the choice. It explains stage ownership, the selected action, activation,
    lifetime, priority, and exception precedence. A larger priority wins. An exception must normally
    have a larger priority than the broad rule that it should override. JEI and EMI presentation can
@@ -523,11 +524,12 @@ browser prompt box, JSON object, inline TOML value, or direct file selection.
 ### 4.1 The Prefix System
 
 ProgressiveStages 3.0 uses a **unified prefix system** for every locked list.
-Instead of separate arrays for IDs / tags / mods (the 1.x design), every
-`locked = [...]` list accepts **four prefixes**:
+Instead of separate arrays for IDs, tags, and mods, every
+`locked = [...]` list accepts the same named selectors:
 
 | Prefix | Meaning | Example |
 |--------|---------|---------|
+| `all:*` | Every registered entry in the current category | `all:*` |
 | `id:<namespace:path>` | Exact registry ID match | `id:minecraft:diamond` |
 | *(no prefix)* | Implicit `id:` for `namespace:path` strings | `minecraft:diamond` |
 | `mod:<namespace>` | Every registry entry whose namespace equals this | `mod:ae2` |
@@ -555,9 +557,35 @@ least one stage gates it AND the player lacks every gating stage. The
 collapses all stage definitions into a single resolved map keyed by registry
 ID, with the set of stages that gate it.
 
+`all:*` is category aware. Under Items it means every registered item. Under Fluids it means every
+registered fluid. Under Structures it means every registered structure. It does not combine
+registries and it does not guess a content type. The rule category supplies that type.
+
+For schema 4 rules, add a parent linked exception with a higher priority when most content should
+be denied but selected content should remain available. This example denies every registered fluid
+until the stage is owned but leaves water available.
+
+```toml
+[[rules]]
+id = "pack:elemental_access/all_fluids"
+effect = "lock"
+action = "place"
+priority = 100
+targets.fluids = ["all:*"]
+
+[[rules.exceptions]]
+effect = "exclude"
+priority = 200
+targets.fluids = ["id:minecraft:water"]
+```
+
+The exception applies only to its parent rule. It does not remove an unrelated fluid rule from a
+different stage. A higher priority lock from another rule can still deny water. This preserves the
+normal priority model and makes broad rules safe to combine.
+
 The parser for prefix entries is
 [`PrefixEntry`](src/main/java/com/enviouse/progressivestages/common/lock/PrefixEntry.java) —
-inspect it for the exact parsing rules and the `Kind` enum (`ID`, `MOD`, `TAG`,
+inspect it for the exact parsing rules and the `Kind` enum (`ALL`, `ID`, `MOD`, `TAG`,
 `NAME`).
 
 ### 4.2 `[stage]` — identity + dependencies
@@ -851,7 +879,7 @@ locked enchant slip into the preview; the inventory-strip pass removes it
 within one tick of being applied. Players cannot keep a locked enchant, but
 they may briefly see one in the preview.
 
-### 4.10 `[entities]` — attack and interact gating
+### 4.10 `[entities]` — presence, attack, interaction, and mount gating
 
 ```toml
 [entities]
@@ -865,14 +893,73 @@ always_unlocked = [
 ]
 ```
 
-This category gates the player's **direct interaction** with specific entity
-types — primarily **attacking**. The entity still spawns, exists, can attack
-the player, etc., but the player's `AttackEntityEvent` is cancelled.
+The legacy `[entities].locked` list is a complete presence gate. When a player is denied an entity,
+that entity is not part of the player's accessible world. The server blocks attacks, both entity
+interaction paths, and mounting. The client does not render the entity and removes it from the
+normal crosshair target. A denied mob cannot select that player as a target, an existing target is
+cleared, and damage caused by that mob is cancelled for the denied player.
 
-To gate **spawning**, use `[mobs]` (§4.13) instead.
+If every relevant player near a new mob is denied it, the server cancels the spawn. Relevant means
+a living player who is not a spectator and whose chunk is inside the server simulation distance
+from the spawn chunk. If no relevant player exists, the spawn is allowed.
 
-The implementation is
-[`EntityEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/EntityEnforcer.java).
+Mixed multiplayer access is resolved separately for every player. Consider Alice, who owns an Anti
+Skeleton stage, and Bob, who does not. If Alice is denied skeleton presence but Bob is allowed,
+skeletons still spawn because Bob needs them. Alice does not see or target those skeletons. The
+skeletons do not target or damage Alice. Bob sees and fights the same server entities normally.
+One player's rule therefore never removes content that another nearby player is allowed to use.
+
+Schema 4 exposes separate actions so a pack can choose the exact strength of the rule.
+
+| Action | Result when denied |
+|--------|--------------------|
+| `presence` | Conceal the entity, block all direct access, make mobs pacifist toward the player, and participate in multiplayer spawn cancellation. |
+| `attack` | Block only attacks. The entity remains visible. |
+| `interact` | Block both normal and position specific entity interaction. The entity remains visible. |
+| `mount` | Block mounting. Dismounting is always allowed. |
+
+Use `deny` for an Anti Skeleton style stage that becomes restrictive when owned. Use `lock` for a
+normal progression gate that is restrictive while the stage is missing.
+
+```toml
+[[rules]]
+id = "pack:anti_skeleton/no_skeletons"
+effect = "deny"
+action = "presence"
+priority = 500
+targets.entities = ["id:minecraft:skeleton"]
+```
+
+The example activates while `pack:anti_skeleton` is owned. A normal stage gate uses
+`effect = "lock"` instead and activates while the stage is missing.
+
+The `all:*` selector and exceptions work for presence rules. This example hides every entity while
+the stage is owned except villagers and players. The exceptions have a larger priority than the
+parent denial.
+
+```toml
+[[rules]]
+id = "pack:empty_world/hide_everything"
+effect = "deny"
+action = "presence"
+priority = 100
+targets.entities = ["all:*"]
+
+[[rules.exceptions]]
+effect = "exclude"
+priority = 200
+targets.entities = ["id:minecraft:villager", "id:minecraft:player"]
+```
+
+Client concealment is synchronized from the authoritative server. Stage changes force an immediate
+update. Live and temporary conditions are checked again every ten ticks, and a packet is sent only
+when the resolved concealed type set changes. Future clients receive the same resolved state after
+joining.
+
+The implementations are
+[`EntityPresenceEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/EntityPresenceEnforcer.java),
+[`EntityEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/EntityEnforcer.java),
+and [`EntityRenderDispatcherMixin`](src/main/java/com/enviouse/progressivestages/mixin/client/EntityRenderDispatcherMixin.java).
 
 ### 4.11 `[[interactions]]` — fine-grained "X-on-Y" rules
 
@@ -943,8 +1030,8 @@ Sources covered automatically:
 2. `THIS_ENTITY` parameter — chest opener.
 3. Nearest player to `ORIGIN` within `enforcement.mob_spawn_check_radius`.
 
-If no player is in range at all, the loot passes through unchanged. This
-matches the nearest-player policy used by mob spawning.
+If no player is in range at all, the loot passes through unchanged. This nearest player lookup is
+specific to loot ownership and is not the multiplayer mob spawn policy described in section 4.13.
 
 The implementation:
 
@@ -975,16 +1062,23 @@ replace_with = "id:minecraft:zombie"
 
 Two independent surfaces:
 
-#### `locked_spawns` — block the mob entirely
+#### `locked_spawns` — resolve mob presence for nearby players
 
-Fires at `FinalizeSpawnEvent`. If the nearest player within
-`enforcement.mob_spawn_check_radius` lacks the gating stage, the spawn is
-cancelled. Covers natural spawns, spawners, spawn eggs, and most modded spawn
-paths (anything that goes through `Mob.finalizeSpawn`).
+ProgressiveStages checks `FinalizeSpawnEvent` and new mob additions through `EntityJoinLevelEvent`.
+This covers natural spawns, spawners, spawn eggs, commands, and modded direct add paths. Mobs loaded
+from saved chunk data are not deleted. The mod gathers every living player who is not a spectator
+inside the configured server simulation distance. It resolves the mob rule, stage ownership,
+priority, and exceptions separately for each player. The spawn is cancelled only when every one of
+those players is denied the mob.
 
 If **no player is in range**, the spawn is ALLOWED — nobody is there to see
-the mob, so there's no reason to suppress it. Increasing `mob_spawn_check_radius`
-makes the gate more aggressive (max 512 blocks).
+the mob, so there is no reason to suppress it. Mob spawn gating now follows the server simulation
+distance and does not use `enforcement.mob_spawn_check_radius`. That older radius remains available
+for loot, crop, fluid, replacement, and compatibility nearest player checks.
+
+If nearby players disagree, the spawn is allowed. Players who are denied that mob receive the same
+concealment, interaction protection, pacifist targeting, and damage protection described in section
+4.10. Players who are allowed the mob receive normal vanilla behavior.
 
 **Boss gating:** add `id:minecraft:wither` or `id:minecraft:ender_dragon` to
 `locked_spawns` — both fire `FinalizeSpawnEvent` so they're gated automatically.
@@ -1006,6 +1100,7 @@ despawn.
 
 The implementations:
 - [`MobSpawnEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/MobSpawnEnforcer.java)
+- [`EntityPresenceEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/EntityPresenceEnforcer.java)
 - [`MobReplacementEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/MobReplacementEnforcer.java)
 - [`NearestPlayerCheck`](src/main/java/com/enviouse/progressivestages/server/enforcement/NearestPlayerCheck.java)
 
@@ -2117,9 +2212,9 @@ structures = []
 abilities = []
 ```
 
-Items, blocks, fluids, and entities accept `id:`, implicit exact ids, `mod:`, `tag:` or `#`, and
-`name:`. Recipes, dimensions, structures, and abilities accept exact ids, `id:`, `mod:`, and
-`name:` but not tags. Ability ids enforced by the built-in engine are `jump`, `elytra`, `sprint`,
+Every target category accepts `all:*`. Items, blocks, fluids, and entities also accept `id:`,
+implicit exact ids, `mod:`, `tag:` or `#`, and `name:`. Recipes, dimensions, structures, and
+abilities accept exact ids, `id:`, `mod:`, and `name:` but not tags. Ability ids enforced by the built in engine are `jump`, `elytra`, `sprint`,
 `swim`, and `climb`.
 
 Conditional item and block decisions continue through the normal global toggles and the containing
@@ -2978,7 +3073,7 @@ that enforcement path for every stage, regardless of stage file content.
 | `block_interactions` | `true` | `[[interactions]]` entries |
 | `block_entity_attack` | `true` | `[entities]` attack gating |
 | `block_mob_spawns` | `true` | `[mobs].locked_spawns` gating |
-| `mob_spawn_check_radius` | `128` | Radius for the nearest-player check used by mob spawn + crop growth + loot drop |
+| `mob_spawn_check_radius` | `128` | Legacy nearest player radius used by crop, loot, fluid, replacement, and compatibility checks. Mob spawn cancellation uses server simulation distance. |
 | `block_enchants` | `true` | Enchantment-table + anvil + villager + inventory-strip |
 | `block_screen_open` | `true` | `[screens]` GUI gating |
 | `block_trades` | `true` | `[trades]` villager / wandering-trader trade gating (hide + server-side block) |
@@ -3983,7 +4078,7 @@ common/
     LockRegistry.java                ← collapsed stage-set per registry ID
     LockDefinition.java              ← all parsed locks from one stage file
     CategoryLocks.java               ← one category's locked + always_unlocked
-    PrefixEntry.java                 ← prefix parser (id:/mod:/tag:/name:)
+    PrefixEntry.java                 ← prefix parser (all:*/id:/mod:/tag:/name:)
   network/
     NetworkHandler.java              ← packet registration + send helpers
   compat/
@@ -4011,7 +4106,8 @@ server/
     CropEnforcer.java                ← planting, growth, bonemeal, harvest
     DimensionEnforcer.java           ← portal + teleport + tick safety net
     EnchantEnforcer.java             ← table + anvil + villager + inventory strip
-    EntityEnforcer.java              ← attack gating
+    EntityPresenceEnforcer.java      ← multiplayer spawn, concealment, pacifism, and damage gating
+    EntityEnforcer.java              ← attack, interaction, and mount gating
     FluidEnforcer.java               ← bucket, place, submersion debuff
     InteractionEnforcer.java         ← [[interactions]] X-on-Y rules
     InventoryScanner.java            ← periodic locked-item scan
@@ -4051,6 +4147,7 @@ client/
   ClientModBusEvents.java            ← mod bus client setup + "Open Progression Tree" keybind
   ClientStageCache.java              ← client-side stage state mirror
   ClientLockCache.java               ← client-side lock registry mirror
+  ClientEntityVisibility.java        ← server resolved concealed entity types
   ClientTriggerProgress.java         ← client mirror of live [[triggers]] progress (for GUI + tooltips)
   gui/StageTreeScreen.java           ← Stage Tree / Progression viewer (2.1)
   emi/ProgressiveStagesEMIPlugin.java

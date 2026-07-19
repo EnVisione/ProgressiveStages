@@ -14,6 +14,8 @@ class CompiledRuleEngineTest {
         assertFalse(CompiledRuleEngine.stageStateMatches(false, "", "temporary_rules", RuleEffect.LOCK));
         assertTrue(CompiledRuleEngine.stageStateMatches(true, "", "temporary_rules", RuleEffect.LOCK));
         assertTrue(CompiledRuleEngine.stageStateMatches(true, "", "rules", RuleEffect.ALLOW));
+        assertFalse(CompiledRuleEngine.stageStateMatches(false, "", "rules", RuleEffect.DENY));
+        assertTrue(CompiledRuleEngine.stageStateMatches(true, "", "rules", RuleEffect.DENY));
         assertTrue(CompiledRuleEngine.stageStateMatches(false, "always", "rules", RuleEffect.ALLOW));
     }
 }

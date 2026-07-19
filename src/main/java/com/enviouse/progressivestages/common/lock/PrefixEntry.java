@@ -18,6 +18,7 @@ import java.util.Objects;
  *   <li>{@code mod:ae2}              — every registry entry from a mod</li>
  *   <li>{@code tag:c:gems/diamond}   — every registry entry in a tag</li>
  *   <li>{@code name:diamond}         — case-insensitive substring of the full ID</li>
+ *   <li>{@code all:*}, every entry in the selected registry category</li>
  * </ul>
  *
  * <p>Parsed entries are immutable and cheap to carry. Matching is done per-registry via
@@ -27,6 +28,8 @@ import java.util.Objects;
 public final class PrefixEntry {
 
     public enum Kind {
+        /** every registry entry in the category. */
+        ALL,
         /** Exact registry ID match. */
         ID,
         /** Every registry entry whose namespace equals {@code value}. */
@@ -92,6 +95,10 @@ public final class PrefixEntry {
             String rest = trimmed.substring(colon + 1).trim();
 
             switch (prefix) {
+                case "all": {
+                    if (!rest.equals("*")) return null;
+                    return new PrefixEntry(Kind.ALL, source, "*", null);
+                }
                 case "id": {
                     ResourceLocation idLoc = tryParse(rest);
                     return idLoc == null ? null : new PrefixEntry(Kind.ID, source, rest, idLoc);
@@ -145,6 +152,8 @@ public final class PrefixEntry {
     public <T> boolean matches(ResourceLocation elementId, Holder<T> holder, ResourceKey<? extends net.minecraft.core.Registry<T>> registryKey) {
         if (elementId == null) return false;
         switch (kind) {
+            case ALL:
+                return true;
             case ID:
                 return elementId.equals(id);
             case MOD:
@@ -167,6 +176,7 @@ public final class PrefixEntry {
     public boolean matchesIdOnly(ResourceLocation elementId) {
         if (elementId == null) return false;
         return switch (kind) {
+            case ALL  -> true;
             case ID   -> elementId.equals(id);
             case MOD  -> elementId.getNamespace().equalsIgnoreCase(value);
             case NAME -> elementId.toString().toLowerCase(java.util.Locale.ROOT).contains(value);

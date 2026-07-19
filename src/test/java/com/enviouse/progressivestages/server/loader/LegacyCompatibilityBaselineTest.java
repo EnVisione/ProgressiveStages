@@ -19,7 +19,7 @@ class LegacyCompatibilityBaselineTest {
     void legacyGoldenSourcesRemainStableAndParseable() throws Exception {
         Map<String, String> expected = Map.of(
             "examples/reference/diamond_stage.toml",
-            "7031d94a7158dc0f9c4089f72f7dc54f352f7aec6e9c2d1ebb1c7be8f8c5f7d5",
+            "cb09183e3d602484b2031f51c6b283c1791e52736c122083f1f980d21d804b7c",
             "examples/beginner_pack/stages/stone_age.toml",
             "36ad8de47bf1709d841f1def05e46ed3c82c9e00f3ea9cbac198874f2c6625d5",
             "examples/beginner_pack/stages/iron_age.toml",

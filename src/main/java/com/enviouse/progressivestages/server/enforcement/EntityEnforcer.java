@@ -19,24 +19,39 @@ public class EntityEnforcer {
      * @return true if allowed, false if blocked
      */
     public static boolean canAttackEntity(ServerPlayer player, EntityType<?> entityType) {
+        if (player == null || entityType == null) return true;
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
+        if (EntityPresenceEnforcer.isPresenceDenied(player, entityType)) return false;
+
         LockRegistry reg = LockRegistry.getInstance();
         if (!StageConfig.isBlockEntityAttack() && !reg.hasEnforcementOverrides()
                 && !ConditionalLockEngine.hasRules(ConditionalRule.TargetType.ENTITY)) {
             return true;
         }
 
-        // Creative bypass
-        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) {
-            return true;
-        }
-
-        if (entityType == null) {
-            return true;
-        }
-
         // v2.3: per-stage override — enforce if ANY missing gating stage requires it (most-restrictive).
-        java.util.Set<StageId> restrictions = reg.restrictionStagesForEntity(player, entityType);
+        java.util.Set<StageId> restrictions = reg.restrictionStagesForEntity(player, entityType, "attack");
         return restrictions.isEmpty() || !reg.isCategoryEnforced(
+            restrictions, EnforcementCategory.ENTITY_ATTACK);
+    }
+
+    public static boolean canInteractEntity(ServerPlayer player, EntityType<?> entityType) {
+        if (player == null || entityType == null) return true;
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
+        if (EntityPresenceEnforcer.isPresenceDenied(player, entityType)) return false;
+        LockRegistry registry = LockRegistry.getInstance();
+        java.util.Set<StageId> restrictions = registry.restrictionStagesForEntity(player, entityType, "interact");
+        return restrictions.isEmpty() || !registry.isCategoryEnforced(
+            restrictions, EnforcementCategory.ENTITY_ATTACK);
+    }
+
+    public static boolean canMountEntity(ServerPlayer player, EntityType<?> entityType) {
+        if (player == null || entityType == null) return true;
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return true;
+        if (EntityPresenceEnforcer.isPresenceDenied(player, entityType)) return false;
+        LockRegistry registry = LockRegistry.getInstance();
+        java.util.Set<StageId> restrictions = registry.restrictionStagesForEntity(player, entityType, "mount");
+        return restrictions.isEmpty() || !registry.isCategoryEnforced(
             restrictions, EnforcementCategory.ENTITY_ATTACK);
     }
 
@@ -45,7 +60,7 @@ public class EntityEnforcer {
      * v2.0: multi-stage aware.
      */
     public static boolean isEntityLockedForPlayer(ServerPlayer player, EntityType<?> entityType) {
-        return LockRegistry.getInstance().isEntityBlockedFor(player, entityType);
+        return !canAttackEntity(player, entityType);
     }
 
     /**

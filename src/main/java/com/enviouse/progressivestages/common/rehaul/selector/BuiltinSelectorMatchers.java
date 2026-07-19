@@ -15,6 +15,7 @@ final class BuiltinSelectorMatchers {
 
     static List<SelectorMatcher> all() {
         return List.of(
+            textMatcher("all", SelectorSpec.ALL, 0, (selector, target) -> selector.value().equals("*")),
             resourceMatcher("id", SelectorSpec.ID, 400, (selector, target) -> target.id().equals(selector.resourceId())),
             textMatcher("mod", SelectorSpec.MOD, 100,
                 (selector, target) -> target.id().getNamespace().equalsIgnoreCase(selector.value())),

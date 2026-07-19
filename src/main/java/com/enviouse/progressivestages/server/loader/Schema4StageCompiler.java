@@ -548,7 +548,7 @@ public final class Schema4StageCompiler {
             case "items" -> "use";
             case "blocks" -> "interact";
             case "fluids" -> "interact";
-            case "entities" -> "interact";
+            case "entities" -> "presence";
             case "recipes" -> "craft";
             case "dimensions", "structures" -> "enter";
             case "abilities" -> "perform";

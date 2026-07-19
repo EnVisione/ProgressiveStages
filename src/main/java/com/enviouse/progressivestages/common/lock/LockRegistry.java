@@ -1039,11 +1039,16 @@ public final class LockRegistry {
 
     public Set<StageId> restrictionStagesForEntity(
             net.minecraft.server.level.ServerPlayer player, EntityType<?> type) {
+        return restrictionStagesForEntity(player, type, "interact");
+    }
+
+    public Set<StageId> restrictionStagesForEntity(
+            net.minecraft.server.level.ServerPlayer player, EntityType<?> type, String action) {
         if (player == null || type == null) return Set.of();
         Set<StageId> missing = missingGatingStages(player, getRequiredStagesForEntity(type));
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
         ConditionalLockEngine.Decision decision = ConditionalLockEngine.resolve(player,
-            ConditionalRule.TargetType.ENTITY, id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type),
+            ConditionalRule.TargetType.ENTITY, action, id, BuiltInRegistries.ENTITY_TYPE.wrapAsHolder(type),
             !missing.isEmpty());
         if (decision == null || decision.effect() == ConditionalRule.Effect.UNLOCK) return Set.of();
         return decision.ownerStage() != null ? Set.of(decision.ownerStage()) : missing;

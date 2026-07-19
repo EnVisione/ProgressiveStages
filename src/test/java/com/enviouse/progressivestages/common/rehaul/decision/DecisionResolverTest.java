@@ -45,6 +45,19 @@ class DecisionResolverTest {
     }
 
     @Test
+    void highPriorityExceptionCarvesOneEntityOutOfAll() {
+        ResourceLocation broadId = id("all_entities");
+        DecisionTrace trace = DecisionResolver.resolve(ResourceLocation.parse("minecraft:villager"),
+            "entities", "presence", List.of(
+                candidate(rule(broadId, RuleEffect.LOCK, 100, "all:*", null), 100, 0, 0),
+                candidate(rule("villager_exception", RuleEffect.EXCLUDE, 200,
+                    "id:minecraft:villager", broadId), 200, 1, 400)),
+            TiePolicy.SAFE);
+        assertFalse(trace.blocked());
+        assertEquals(null, trace.winningEffect());
+    }
+
+    @Test
     void safeTieLocksAndErrorPolicyRejects() {
         List<DecisionCandidate> candidates = List.of(
             candidate(rule("allow", RuleEffect.ALLOW, 100, "id:example:target", null), 100, 0, 400),

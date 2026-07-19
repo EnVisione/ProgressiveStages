@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dependencySummary, discoverStages, progressionModels, ruleModels, stageDependsOn, stageIdentity } from "./model";
+import { dependencySummary, discoverStages, normalizeSelector, progressionModels, ruleModels, selectorMode, stageDependsOn, stageIdentity } from "./model";
 
 const files = {
   "stages/mage/stage.toml": `[stage]\nid = "classes:mage"\ndisplay_name = "Mage"\ncategory = "Classes"\n`,
@@ -35,5 +35,10 @@ describe("react editor stage models", () => {
 
   it("creates interchangeable namespaces without a forced pack prefix", () => {
     expect(stageIdentity("Warlock", "wizard")).toMatchObject({ id: "wizard:warlock", path: "warlock" });
+  });
+
+  it("uses all star for the entire selected registry category", () => {
+    expect(normalizeSelector("all", "ignored")).toBe("all:*");
+    expect(selectorMode("all:*")).toBe("all");
   });
 });

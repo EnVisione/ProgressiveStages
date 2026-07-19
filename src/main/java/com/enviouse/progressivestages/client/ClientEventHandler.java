@@ -150,6 +150,7 @@ public class ClientEventHandler {
     public static void onLevelUnload(net.neoforged.neoforge.event.level.LevelEvent.Unload event) {
         if (event.getLevel() instanceof net.minecraft.client.multiplayer.ClientLevel) {
             OreSpoofClientState.clear();
+            ClientEntityVisibility.clear();
         }
     }
 
@@ -161,6 +162,7 @@ public class ClientEventHandler {
         ClientUnlockJuice.clear();
         ClientChallengeHud.clear();
         ClientAbilityState.clear();
+        ClientEntityVisibility.clear();
         OreSpoofClientState.clear();
         ClientCompiledSnapshotCache.clear();
         com.enviouse.progressivestages.client.editor.LoopbackEditorBridge.closeActive();
@@ -175,6 +177,7 @@ public class ClientEventHandler {
     @SubscribeEvent
     public static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
         enforceAbilityState();
+        clearConcealedCrosshairTarget();
         // Drain all queued presses (so the keymapping counter is reset) but send at most one
         // request per tick to avoid flooding the server on a double-tap.
         boolean pressed = false;
@@ -184,6 +187,11 @@ public class ClientEventHandler {
         if (pressed) {
             ClientTriggerProgress.requestFromServer();
         }
+    }
+
+    @SubscribeEvent
+    public static void onEntitySound(net.neoforged.neoforge.event.PlayLevelSoundEvent.AtEntity event) {
+        if (ClientEntityVisibility.isConcealed(event.getEntity())) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -206,6 +214,20 @@ public class ClientEventHandler {
         if (ClientAbilityState.isLocked("climb") && player.onClimbable()) {
             var movement = player.getDeltaMovement();
             if (movement.y > 0.0D) player.setDeltaMovement(movement.x, 0.0D, movement.z);
+        }
+    }
+
+    private static void clearConcealedCrosshairTarget() {
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (minecraft.crosshairPickEntity != null
+                && ClientEntityVisibility.isConcealed(minecraft.crosshairPickEntity)) {
+            minecraft.crosshairPickEntity = null;
+            minecraft.hitResult = null;
+            return;
+        }
+        if (minecraft.hitResult instanceof net.minecraft.world.phys.EntityHitResult entityHit
+                && ClientEntityVisibility.isConcealed(entityHit.getEntity())) {
+            minecraft.hitResult = null;
         }
     }
 

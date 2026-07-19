@@ -54,8 +54,9 @@ This workflow works in an integrated single-player world and on a dedicated serv
    or `Require a minimum number`. The preview places the new evolution above its parents and shows
    where each parent came from. Invalid selections that would create a dependency loop are disabled.
 9. Click `Add rule`. Choose Items, Blocks, Fluids, Entities, Abilities, or any other supported
-   category. The next menu contains only actions valid for that category. Choose exact ID, whole
-   mod, tag, or name matching. Search results contain only the selected registry type, and `Only
+   category. The next menu contains only actions valid for that category. Choose everything in the
+   category, exact ID, whole mod, tag, or name matching. Everything writes `all:*` and can be paired
+   with a higher priority exception. Search results contain only the selected registry type, and `Only
    show this mod` narrows a large modpack catalog before a target is selected.
 10. Choose Lock, Deny, Allow, Unlock, Replace, or viewer-only presentation. Set priority, JEI and
     EMI visibility, an optional higher-priority exception, and an optional live, timed, session,
@@ -204,6 +205,7 @@ Every compatible category uses the same small selector vocabulary:
 
 | Form | Meaning | Example |
 |---|---|---|
+| `all:*` | Every registered entry in the selected category | `all:*` |
 | Exact ID | One registry entry | `minecraft:diamond` |
 | `id:` | Explicit exact ID | `id:minecraft:diamond` |
 | `mod:` | Every matching namespace or loaded mod entry | `mod:create` |
@@ -222,6 +224,10 @@ stale cursors are rejected rather than mixing old and new results.
 interchangeable. Use the editor preview or `/pstages explain target items.use minecraft:diamond`
 when a broad selector behaves differently than expected.
 
+`all:*` never crosses registry categories. In an Items rule it means every item. In an Entities
+rule it means every entity type. Add a parent linked exception with a larger priority when selected
+content must remain available.
+
 ## 5. Priority, exclusions, global allows, and viewer policy
 
 The priority cascade is:
@@ -237,6 +243,11 @@ then global priority
 Higher priority wins. Equal priority follows the configured deterministic tie policy. The default
 safe behavior favors a denial rather than accidentally opening gated content. Stable rule ID and
 specificity complete arbitration so a reload cannot randomly change the winner.
+
+`lock` is active while the owning stage is missing. It expresses ordinary progression. `deny` is
+active while the owning stage is owned. It expresses a negative stage such as Anti Skeleton.
+`allow` and `unlock` are active while the owning stage is owned. A temporary rule first requires
+the stage to be owned, then follows its condition and lifetime.
 
 You may put priority beside a selector:
 
@@ -281,6 +292,30 @@ make it usable on the server:
 viewer = "show"
 priority = 700
 ```
+
+### Per player entity presence
+
+Choose Entities and the Presence action when an entity should be absent for one player rather than
+merely unusable. A denied entity is not rendered or selected by the normal crosshair. The server
+blocks attack, interaction, and mounting. A denied mob cannot target or damage that player.
+
+Spawning is multiplayer safe. The server examines every living player who is not a spectator and
+is inside simulation distance of the spawn chunk. It cancels the spawn only when every relevant
+player is denied the mob. If one player is allowed, the entity remains on the server. Allowed
+players see normal behavior and denied players receive concealment and pacifist behavior.
+
+```toml
+[[rules]]
+id = "classes:anti_skeleton/no_skeletons"
+effect = "deny"
+action = "presence"
+priority = 500
+targets.entities = ["id:minecraft:skeleton"]
+```
+
+Use Attack, Interact, or Mount instead when the entity should remain visible and only that action
+should be denied. Client concealment is refreshed immediately after ownership changes and is
+rechecked every ten ticks for live conditions.
 
 Viewer choices are inherit, show, hide, and overlay where supported. Broad mod hiding and exact
 higher-priority showing use the same resolver as locks.

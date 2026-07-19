@@ -18,6 +18,8 @@
     "CartographyTableMenuMixin",
     "CrafterBlockMixin",
     "PlayerChunkSenderMixin",
+    "ChunkMapAccessor",
+    "ChunkMapTrackedEntityMixin",
     "ClientboundLevelChunkPacketDataMixin",
     "LevelChunkSectionAccessor",
     "ServerCommonPacketListenerImplMixin",
@@ -28,7 +30,8 @@
     "ClientboundSectionBlocksUpdatePacketAccessor"
   ],
   "client": [
-    "client.ClientLightUpdateMixin"
+    "client.ClientLightUpdateMixin",
+    "client.EntityRenderDispatcherMixin"
   ],
   "injectors": {
     "defaultRequire": 0

@@ -88,6 +88,10 @@ The test sources live under `src/test/java`.
 | `StageOrderTest` | Converging dependency graphs and cycle handling. |
 | `StageFileParserTest` | Namespaced IDs, malformed data, trigger validation, costs, custom map backgrounds, generated templates, and all temporary or triggered rule forms. |
 | `ConditionalLockEngineTest` | Priority ordering, static-gate overrides, safe lock-on-tie behavior, and deterministic same-effect ties. |
+| `PrefixEntryTest` | Exact parsing and matching for the category wide `all:*` selector. |
+| `SelectorMatcherRegistryTest` | Category wide matching, specificity, exceptions, and priority resolution. |
+| `EntityPresenceEnforcerTest` | Simulation distance boundaries and mixed multiplayer spawn cancellation decisions. |
+| `ClientEntityVisibilityTest` | Immutable and replacing client concealment snapshots. |
 | `StageModelImmutabilityTest` | Defensive copies for rewards, regions, and enforcement maps. |
 | `StagePurchaseDataTest` | Namespaced offline refund persistence. |
 | `DefaultShowcaseStagesTest` | Fifty schema 4 packages, one hundred fifty files, three limited beginner paths, stacking and replacement policies, acyclic class tree, Diamond Engineer payment, and Fortune drop modifier. |

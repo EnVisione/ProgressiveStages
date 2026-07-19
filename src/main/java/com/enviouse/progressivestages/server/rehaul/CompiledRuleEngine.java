@@ -68,6 +68,17 @@ public final class CompiledRuleEngine {
 
     public Optional<DecisionTrace> resolve(ServerPlayer player, String category, String action,
                                            ResourceLocation targetId, Holder<?> holder) {
+        return resolve(player, category, action, targetId, holder, true);
+    }
+
+    public Optional<DecisionTrace> resolveUntracked(ServerPlayer player, String category, String action,
+                                                    ResourceLocation targetId, Holder<?> holder) {
+        return resolve(player, category, action, targetId, holder, false);
+    }
+
+    private Optional<DecisionTrace> resolve(ServerPlayer player, String category, String action,
+                                            ResourceLocation targetId, Holder<?> holder,
+                                            boolean retainHistory) {
         List<CompiledRule> rules = rules(category);
         if (player == null || targetId == null || rules.isEmpty()) return Optional.empty();
         SelectorTarget target = target(targetId, holder);
@@ -86,7 +97,7 @@ public final class CompiledRuleEngine {
         }
         if (candidates.isEmpty()) return Optional.empty();
         DecisionTrace trace = DecisionResolver.resolve(targetId, category, action, candidates, TiePolicy.SAFE);
-        remember(trace);
+        if (retainHistory) remember(trace);
         return Optional.of(trace);
     }
 
@@ -135,7 +146,8 @@ public final class CompiledRuleEngine {
         if (configured.equals("missing") || configured.equals("lacks")) return !owned;
         if (source.contains("temporary")) return owned;
         return switch (effect) {
-            case LOCK, DENY, EXCLUDE -> !owned;
+            case LOCK, EXCLUDE -> !owned;
+            case DENY -> owned;
             case UNLOCK, ALLOW, MODIFY, REPLACE, PRESENT -> owned;
         };
     }

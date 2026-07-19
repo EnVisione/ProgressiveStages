@@ -128,15 +128,17 @@ public class StageConfig {
     private static final ModConfigSpec.BooleanValue BLOCK_MOB_SPAWNS = BUILDER
         .comment("Gate mob spawns behind stages",
                  "If true, mobs listed in spawn_entities / spawn_entity_tags / spawn_entity_mods",
-                 "will be prevented from spawning in the world until the nearest player has the required stage.",
+                 "are cancelled only when every player inside simulation distance is denied the mob.",
+                 "Mixed multiplayer access keeps the spawn and conceals it from denied players.",
                  "Useful for 'world responds to progression' setups (e.g., Born In Chaos mobs only spawn after a quest).")
         .define("enforcement.block_mob_spawns", true);
 
     private static final ModConfigSpec.IntValue MOB_SPAWN_CHECK_RADIUS = BUILDER
-        .comment("Radius (in blocks) to search for the nearest player when gating mob spawns",
-                 "If no player is within this radius of the spawn, the spawn is ALLOWED (no one will see it).",
-                 "If a player is within range, their stages determine whether the spawn is allowed.",
-                 "Default 128 blocks (~8 chunks, standard mob tracking range).")
+        .comment("Legacy shared radius for nearest player ownership checks",
+                 "Mob spawn cancellation now uses the server simulation distance instead.",
+                 "This radius remains in use for crop, loot, fluid, replacement, and compatibility checks.",
+                 "If no player is within this radius of an evaluated origin, that nearest player check is skipped.",
+                 "Default 128 blocks.")
         .defineInRange("enforcement.mob_spawn_check_radius", 128, 16, 512);
 
     // ============ 2.0 Enforcement Toggles ============

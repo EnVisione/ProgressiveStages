@@ -40,7 +40,7 @@ export function CatalogPicker({ catalogId, selected = "", allowPrefixes = true, 
 
   return <div className="catalog-picker">
     <div className="catalog-toolbar">
-      {allowPrefixes ? <Field label="Selection method"><select value={mode} onChange={event => setMode(event.target.value)}><option value="id">Exact identifier</option><option value="mod">Whole mod</option><option value="tag">Content tag</option><option value="name">Name contains text</option></select></Field> : null}
+      {allowPrefixes ? <Field label="Selection method"><select value={mode} onChange={event => setMode(event.target.value)}><option value="all">Everything in this category</option><option value="id">Exact identifier</option><option value="mod">Whole mod</option><option value="tag">Content tag</option><option value="name">Name contains text</option></select></Field> : null}
       <Field label="Search"><input value={search} onChange={event => setSearch(event.target.value)} autoFocus placeholder="Start typing an item or mod name"/></Field>
       <Field label="Installed mod"><select value={mod} onChange={event => setMod(event.target.value)}><option value="">Every installed mod</option>{mods.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></Field>
     </div>

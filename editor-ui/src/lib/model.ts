@@ -218,13 +218,14 @@ export function featureCounts(stage: StagePackage, files: Record<string, string>
 }
 
 export function normalizeSelector(mode: string, key: string, search = ""): string {
-  const clean = key.replace(/^(id|mod|tag|name):/, "");
+  if (mode === "all") return "all:*";
+  const clean = key.replace(/^(all|id|mod|tag|name):/, "");
   if (mode === "name") return `name:${(search || clean).trim()}`;
   return `${mode}:${clean}`;
 }
 
 export function selectorMode(selector: string): string {
-  return selector.match(/^(id|mod|tag|name):/)?.[1] || "id";
+  return selector.match(/^(all|id|mod|tag|name):/)?.[1] || "id";
 }
 
 export function stripSelectorPrefix(value: string): string {

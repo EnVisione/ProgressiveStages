@@ -34,7 +34,7 @@ public final class LegacyStageCompiler {
         addCategory(rules, stage, "items", "use", locks.items(), root);
         addCategory(rules, stage, "blocks", "interact", locks.blocks(), root);
         addCategory(rules, stage, "fluids", "interact", locks.fluids(), root);
-        addCategory(rules, stage, "entities", "interact", locks.entities(), root);
+        addCategory(rules, stage, "entities", "presence", locks.entities(), root);
         addCategory(rules, stage, "enchants", "apply", locks.enchants(), root);
         addCategory(rules, stage, "crops", "grow", locks.crops(), root);
         addCategory(rules, stage, "screens", "open", locks.screens(), root);

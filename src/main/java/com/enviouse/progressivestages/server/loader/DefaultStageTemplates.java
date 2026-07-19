@@ -19,6 +19,7 @@ public final class DefaultStageTemplates {
             #
             # NEW IN 2.0: UNIFIED PREFIX SYSTEM
             # Every lock list accepts the same prefixes:
+            #   "all:*"                                               every entry in this category
             #   "id:minecraft:stone"   (or just "minecraft:stone")   exact match
             #   "mod:mekanism"                                       every entry from a mod
             #   "tag:minecraft:crops"                                every entry in a tag
@@ -295,8 +296,10 @@ public final class DefaultStageTemplates {
             # ============================================================================
             # 2. THE PREFIX SYSTEM — read once, use everywhere
             # ============================================================================
-            # Every `locked = [...]` list in this file accepts the SAME four prefixes.
+            # Every `locked = [...]` list in this file accepts the SAME selectors.
             # Learn them once and you understand all 14+ categories.
+            #
+            #   "all:*"                      every registered entry in this category.
             #
             #   "id:minecraft:diamond"       exact match. "id:" is optional —
             #   "minecraft:diamond"          a plain namespace:path string means id:.
@@ -602,8 +605,7 @@ public final class DefaultStageTemplates {
             #   2. THIS_ENTITY         (chest opener)
             #   3. Nearest player to ORIGIN within mob_spawn_check_radius
             #
-            # If no player is in range at all, loot passes through unchanged — matches
-            # the policy used by mob spawn gating.
+            # If no player is in range at all, loot passes through unchanged.
             # ----------------------------------------------------------------------------
 
             [loot]
@@ -617,10 +619,12 @@ public final class DefaultStageTemplates {
             # ============================================================================
             # 13. [mobs] — SPAWN GATING + DYNAMIC REPLACEMENT
             # ============================================================================
-            # locked_spawns — prevents the mob from spawning at all when the NEAREST
-            #                 player lacks the stage. Fires at FinalizeSpawnEvent, so it
-            #                 catches natural spawns, spawners, spawn eggs, and most
-            #                 modded spawn paths.
+            # locked_spawns — checks every player inside server simulation distance.
+            #                 The spawn is cancelled only when all of those players are
+            #                 denied. Mixed multiplayer access preserves the mob for
+            #                 allowed players and conceals it from denied players. Fires
+            #                 at FinalizeSpawnEvent, so it catches natural spawns,
+            #                 spawners, spawn eggs, and most modded spawn paths.
             #
             # [[mobs.replacements]] — instead of cancelling a spawn, swap in a different
             #                        mob at the same coords. Picks the first matching
@@ -777,7 +781,7 @@ public final class DefaultStageTemplates {
             # ============================================================================
             # Hides AND blocks any villager or wandering-trader offer whose RESULT item
             # matches this list — using the same prefix system as everything else
-            # (id: / mod: / tag: / name:). Use this when you want "you can't BUY this yet"
+            # (all:* / id: / mod: / tag: / name:). Use this when you want "you can't BUY this yet"
             # without locking the item itself: unlike [items], the player can still hold,
             # use, and obtain the result through other means — they just can't trade for it.
             #
@@ -1372,10 +1376,9 @@ public final class DefaultStageTemplates {
             #   exist or has zero members, the prefix matches nothing. Check via /tag.
             #
             # "Mobs are still spawning."
-            #   The nearest-player check uses mob_spawn_check_radius (default 128 blocks).
-            #   If no player is within that range, the spawn is allowed because no one is
-            #   there to see it. Increase the radius in progressivestages.toml if you want
-            #   more aggressive gating — max is 512.
+            #   Spawn gating uses the server simulation distance. If no player is inside
+            #   that distance, the spawn is allowed. If players disagree, the mob remains
+            #   for allowed players and is concealed from denied players.
             #
             # "My enchant is still appearing in the enchanting table."
             #   Secondary enchants from getEnchantmentList can slip past the clue-based

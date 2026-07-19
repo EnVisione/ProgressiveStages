@@ -68,6 +68,13 @@ public final class StageTagRegistry {
             // kept local here so StageTagRegistry can map items → owning stage.
             for (com.enviouse.progressivestages.common.lock.PrefixEntry entry : locks.items().locked()) {
                 switch (entry.kind()) {
+                    case ALL: {
+                        for (Item item : BuiltInRegistries.ITEM) {
+                            items.add(item);
+                            itemToStage.putIfAbsent(item, stageId);
+                        }
+                        break;
+                    }
                     case ID: {
                         if (entry.id() == null) break;
                         Item item = BuiltInRegistries.ITEM.get(entry.id());

@@ -624,7 +624,8 @@ dependency = "iron_age"
 category = "Combat"
 
 [entities]
-locked = ["id:minecraft:ender_dragon", "mod:cataclysm"]
+locked = ["all:*"]
+always_unlocked = ["id:minecraft:villager", "id:minecraft:wandering_trader"]
 
 [mobs]
 locked_spawns = [
@@ -654,8 +655,8 @@ locked = [
 
 ### Understand the boundaries
 
-- `[entities]` gates player attacks and interactions with matching entity types.
-- `[mobs].locked_spawns` prevents matching spawn attempts near the relevant player.
+- `[entities]` gates whether matching entity types may be present for a player. Presence denial also blocks attacks, interactions, and mounting.
+- `[mobs].locked_spawns` applies the same player aware presence policy to spawn gates.
 - `[[mobs.replacements]]` swaps the target at spawn time after validating the replacement.
 - `[pets].locked_taming` gates taming.
 - `[pets].locked_breeding` gates breeding.
@@ -663,9 +664,14 @@ locked = [
 - `[trades]` filters individual trade results.
 - `[professions]` denies the entire trading GUI for matching villager professions.
 
-Spawn gating uses the nearest applicable player within the configured spawn-check radius. If no
-player is close enough, the spawn is allowed because no progression owner can be chosen safely.
-This is important on multiplayer servers and for mob farms near chunk loaders.
+Spawn gating checks every living player within the server simulation distance. The spawn is cancelled
+only when every relevant player is denied that entity. If one nearby player is allowed the entity,
+the entity may spawn for that player. It is concealed from denied players, cannot be attacked,
+interacted with, mounted, or detected by those players, and cannot target or damage those players.
+If no player is within simulation distance, the spawn is allowed.
+
+`all:*` matches every registered value in the category where it appears. The entity example above
+therefore denies every entity except villagers and wandering traders until the stage is owned.
 
 ### Replacement design
 
@@ -682,16 +688,16 @@ That design is ambiguous and should not be used.
 ### Verification
 
 1. Use a natural spawn test and a spawn egg test.
-2. Test with one eligible and one ineligible player at different distances.
-3. Attack and right-click the gated entity.
+2. Test with one eligible and one ineligible player inside the same simulation distance.
+3. Confirm the eligible player sees the mob while the ineligible player cannot see, attack, interact with, mount, or take damage from it.
 4. Attempt taming, breeding, and pet commands separately.
 5. Open an armorer GUI and a farmer GUI to prove profession specificity.
 6. Inspect individual trade rows to prove `[trades]` is independent.
 
 ### Common mistakes
 
-- Expecting `[entities]` to prevent spawning.
-- Expecting `[mobs].locked_spawns` to block attacking an already existing mob.
+- Assuming one denied player removes a mob that another nearby player is allowed to use.
+- Testing concealment with both players denied. The spawn should be cancelled in that case.
 - Using an entity ID in `[professions]` instead of a villager-profession ID.
 - Treating a wandering trader as a profession. Use `[trades]` for wandering traders.
 

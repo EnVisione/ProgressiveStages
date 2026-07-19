@@ -25,7 +25,7 @@ interface RuleDraft {
   exceptionPriority: number;
 }
 
-function effectLabel(category: string, effect: string): string {
+function effectLabel(category: string, effect: string, action = ""): string {
   if (category === "structures") {
     if (effect === "allow" || effect === "unlock") return "Allow access to structure";
     if (effect === "lock" || effect === "deny") return "Deny access to structure";
@@ -33,6 +33,10 @@ function effectLabel(category: string, effect: string): string {
   if (category === "abilities") {
     if (effect === "allow" || effect === "unlock") return "Allow this ability";
     if (effect === "lock" || effect === "deny") return "Block this ability";
+  }
+  if (category === "entities" && action === "presence") {
+    if (effect === "allow" || effect === "unlock") return "Allow the entity to exist for this player";
+    if (effect === "lock" || effect === "deny") return "Hide the entity and make it pacifist";
   }
   return EFFECTS.find(value => value.value === effect)?.label || title(effect);
 }
@@ -123,6 +127,7 @@ function RuleForm({ stage, rule }: { stage: StagePackage; rule?: RuleModel }) {
   const category = CATEGORIES[draft.category];
   const condition = CONDITIONS.find(entry => entry.id === draft.conditionType);
   const temporary = draft.lifetime !== "permanent" || draft.conditionType !== "none";
+  const selectsEverything = draft.mode === "all";
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!draft.selector) return;
@@ -145,20 +150,23 @@ function RuleForm({ stage, rule }: { stage: StagePackage; rule?: RuleModel }) {
     closeDialog();
   };
   return <form className="dialog-form" onSubmit={save}>
-    <div className="rule-sentence"><span>When a player tries to</span><strong>{ACTION_LABELS[draft.action] || title(draft.action)}</strong><span>the server will</span><strong>{effectLabel(draft.category, draft.effect)}</strong></div>
+    <div className="rule-sentence"><span>When a player tries to</span><strong>{ACTION_LABELS[draft.action] || title(draft.action)}</strong><span>the server will</span><strong>{effectLabel(draft.category, draft.effect, draft.action)}</strong></div>
     <div className="form-grid">
       <Field label="Rule category"><select value={draft.category} onChange={event => {
         const next = event.target.value;
-        setDraft(current => ({ ...current, category: next, action: CATEGORIES[next].actions[0], selector: "" }));
+        setDraft(current => ({ ...current, category: next, action: CATEGORIES[next].actions[0], selector: current.mode === "all" ? "all:*" : "" }));
       }}>{Object.entries(CATEGORIES).map(([id, value]) => <option key={id} value={id}>{value.label}</option>)}</select></Field>
       <Field label="Player action"><select value={draft.action} onChange={event => update("action", event.target.value)}>{category.actions.map(action => <option key={action} value={action}>{ACTION_LABELS[action] || title(action)}</option>)}</select></Field>
-      <Field label="Result"><select value={draft.effect} onChange={event => update("effect", event.target.value)}>{EFFECTS.filter(effect => effect.value !== "replace" || ["mobs", "ores"].includes(draft.category)).filter(effect => effect.value !== "present" || ["recipes", "advancements", "ores"].includes(draft.category)).map(effect => <option key={effect.value} value={effect.value}>{effectLabel(draft.category, effect.value)}</option>)}</select></Field>
+      <Field label="Result"><select value={draft.effect} onChange={event => update("effect", event.target.value)}>{EFFECTS.filter(effect => effect.value !== "replace" || ["mobs", "ores"].includes(draft.category)).filter(effect => effect.value !== "present" || ["recipes", "advancements", "ores"].includes(draft.category)).map(effect => <option key={effect.value} value={effect.value}>{effectLabel(draft.category, effect.value, draft.action)}</option>)}</select></Field>
       <Field label="Priority" help="A larger number wins when rules overlap."><input type="number" value={draft.priority} onChange={event => update("priority", Number(event.target.value))}/></Field>
     </div>
     <section className="dialog-section"><header><span className="step-number">1</span><div><h3>Choose the target</h3><p>The registry only shows content valid for {category.label.toLowerCase()}.</p></div></header><div className="form-grid">
-      <Field label="Selection method"><select value={draft.mode} onChange={event => update("mode", event.target.value)}><option value="id">One exact identifier</option><option value="mod">Everything from a mod</option><option value="tag">Everything in a tag</option><option value="name">Anything with a matching name</option></select></Field>
-      <Field label="Selected target"><input value={draft.selector} onChange={event => update("selector", event.target.value)} placeholder="id:minecraft:diamond_sword" required/></Field>
-      <div className="field-wide"><InlineCatalogSearch catalogId={category.catalog} mode={draft.mode} onPick={value => update("selector", value)}/></div>
+      <Field label="Selection method"><select value={draft.mode} onChange={event => {
+        const mode = event.target.value;
+        setDraft(current => ({ ...current, mode, selector: mode === "all" ? "all:*" : current.mode === "all" ? "" : current.selector }));
+      }}><option value="all">Everything in this category</option><option value="id">One exact identifier</option><option value="mod">Everything from a mod</option><option value="tag">Everything in a tag</option><option value="name">Anything with a matching name</option></select></Field>
+      <Field label="Selected target" help={selectsEverything ? `This matches every registered ${category.label.toLowerCase()}. Add a higher priority exception to allow selected content.` : undefined}><input value={draft.selector} onChange={event => update("selector", event.target.value)} placeholder="id:minecraft:diamond_sword" readOnly={selectsEverything} required/></Field>
+      {!selectsEverything ? <div className="field-wide"><InlineCatalogSearch catalogId={category.catalog} mode={draft.mode} onPick={value => update("selector", value)}/></div> : null}
     </div></section>
     <section className="dialog-section"><header><span className="step-number">2</span><div><h3>Choose when it participates</h3><p>Permanent rules follow stage ownership. Conditional rules can follow locations, events, sessions, and scripts.</p></div></header><div className="form-grid">
       <Field label="Activation condition"><select value={draft.conditionType} onChange={event => update("conditionType", event.target.value)}>{CONDITIONS.map(entry => <option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></Field>

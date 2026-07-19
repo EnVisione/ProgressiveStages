@@ -12,7 +12,7 @@ import java.util.function.BiConsumer;
 
 final class BuiltinEditorSchemas {
 
-    private static final Set<String> PREFIXES = Set.of("id", "mod", "tag", "name");
+    private static final Set<String> PREFIXES = Set.of("all", "id", "mod", "tag", "name");
 
     private BuiltinEditorSchemas() {}
 
@@ -78,7 +78,7 @@ final class BuiltinEditorSchemas {
         category(sink, "crops", "blocks", List.of("plant", "grow", "bonemeal", "harvest"));
         category(sink, "dimensions", "dimensions", List.of("enter", "portal", "teleport"));
         category(sink, "enchants", "enchantments", List.of("table", "anvil", "trade", "hold"));
-        category(sink, "entities", "entities", List.of("attack", "interact", "mount"));
+        category(sink, "entities", "entities", List.of("presence", "attack", "interact", "mount"));
         category(sink, "interactions", "items", List.of("block_right_click", "item_on_block", "item_on_entity"));
         category(sink, "loot", "loot_tables", List.of("generate", "open", "drop"));
         category(sink, "mobs", "entities", List.of("spawn", "replace"));

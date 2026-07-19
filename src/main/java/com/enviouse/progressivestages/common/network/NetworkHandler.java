@@ -76,6 +76,15 @@ public class NetworkHandler {
             )
         );
 
+        registrar.playToClient(
+            EntityVisibilityPayload.TYPE,
+            EntityVisibilityPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleEntityVisibilityClient,
+                (payload, context) -> {}
+            )
+        );
+
         // Stage definitions sync packet (v1.3 - includes dependencies)
         registrar.playToClient(
             StageDefinitionsSyncPayload.TYPE,
@@ -676,6 +685,8 @@ public class NetworkHandler {
         PacketDistributor.sendToPlayer(player, new StageSyncPayload(stageList));
         // Also push reveal-policy so client knows whether to hide stage names
         sendRevealPolicy(player);
+        com.enviouse.progressivestages.server.enforcement.EntityPresenceEnforcer
+            .syncClientState(player, true);
     }
 
     /**
@@ -683,10 +694,17 @@ public class NetworkHandler {
      */
     public static void sendStageUpdate(ServerPlayer player, StageId stageId, boolean granted) {
         PacketDistributor.sendToPlayer(player, new StageUpdatePayload(stageId.getResourceLocation(), granted));
+        com.enviouse.progressivestages.server.enforcement.EntityPresenceEnforcer
+            .syncClientState(player, true);
     }
 
     public static void sendAbilityState(ServerPlayer player, Set<String> lockedAbilities) {
         PacketDistributor.sendToPlayer(player, new AbilityStatePayload(lockedAbilities.stream().sorted().toList()));
+    }
+
+    public static void sendEntityVisibility(ServerPlayer player, Set<ResourceLocation> concealedEntityTypes) {
+        PacketDistributor.sendToPlayer(player, new EntityVisibilityPayload(
+            concealedEntityTypes.stream().sorted().toList()));
     }
 
     /**
@@ -875,6 +893,11 @@ public class NetworkHandler {
                 ClientStageCache.removeStage(stageId);
             }
         });
+    }
+
+    private static void handleEntityVisibilityClient(EntityVisibilityPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> com.enviouse.progressivestages.client.ClientEntityVisibility
+            .setConcealed(new java.util.LinkedHashSet<>(payload.concealedEntityTypes())));
     }
 
     private static void handleLockSyncClient(LockSyncPayload payload, IPayloadContext context) {
@@ -1110,6 +1133,21 @@ public class NetworkHandler {
             ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), AbilityStatePayload::lockedAbilities,
             AbilityStatePayload::new
         );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record EntityVisibilityPayload(List<ResourceLocation> concealedEntityTypes)
+            implements CustomPacketPayload {
+        public static final Type<EntityVisibilityPayload> TYPE = new Type<>(Constants.ENTITY_VISIBILITY_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, EntityVisibilityPayload> STREAM_CODEC =
+            StreamCodec.composite(
+                ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()),
+                EntityVisibilityPayload::concealedEntityTypes,
+                EntityVisibilityPayload::new);
 
         @Override
         public Type<? extends CustomPacketPayload> type() {

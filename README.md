@@ -48,6 +48,21 @@ schema 4 showcase now demonstrates the editor and class tree directly.
 
 ---
 
+## What's new in 3.0.1
+
+- **Everything selector.** Rules can use `all:*` to match every registered entry in the selected
+  category. Items means every item, fluids means every fluid, structures means every structure,
+  and so on. Parent linked exceptions and normal priority resolution still apply, so a broad rule
+  can safely keep selected IDs, mods, tags, or names available.
+- **Multiplayer safe entity presence.** Entity rules now include the `presence` action. If every
+  player inside simulation distance is denied a mob, its spawn is cancelled. If nearby players
+  disagree, the mob remains for allowed players and is concealed only from denied players. Denied
+  players cannot render, target, attack, interact with, or mount that entity. Denied mobs cannot
+  target or damage those players. An owned negative stage uses `effect = "deny"`, while a normal
+  missing stage progression gate uses `effect = "lock"`.
+
+---
+
 ## What's new in 3.0
 
 - **Fifty stage first-launch showcase tree** — an empty stages directory now receives exactly three
@@ -133,7 +148,7 @@ schema 4 showcase now demonstrates the editor and class tree directly.
 
 ## What's new in 2.0
 
-- **Unified prefix lock model** — `id:`, `mod:`, `tag:`, `name:` (no prefix = `id:`) replace v1's scattered `items` / `item_tags` / `item_mods` arrays. One list, one syntax.
+- **Unified prefix lock model** — `all:*`, `id:`, `mod:`, `tag:`, `name:` (no prefix = `id:`) replace v1's scattered `items` / `item_tags` / `item_mods` arrays. One list, one syntax.
 - **Multi-stage gating** — the same item can be locked by multiple stages simultaneously. The player must own **all** gating stages to access it. First-match-wins is gone.
 - **Per-stage `[unlocks]` carve-outs** — a stage can lock an entire mod yet exempt specific items via its own `[unlocks]` list. Unlike v1's global per-category whitelist, each stage's carve-outs are scoped to that stage.
 - **`minecraft = true` shorthand** — equivalent to `mods = ["minecraft"]`, with parent-stage inheritance: granting a child stage that doesn't itself set `minecraft = true` doesn't leak vanilla content the parent had locked.
@@ -202,7 +217,7 @@ The same player can be required to also have `tutorial_done` to use a specific i
 
 ## Lock Categories
 
-Each category lives in its own TOML section. Lists accept the unified prefix syntax: `id:`, `mod:`, `tag:`, `name:` (no prefix defaults to `id:`).
+Each category lives in its own TOML section. Lists accept the unified prefix syntax: `all:*`, `id:`, `mod:`, `tag:`, `name:` (no prefix defaults to `id:`).
 
 | Section | Field | Effect |
 |---|---|---|
@@ -210,7 +225,7 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[blocks]` | `locked`, `always_unlocked` | Block placement and right-click interaction |
 | `[fluids]` | `locked`, `always_unlocked` | Pickup/place buckets, hide from EMI/JEI, prevent submersion effects |
 | `[dimensions]` | `locked` (exact ids only) | Cancel travel, eject players from locked dimensions |
-| `[entities]` | `locked`, `always_unlocked` | Block attacking and interacting with entity types |
+| `[entities]` | `locked`, `always_unlocked` | Legacy complete presence gate. Cancel spawns when every nearby player is denied. Conceal mixed access entities per player. Block attacking, interaction, mounting, mob targeting, and mob damage for denied players. Schema 4 can instead choose `presence`, `attack`, `interact`, or `mount`. |
 | `[recipes]` | `locked_ids`, `locked_items` | `locked_ids` blocks specific recipe IDs; `locked_items` blocks every recipe producing the output item |
 | `[enchants]` | `locked`, **`max_levels`** | Hide enchants in enchanting table, refuse anvil application, strip from inventory. **New in 3.0:** `max_levels = ["minecraft:sharpness:3", ...]` caps an enchant at that level (instead of locking it) until the gating stage is owned — effective cap = MIN across every missing capping stage, level `0` removes it; enforced in the inventory scan |
 | `[crops]` | `locked`, `always_unlocked` | Block planting, growth ticks, bonemeal application |
@@ -220,7 +235,7 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[loot]` | `locked` | Filter locked items out of loot tables and mob/block drops |
 | `[pets]` | `locked_taming`, `locked_breeding`, `locked_commanding` | Block taming, breeding, or commanding specific entity types |
 | `[curios]` | `locked_slots` | Block equipping into specific Curios slot ids |
-| `[mobs]` | `locked_spawns` | Cancel mob spawns near gated players |
+| `[mobs]` | `locked_spawns` | Cancel only when every relevant player inside server simulation distance is denied. Mixed access preserves the mob for allowed players and conceals it from denied players. |
 | `[[mobs.replacements]]` | `target`, `replace_with` | Substitute one mob type for another at spawn |
 | `[[interactions]]` | `type`, `held_item`, `target_block` / `target_entity`, `description` | Block right-click / item-on-block / item-on-entity combos |
 | `[[regions]]` | `dimension`, `pos1`, `pos2`, `prevent_entry`, `prevent_explosions`, ... | 3D bounding-box gates |
@@ -572,7 +587,7 @@ compat/
 - **Command changes** — added `/stage gui` and `/progressivestages triggers list`; `/progressivestages trigger reset` now takes `<stage>`; removed `/progressivestages multi list`.
 
 ### v2.0
-- **Unified prefix lock model** — `id:`, `mod:`, `tag:`, `name:` replace v1's scattered arrays.
+- **Unified prefix lock model** — `all:*`, `id:`, `mod:`, `tag:`, `name:` replace v1's scattered arrays.
 - **Multi-stage gating** — player must own ALL gating stages to access a resource.
 - **Per-stage `[unlocks]`** — scoped carve-outs, no more global-only whitelist.
 - **`minecraft = true`** namespace shorthand with parent-stage inheritance.

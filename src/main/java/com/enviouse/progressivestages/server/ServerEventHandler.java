@@ -32,9 +32,12 @@ import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityMountEvent;
 import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
 import net.neoforged.neoforge.event.entity.player.BonemealEvent;
 import net.neoforged.neoforge.event.entity.player.ItemEntityPickupEvent;
@@ -137,6 +140,7 @@ public class ServerEventHandler {
         DimensionEnforcer.resetRuntimeState();
         StructureEnforcer.resetRuntimeState();
         ConditionalLockEngine.resetRuntimeState();
+        EntityPresenceEnforcer.resetRuntimeState();
         ContextualModifierApplier.reset();
         StructureSessionManager.getInstance().shutdown(event.getServer());
         com.enviouse.progressivestages.common.compat.ScriptHooks.reset();
@@ -333,6 +337,7 @@ public class ServerEventHandler {
         UUID playerId = player.getUUID();
         long currentTime = player.level().getGameTime();
         StructureSessionManager.getInstance().tick(player);
+        EntityPresenceEnforcer.tick(player);
 
         // ── Tick-based dimension enforcement (safety net for mods that bypass both events) ──
         // v2.3: also run when a stage opts in via a per-stage override (global may be off).
@@ -646,12 +651,30 @@ public class ServerEventHandler {
         }
     }
 
+    /** catches commands and modded direct add paths that skip spawn finalization. */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onEntityJoinLevel(EntityJoinLevelEvent event) {
+        if (event.loadedFromDisk() || !(event.getEntity() instanceof net.minecraft.world.entity.Mob mob)
+                || !(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)) {
+            return;
+        }
+        if (MobSpawnEnforcer.shouldCancelSpawn(mob, level, mob.getX(), mob.getY(), mob.getZ())) {
+            event.setCanceled(true);
+        }
+    }
+
     // ============ Entity Interaction Enforcement (item_on_entity) ============
 
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             var entityType = event.getTarget().getType();
+
+            if (!EntityEnforcer.canInteractEntity(player, entityType)) {
+                event.setCanceled(true);
+                EntityEnforcer.notifyLocked(player, entityType);
+                return;
+            }
 
             // v2.5: villager profession gating — block opening the trade GUI of a gated profession.
             if (event.getTarget() instanceof net.minecraft.world.entity.npc.Villager villager) {
@@ -698,6 +721,14 @@ public class ServerEventHandler {
         }
     }
 
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onEntityInteractSpecific(PlayerInteractEvent.EntityInteractSpecific event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (EntityEnforcer.canInteractEntity(player, event.getTarget().getType())) return;
+        event.setCanceled(true);
+        EntityEnforcer.notifyLocked(player, event.getTarget().getType());
+    }
+
     // ============ Entity Attack Enforcement ============
 
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -717,6 +748,19 @@ public class ServerEventHandler {
                 event.setCanceled(true);
                 ItemEnforcer.notifyLockedWithCooldown(player, decision, heldItem.getItem());
             }
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onLivingChangeTarget(LivingChangeTargetEvent event) {
+        EntityPresenceEnforcer.preventTarget(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onLivingIncomingDamage(LivingIncomingDamageEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player
+                && EntityPresenceEnforcer.blocksDamage(player, event.getSource())) {
+            event.setCanceled(true);
         }
     }
 
@@ -831,6 +875,11 @@ public class ServerEventHandler {
         if (!event.isMounting()) return;
         if (!(event.getEntityMounting() instanceof ServerPlayer player)) return;
         if (event.getEntityBeingMounted() == null) return;
+        if (!EntityEnforcer.canMountEntity(player, event.getEntityBeingMounted().getType())) {
+            event.setCanceled(true);
+            EntityEnforcer.notifyLocked(player, event.getEntityBeingMounted().getType());
+            return;
+        }
         if (!PetEnforcer.canInteract(player, event.getEntityBeingMounted().getType(),
                 event.getEntityBeingMounted())) {
             event.setCanceled(true);
@@ -871,6 +920,7 @@ public class ServerEventHandler {
             StructureEnforcer.cleanupPlayer(player.getUUID());
             OreSpoofManager.get().onPlayerLogout(player);
             ContextualModifierApplier.clear(player);
+            EntityPresenceEnforcer.clearPlayer(player.getUUID());
             com.enviouse.progressivestages.server.editor.EditorSessionService.get().revokePlayer(player.getUUID());
         }
     }

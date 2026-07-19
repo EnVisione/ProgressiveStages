@@ -35,4 +35,17 @@ class SelectorMatcherRegistryTest {
             Set.of(), Map.of("rarity", "epic"));
         assertTrue(SelectorMatcherRegistry.get().match(rarity, target).matched());
     }
+
+    @Test
+    void allSelectorMatchesEveryRegisteredCandidateAndKeepsPriority() {
+        SelectorSpec all = SelectorSpec.parse("all:*|priority=900").orElseThrow();
+        assertEquals(SelectorSpec.ALL, all.matcherId());
+        assertEquals(900, all.explicitPriority());
+        assertTrue(SelectorMatcherRegistry.get().match(all,
+            SelectorTarget.id(ResourceLocation.parse("minecraft:skeleton"))).matched());
+        assertTrue(SelectorMatcherRegistry.get().match(all,
+            SelectorTarget.id(ResourceLocation.parse("example:anything"))).matched());
+        assertEquals(0, SelectorMatcherRegistry.get().match(all,
+            SelectorTarget.id(ResourceLocation.parse("minecraft:skeleton"))).specificity());
+    }
 }

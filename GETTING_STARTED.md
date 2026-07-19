@@ -244,6 +244,7 @@ Every normal lock category uses the same matching language:
 
 | Entry | Meaning |
 |---|---|
+| `all:*` | Every registered entry in the category containing this selector. |
 | `minecraft:diamond` | One exact identifier. The `id:` prefix is optional. |
 | `id:minecraft:diamond` | The same exact identifier written explicitly. |
 | `mod:create` | Everything from the `create` namespace in this category. |
@@ -252,6 +253,9 @@ Every normal lock category uses the same matching language:
 
 Prefixes are evaluated inside the category containing them. `mod:create` under `[items]` locks
 Create items. The same entry under `[blocks]` locks Create blocks.
+
+Use `all:*` for a broad rule, then add exact exceptions. For example, `all:*` under `[fluids]`
+matches every registered fluid without affecting items, blocks, or any other registry.
 
 Example with an exception:
 
@@ -276,8 +280,8 @@ Common categories are:
 | Fluid buckets and fluid interactions | `[fluids]` |
 | Crafting recipes or recipe outputs | `[recipes]` |
 | Dimension travel | `[dimensions]` |
-| Attacking entities | `[entities]` |
-| Mob spawning | `[mobs]` |
+| Entity presence, attacks, interactions, or mounting | `[entities]` or an editor entity rule |
+| Mob spawning and replacement | `[mobs]` |
 | Crop planting and growth | `[crops]` |
 | Enchantments and level caps | `[enchants]` |
 | Villager offers | `[trades]` |

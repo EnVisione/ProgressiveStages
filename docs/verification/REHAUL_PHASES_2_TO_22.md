@@ -34,7 +34,7 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 ### Frontend
 
 - `npm run check` passed with TypeScript emitting no files and no errors.
-- `npm test` passed eight React editor model and TOML preservation tests.
+- `npm test` passed nine React editor model and TOML preservation tests.
 - `npm run build` passed with Vite 6.4.3.
 - Production output contains `index.html`, `app.css`, `app.js`, and `favicon.svg`.
 - The application uses React 19.1.1. The previous Preact shell and `legacy.js` controller were removed.
@@ -43,8 +43,8 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 
 ### Java and dedicated server
 
-- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in eleven seconds.
-- The clean suite ran 141 tests with zero failures, zero errors, and zero
+- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in fifteen seconds.
+- The clean suite ran 148 tests with zero failures, zero errors, and zero
   skipped tests.
 - `DefaultShowcaseStagesTest` wrote all one hundred fifty generated files into an empty temporary
   stages directory, discovered fifty packages, parsed and compiled every package, validated the
@@ -62,15 +62,19 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
   when no file changed. `AbilityEnforcerTest` verifies that jump, elytra, sprint, swim, and climb
   all remain in the authoritative enforcement set. `ClientAbilityStateTest` verifies normalized,
   replacing client snapshots so stale restrictions cannot survive a server state change.
-- The earlier `./gradlew runServer --no-daemon` smoke remains the dedicated-server compatibility
-  checkpoint for three existing legacy files. First-launch showcase generation does not replace
-  those files because existing installations are intentionally preserved.
+- `PrefixEntryTest` and `SelectorMatcherRegistryTest` verify `all:*`, specificity, priority, and
+  exception behavior. `EntityPresenceEnforcerTest` verifies simulation distance boundaries and the
+  mixed multiplayer spawn matrix. `ClientEntityVisibilityTest` verifies replacing immutable
+  concealment snapshots.
+- `./gradlew runServer --no-daemon` reached the dedicated server ready state in an isolated world.
+  NeoForge applied `ChunkMapAccessor` and `ChunkMapTrackedEntityMixin`, loaded the three existing
+  legacy stages, and saved every dimension cleanly during shutdown.
 
 ### Release artifact
 
 - Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,702,517 bytes.
-- SHA-256: `3eb2116db42d429c97001f4c6b5f8d28460892815ef2b8e0c57fb38743640735`.
+- Size: 1,719,105 bytes.
+- SHA-256: `c6c24daa3f3c20ced3b16b738e33a14e28228a1cfa85f632730eebd71da904f5`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
   logo, `assets/progressivestages/lang/en_us.json`, and all four production React editor assets.
 - The source logo SHA-256 is
