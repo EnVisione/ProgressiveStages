@@ -42,7 +42,18 @@ class StageTreeScreenRenderOrderTest {
 
         assertTrue(source.contains("pressedNode = nodeAt(mouseX, mouseY)"));
         assertTrue(source.contains("dragDistance += Math.hypot(dragX, dragY)"));
+        assertTrue(source.contains("StageTreeViewport.drag("));
         assertTrue(source.contains("if (dragDistance < 2.0 && pressedNode != null)"));
+    }
+
+    @Test
+    void mapWheelUsesTheProgressiveSkillsCursorZoomModel() throws IOException {
+        String source = Files.readString(SCREEN);
+
+        assertTrue(source.contains("StageTreeViewport.zoomAt("));
+        assertTrue(source.contains("mouseX - (mapLeft + mapRight) / 2.0D"));
+        assertTrue(source.contains("mouseY - (mapTop + mapBottom) / 2.0D"));
+        assertTrue(source.contains("zoom = camera.zoom()"));
     }
 
     private static int occurrences(String value, String target) {

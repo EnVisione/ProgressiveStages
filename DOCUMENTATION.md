@@ -2770,11 +2770,15 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
 
 **Navigation.** Hold the left mouse button and drag from empty map space or from
 a stage node. A short click opens that node, while movement pans the map like
-the vanilla advancement screen. The mouse wheel scrolls vertically;
-Shift+wheel scrolls horizontally. WASD and the arrow keys also pan. The header
-home button returns to the most relevant available stage. The in-map category
-selector cycles with left/right click; `C` and Shift+`C` cycle it from the
-keyboard.
+the vanilla advancement screen and the ProgressiveSkills skill tree. Roll the
+mouse wheel over the map to zoom toward the pointer. The supported zoom range
+is 65 percent through 165 percent. The stage icons remain at a readable size
+while their positions and connector paths zoom. This is the same camera model
+used by ProgressiveSkills. WASD and the arrow keys also pan, and their visible
+movement stays consistent at every zoom level. Press Space or use the header
+home button to center the complete graph and choose the best zoom that fits it.
+Click the category control to open its full list. Press `C` to open or close
+that list from the keyboard.
 
 **Nodes and details.** Hover a framed node for its name, id, status,
 description, category, and trigger completion. Click it to pin an inspector with

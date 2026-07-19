@@ -31,10 +31,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 3.0 progression map. Its interaction and visual language deliberately mirror vanilla's
- * advancement screen: framed icon nodes, elbow connectors, a tiled map, drag-to-pan, wheel
- * scrolling, and hover cards. Clicking a node pins the richer stage inspector (and purchase
- * control) without making map navigation itself mutate server state.
+ * The progression map uses vanilla advancement visuals.
+ * Dragging pans the map, the mouse wheel zooms around the pointer, and clicking opens details.
  */
 public final class StageTreeScreen extends Screen {
 
@@ -53,6 +51,7 @@ public final class StageTreeScreen extends Screen {
     private int left, top, right, bottom;
     private int mapLeft, mapTop, mapRight, mapBottom;
     private double panX, panY;
+    private double zoom = 1.0D;
     private int minNodeX, minNodeY, maxNodeX, maxNodeY;
     private boolean centered;
     private boolean draggingMap;
@@ -196,7 +195,7 @@ public final class StageTreeScreen extends Screen {
 
         if (selected != null && !byId.containsKey(selected)) selected = null;
         computeBounds();
-        if (recenter || !centered) centerOnBestNode();
+        if (recenter || !centered) centerGraph();
         else clampPan();
     }
 
@@ -281,16 +280,24 @@ public final class StageTreeScreen extends Screen {
         maxNodeY = nodes.stream().mapToInt(n -> n.y() + NODE).max().orElse(NODE);
     }
 
-    private void centerOnBestNode() {
-        MapNode target = null;
-        for (MapNode n : nodes) if (n.available()) { target = n; break; }
-        if (target == null) for (MapNode n : nodes) if (!n.owned()) { target = n; break; }
-        if (target == null && !nodes.isEmpty()) target = nodes.get(0);
-        if (target == null) {
+    private void centerGraph() {
+        if (nodes.isEmpty()) {
             panX = panY = 0;
+            zoom = 1.0D;
         } else {
-            panX = (mapRight - mapLeft - NODE) / 2.0 - target.x();
-            panY = (mapBottom - mapTop - NODE) / 2.0 - target.y();
+            double minimumCenterX = minNodeX + NODE / 2.0D;
+            double maximumCenterX = maxNodeX - NODE / 2.0D;
+            double minimumCenterY = minNodeY + NODE / 2.0D;
+            double maximumCenterY = maxNodeY - NODE / 2.0D;
+            panX = -(minimumCenterX + maximumCenterX) / 2.0D;
+            panY = -(minimumCenterY + maximumCenterY) / 2.0D;
+            zoom = StageTreeViewport.fitZoom(
+                mapRight - mapLeft,
+                mapBottom - mapTop,
+                minimumCenterX,
+                maximumCenterX,
+                minimumCenterY,
+                maximumCenterY);
         }
         centered = true;
         clampPan();
@@ -299,12 +306,10 @@ public final class StageTreeScreen extends Screen {
     private void clampPan() {
         int viewportW = Math.max(1, mapRight - mapLeft);
         int viewportH = Math.max(1, mapBottom - mapTop);
-        int contentW = maxNodeX - minNodeX;
-        int contentH = maxNodeY - minNodeY;
-        if (contentW + 40 <= viewportW) panX = (viewportW - contentW) / 2.0 - minNodeX;
-        else panX = Math.max(viewportW - maxNodeX - 24, Math.min(24 - minNodeX, panX));
-        if (contentH + 40 <= viewportH) panY = (viewportH - contentH) / 2.0 - minNodeY;
-        else panY = Math.max(viewportH - maxNodeY - 24, Math.min(24 - minNodeY, panY));
+        panX = StageTreeViewport.clampPan(
+            panX, viewportW, zoom, minNodeX + NODE / 2.0D, maxNodeX - NODE / 2.0D);
+        panY = StageTreeViewport.clampPan(
+            panY, viewportH, zoom, minNodeY + NODE / 2.0D, maxNodeY - NODE / 2.0D);
     }
 
     @Override
@@ -317,6 +322,7 @@ public final class StageTreeScreen extends Screen {
         renderConnections(g);
         renderNodes(g, mouseX, mouseY);
         g.disableScissor();
+        renderZoomIndicator(g);
 
         if (selected != null) {
             g.pose().pushPose();
@@ -356,6 +362,16 @@ public final class StageTreeScreen extends Screen {
             g.drawCenteredString(font, Component.translatable("gui.progressivestages.tree.empty"),
                 (mapLeft + mapRight) / 2, (mapTop + mapBottom) / 2 - 4, 0xFFFFFFFF);
         }
+    }
+
+    private void renderZoomIndicator(GuiGraphics g) {
+        Component label = Component.translatable(
+            "gui.progressivestages.tree.zoom", Math.round(zoom * 100.0D));
+        int labelWidth = font.width(label);
+        int x = mapLeft + 4;
+        int y = mapBottom - font.lineHeight - 4;
+        g.fill(x - 2, y - 2, x + labelWidth + 2, y + font.lineHeight + 2, 0x99000000);
+        g.drawString(font, label, x, y, 0xFFFFFFFF, false);
     }
 
     private ResourceLocation backgroundTexture() {
@@ -421,8 +437,15 @@ public final class StageTreeScreen extends Screen {
         };
     }
 
-    private int screenX(MapNode node) { return mapLeft + (int) Math.round(panX) + node.x(); }
-    private int screenY(MapNode node) { return mapTop + (int) Math.round(panY) + node.y(); }
+    private int screenX(MapNode node) {
+        return StageTreeViewport.nodeTopLeft(
+            (mapLeft + mapRight) / 2, node.x() + NODE / 2.0D, panX, zoom, NODE);
+    }
+
+    private int screenY(MapNode node) {
+        return StageTreeViewport.nodeTopLeft(
+            (mapTop + mapBottom) / 2, node.y() + NODE / 2.0D, panY, zoom, NODE);
+    }
 
     private void renderWindowFrame(GuiGraphics g, int mouseX, int mouseY) {
         // Resize vanilla's 252x140 advancement frame by repeating its center/edge regions while
@@ -814,7 +837,7 @@ public final class StageTreeScreen extends Screen {
             return true;
         }
         if (button == 0 && inside(mouseX, mouseY, homeX, homeY, homeW, homeH)) {
-            centerOnBestNode();
+            centerGraph();
             return true;
         }
         if (button == 0 && categoryOpen) {
@@ -863,8 +886,10 @@ public final class StageTreeScreen extends Screen {
         if (button == 0 && draggingMap) {
             dragDistance += Math.hypot(dragX, dragY);
             if (dragDistance >= 2.0) {
-                panX += dragX;
-                panY += dragY;
+                StageTreeViewport.Camera camera = StageTreeViewport.drag(
+                    new StageTreeViewport.Camera(panX, panY, zoom), dragX, dragY);
+                panX = camera.panX();
+                panY = camera.panY();
                 clampPan();
             }
             return true;
@@ -902,8 +927,14 @@ public final class StageTreeScreen extends Screen {
             return true;
         }
         if (inside(mouseX, mouseY, mapLeft, mapTop, mapRight - mapLeft, mapBottom - mapTop)) {
-            if (hasShiftDown() || scrollX != 0) panX += (scrollX != 0 ? scrollX : scrollY) * 16;
-            else panY += scrollY * 16;
+            StageTreeViewport.Camera camera = StageTreeViewport.zoomAt(
+                new StageTreeViewport.Camera(panX, panY, zoom),
+                scrollY,
+                mouseX - (mapLeft + mapRight) / 2.0D,
+                mouseY - (mapTop + mapBottom) / 2.0D);
+            panX = camera.panX();
+            panY = camera.panY();
+            zoom = camera.zoom();
             clampPan();
             return true;
         }
@@ -926,6 +957,10 @@ public final class StageTreeScreen extends Screen {
             if (!categories.isEmpty()) categoryOpen = !categoryOpen;
             return true;
         }
+        else if (keyCode == GLFW.GLFW_KEY_SPACE) {
+            centerGraph();
+            return true;
+        }
         else if (keyCode == GLFW.GLFW_KEY_ESCAPE && categoryOpen) {
             categoryOpen = false;
             return true;
@@ -935,8 +970,8 @@ public final class StageTreeScreen extends Screen {
             return true;
         }
         if (dx != 0 || dy != 0) {
-            panX += dx;
-            panY += dy;
+            panX += dx / zoom;
+            panY += dy / zoom;
             clampPan();
             return true;
         }
