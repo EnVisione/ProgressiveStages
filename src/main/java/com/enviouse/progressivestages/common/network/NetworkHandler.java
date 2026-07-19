@@ -67,6 +67,15 @@ public class NetworkHandler {
             )
         );
 
+        registrar.playToClient(
+            AbilityStatePayload.TYPE,
+            AbilityStatePayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                NetworkHandler::handleAbilityStateClient,
+                (payload, context) -> {}
+            )
+        );
+
         // Stage definitions sync packet (v1.3 - includes dependencies)
         registrar.playToClient(
             StageDefinitionsSyncPayload.TYPE,
@@ -676,6 +685,10 @@ public class NetworkHandler {
         PacketDistributor.sendToPlayer(player, new StageUpdatePayload(stageId.getResourceLocation(), granted));
     }
 
+    public static void sendAbilityState(ServerPlayer player, Set<String> lockedAbilities) {
+        PacketDistributor.sendToPlayer(player, new AbilityStatePayload(lockedAbilities.stream().sorted().toList()));
+    }
+
     /**
      * Send lock registry sync to a player.
      * Sends ALL resolved item locks including name patterns, tags, and mod locks.
@@ -934,6 +947,10 @@ public class NetworkHandler {
         });
     }
 
+    private static void handleAbilityStateClient(AbilityStatePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> com.enviouse.progressivestages.client.ClientAbilityState.set(payload.lockedAbilities()));
+    }
+
     private static void handleStageDefinitionsSyncClient(StageDefinitionsSyncPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             Map<StageId, ClientStageCache.StageDefinitionData> definitions = new HashMap<>();
@@ -1079,6 +1096,19 @@ public class NetworkHandler {
                 LIST_CODEC.decode(buf), LIST_CODEC.decode(buf), LIST_CODEC.decode(buf),
                 LIST_CODEC.decode(buf), LIST_CODEC.decode(buf), LIST_CODEC.decode(buf),
                 LIST_CODEC.decode(buf))
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record AbilityStatePayload(List<String> lockedAbilities) implements CustomPacketPayload {
+        public static final Type<AbilityStatePayload> TYPE = new Type<>(Constants.ABILITY_STATE_PACKET);
+        public static final StreamCodec<FriendlyByteBuf, AbilityStatePayload> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()), AbilityStatePayload::lockedAbilities,
+            AbilityStatePayload::new
         );
 
         @Override

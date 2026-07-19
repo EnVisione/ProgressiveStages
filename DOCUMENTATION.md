@@ -411,6 +411,13 @@ To create a stage without knowing TOML:
     with prerequisite ancestry, zoom, fit the complete graph, or drag nodes to save their in game
     coordinates. Drag empty graph space to pan. Scroll to move through a large graph. Hold Control
     while scrolling to zoom around the mouse pointer. Curved connectors follow at every zoom.
+    Click `Connect stages` to edit progression directly on the graph. Select the prerequisite stage
+    first. Then select the stage that should require it. The editor writes the dependency into the
+    destination stage and refuses duplicate branches, self references, and dependency loops. To
+    remove a dependency, select its curved connector and confirm `Remove branch`. A selected
+    connector turns red so it is clear which branch will be removed. Keyboard users may focus a
+    connector and press Enter, Space, Delete, or Backspace. The `Required stages` editor remains
+    available when a stage needs an `all`, `any`, or `at_least` dependency policy.
     Automatic layout puts beginner stages at
     the bottom, reduces crossings, and places evolutions above them. `Arrange and save` writes the
     complete crossing-reduced layout. `Use automatic layout` removes every manual position. The
@@ -418,9 +425,11 @@ To create a stage without knowing TOML:
     reset. The browser scales cards for editing but stores the compact coordinates Minecraft uses.
 12. Click `Check my work`. Then click `Review and apply`, inspect every file in the diff, and confirm.
     After the server validates, writes, reloads, and synchronizes the result, every online operator
-    receives the complete file change list in Minecraft chat. The final chat line confirms the live
-    configuration revision and transaction identifier. The browser keeps the same applied file list
-    visible so the operator can compare both reports.
+    receives the complete file change list in Minecraft chat. Added files appear in green. Modified
+    files appear in yellow. Removed files appear in red. The heading appears in gold and the final
+    synchronization result appears in green. Players without operator permission never receive
+    these editor reports. If no file changed, nobody receives a chat message. The browser keeps the
+    same applied file list visible so the operator can compare both reports.
 
 The easy builder writes the same schema that a TOML expert would write. There is no reduced
 runtime, separate simple-rule engine, or client-only shortcut. Priority, exclusions, temporary
@@ -1718,7 +1727,7 @@ owning a stage.
 
 ```toml
 [abilities]
-locked = ["elytra", "sprint", "swim", "climb"]   # all blocked until this stage is owned
+locked = ["jump", "elytra", "sprint", "swim", "climb"]
 ```
 
 | Field | Type | Meaning |
@@ -1730,10 +1739,17 @@ is dropped out of that action. The recognised entries are:
 
 | Ability | Effect while the gating stage is missing |
 |---------|------------------------------------------|
+| `jump` | Upward jump motion is cancelled as soon as a jump begins. |
 | `elytra` | Elytra **gliding** is blocked — the player is dropped out of flight each tick. |
 | `sprint` | **New in 3.0.** Sprinting is **cancelled** each tick. |
 | `swim` | **New in 3.0.** The **swimming** pose is cancelled (also covers fast-swim in water). |
 | `climb` | **New in 3.0.** **Climbing up** ladders/vines is blocked — any upward velocity on a climbable is clamped to ≤ 0 (the player can still hold position / descend). |
+
+The server resolves the final state of every recognised ability after static stage requirements,
+conditional locks, conditional unlocks, priorities, and creative bypass are evaluated. It sends a
+new state to the client only when that result changes. Both sides enforce the result before and
+after movement. This prevents client prediction from briefly restoring swimming, sprinting,
+climbing, or elytra animation while the server is rejecting the action.
 
 > `crawl` on land isn't separately enforceable in vanilla (the prone pose doesn't
 > set the swim flag and the player is wedged in a 1-block gap), so it is **not** a

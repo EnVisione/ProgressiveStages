@@ -29,7 +29,7 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 
 ## Final evidence
 
-Recorded on July 18, 2026 from branch `envy/3.0.1`.
+Recorded on July 19, 2026 from branch `envy/3.0.1`.
 
 ### Frontend
 
@@ -41,8 +41,8 @@ Recorded on July 18, 2026 from branch `envy/3.0.1`.
 
 ### Java and dedicated server
 
-- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in ten seconds.
-- The clean suite ran 120 tests with zero failures, zero errors, and zero
+- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in eleven seconds.
+- The clean suite ran 141 tests with zero failures, zero errors, and zero
   skipped tests.
 - `DefaultShowcaseStagesTest` wrote all one hundred fifty generated files into an empty temporary
   stages directory, discovered fifty packages, parsed and compiled every package, validated the
@@ -54,6 +54,12 @@ Recorded on July 18, 2026 from branch `envy/3.0.1`.
   `NetworkCostSummaryTest` verifies readable singular, plural, and uncountable payment names.
 - `StageSlotResolverTest`, `StageFileParserTest`, and `StageOrderTest` verify unlimited stacking,
   denial, oldest and priority replacement, schema parsing, and consistent group validation.
+- `PackagedEditorAssetsTest` verifies direct graph connection creation and removal controls, CSP
+  safe branch hit areas, and change only operator chat language. `EditorApplyChatTest` verifies
+  gold headings, green additions, yellow modifications, green synchronization results, and silence
+  when no file changed. `AbilityEnforcerTest` verifies that jump, elytra, sprint, swim, and climb
+  all remain in the authoritative enforcement set. `ClientAbilityStateTest` verifies normalized,
+  replacing client snapshots so stale restrictions cannot survive a server state change.
 - The earlier `./gradlew runServer --no-daemon` smoke remains the dedicated-server compatibility
   checkpoint for three existing legacy files. First-launch showcase generation does not replace
   those files because existing installations are intentionally preserved.
@@ -61,8 +67,8 @@ Recorded on July 18, 2026 from branch `envy/3.0.1`.
 ### Release artifact
 
 - Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,618,256 bytes.
-- SHA-256: `f413bf4303f599a2bb2c1425876b9239f81d2c7d6ddad21945fa147c0e90db0b`.
+- Size: 1,644,938 bytes.
+- SHA-256: `376320a74d36b9a1747716f43b21571a194e346eb6c3f4f561d18aa4eca408c7`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
   logo, `assets/progressivestages/lang/en_us.json`, and all four production editor assets.
 - The source logo SHA-256 is

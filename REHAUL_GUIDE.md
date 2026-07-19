@@ -72,13 +72,19 @@ This workflow works in an integrated single-player world and on a dedicated serv
     layout` removes the manual coordinates. A selected stage also has `Edit player UI position`
     under Stage details for exact X and Y entry or a one-stage automatic reset. Browser cards are
     scaled for readability, while the saved coordinates are the compact values used in Minecraft.
+    To change the progression itself, click `Connect stages`, select the prerequisite stage, then
+    select the stage that should require it. Select an existing curved connector to remove that
+    dependency. The editor refuses duplicate branches, self references, and dependency loops.
 13. Use `TOML source` only when you want direct control. `stage.toml`, `rules.toml`, and
     `progression.toml` remain available as separate advanced tabs, and unknown extension fields are
     preserved.
 14. Click `Check my work`. Fix every red error.
 15. Click `Review and apply`. Read the semantic file diff.
 16. Confirm apply. The server writes one transaction, reloads once, and synchronizes connected
-    clients. A later player receives the same compiled revision during login.
+    clients. A later player receives the same compiled revision during login. Every online operator
+    receives added file messages in green, modified file messages in yellow, and removed file
+    messages in red. Players without operator permission receive nothing. An apply with no file
+    changes also sends no chat message.
 
 Nothing is live before step 16. The editor owns a server-side draft with a revision number. Undo,
 redo, source mode, validation, graph view, registry search, stage create, duplicate, rename, move,
@@ -792,4 +798,11 @@ The JAR must contain the mod logo, NeoForge metadata, language data, generated e
 `app.css`, `app.js`, and `legacy.js`. The editor dependency audit must report zero vulnerabilities.
 The Gradle suite must report zero failures. The final manual gate is a dedicated server with two
 clients: open the editor, apply a stage, confirm both current clients activate one revision, join a
-third client, confirm it receives the same revision, then roll the transaction back.
+third client, confirm it receives the same revision, then roll the transaction back. In the player
+layout, draw a branch and confirm that the destination stage gains the prerequisite. Select the
+branch line, remove it, and confirm the prerequisite disappears. Apply one modified, one added, and
+one removed file. Confirm that only operators see the yellow, green, and red messages. Apply again
+without changing anything and confirm that chat stays silent. Finally, remove Aquatic Blessing from
+a survival player, enter water, hold sprint, and confirm that the player never enters the swimming
+pose. Grant Aquatic Blessing and confirm that normal swimming returns. Repeat the movement check for
+`jump`, `elytra`, `sprint`, and `climb` with stages that gate those abilities.

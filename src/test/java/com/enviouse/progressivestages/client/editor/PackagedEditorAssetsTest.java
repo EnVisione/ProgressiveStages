@@ -69,7 +69,10 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("fitGraphViewport"));
         assertTrue(controller.contains("applyGraphScale"));
         assertTrue(controller.contains("graph.setAttribute(\"viewBox\""));
-        assertTrue(controller.contains("foreignObject class=\"graph-node-shell\""));
+        assertTrue(controller.contains("foreignObject class=\"graph-node-shell"));
+        assertTrue(controller.contains("connectGraphStage"));
+        assertTrue(controller.contains("removeGraphConnection"));
+        assertTrue(controller.contains("graph-line-hit"));
         assertFalse(controller.contains(".style."));
         assertFalse(controller.contains("style=\""));
         assertTrue(controller.contains("Apply failed"));
@@ -79,7 +82,8 @@ class PackagedEditorAssetsTest {
         assertTrue(controller.contains("Stay inside an assigned structure"));
         assertTrue(controller.contains("Allow access to structure"));
         assertTrue(controller.contains("Deny access to structure"));
-        assertTrue(controller.contains("Every online operator received the complete change list"));
+        assertTrue(controller.contains("Added files are green, modified files are yellow, and removed files are red"));
+        assertTrue(controller.contains("no operator chat message will be sent"));
         assertTrue(controller.contains("stageIdentity"));
         assertFalse(controller.contains("style.zoom"));
         assertTrue(css.contains("#e3aa32"));

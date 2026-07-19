@@ -100,7 +100,8 @@
     activeInput: null,
     modalCleanup: null,
     dragRule: null,
-    graphZoom: 1
+    graphZoom: 1,
+    graphConnectFrom: ""
   };
 
   const GRAPH_LANE_X = 84;
@@ -1321,42 +1322,145 @@
     $("graph").dataset.baseWidth = maxX;
     $("graph").dataset.baseHeight = maxY;
     $("graph").setAttribute("viewBox", `0 0 ${maxX} ${maxY}`);
-    $("graph").innerHTML = `<g class="graph-lines">${lines}</g>` + nodes.map(node => `<foreignObject class="graph-node-shell" data-graph-stage="${escapeHtml(node.stage.key)}" data-map-x="${node.mapX}" data-map-y="${node.mapY}" x="${node.x}" y="${node.y}" width="178" height="52" tabindex="0" role="button" aria-label="${escapeHtml(node.stage.name)}. ${escapeHtml(graphDependencyLabel(node))}. Drag to change its position or press enter to edit it."><button xmlns="http://www.w3.org/1999/xhtml" class="graph-node" type="button" tabindex="-1"><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button></foreignObject>`).join("");
+    $("graph").innerHTML = `<g class="graph-lines">${lines}</g>` + nodes.map(node => `<foreignObject class="graph-node-shell ${node.stage.key === state.graphConnectFrom ? "graph-connect-source" : ""}" data-graph-stage="${escapeHtml(node.stage.key)}" data-map-x="${node.mapX}" data-map-y="${node.mapY}" x="${node.x}" y="${node.y}" width="178" height="52" tabindex="0" role="button" aria-label="${escapeHtml(node.stage.name)}. ${escapeHtml(graphDependencyLabel(node))}. Drag to change its position or press enter to edit it."><button xmlns="http://www.w3.org/1999/xhtml" class="graph-node" type="button" tabindex="-1"><span><strong>${escapeHtml(node.stage.name)}</strong><small>${escapeHtml(graphDependencyLabel(node))}</small></span></button></foreignObject>`).join("");
     applyGraphScale();
-    if ($("graphStatus")) $("graphStatus").textContent = `${nodes.length} stages shown. ${directIds.size < nodes.length ? `${nodes.length - directIds.size} prerequisite paths included. ` : ""}Dragging saves player map coordinates. Arrange and save stores every automatic position.`;
+    updateGraphConnectionControls();
+    if ($("graphStatus")) $("graphStatus").textContent = state.graphConnectFrom === "__choose_source__"
+      ? "Select the prerequisite stage where the new branch starts."
+      : state.graphConnectFrom
+      ? `Select the stage that should require ${stagePackages().find(stage => stage.key === state.graphConnectFrom)?.name || "the selected stage"}.`
+      : `${nodes.length} stages shown. ${directIds.size < nodes.length ? `${nodes.length - directIds.size} prerequisite paths included. ` : ""}Dragging saves player map coordinates. Connect stages draws a new prerequisite branch. Select a line to remove it.`;
+    qa("[data-graph-from]", $("graph")).forEach(connection => {
+      const remove = () => removeGraphConnection(connection.dataset.graphFrom, connection.dataset.graphTo);
+      connection.onclick = event => { event.stopPropagation(); remove(); };
+      connection.onpointerdown = event => event.stopPropagation();
+      connection.onkeydown = event => {
+        if (event.key !== "Enter" && event.key !== " " && event.key !== "Delete" && event.key !== "Backspace") return;
+        event.preventDefault();
+        remove();
+      };
+    });
     qa("[data-graph-stage]", $("graph")).forEach(node => {
       node.onclick = () => {
         if (node.dataset.dragged === "true") {
           node.dataset.dragged = "false";
           return;
         }
-        selectStage(node.dataset.graphStage);
+        if (state.graphConnectFrom) connectGraphStage(node.dataset.graphStage);
+        else selectStage(node.dataset.graphStage);
       };
       node.onpointerdown = event => dragGraphNode(event, node);
       node.onkeydown = event => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
-        selectStage(node.dataset.graphStage);
+        if (state.graphConnectFrom) connectGraphStage(node.dataset.graphStage);
+        else selectStage(node.dataset.graphStage);
       };
     });
   }
 
   function graphPath(fromKey, toKey, x1, y1, x2, y2) {
     const middle = Math.round((y1 + y2) / 2);
-    return `<path data-graph-from="${escapeHtml(fromKey)}" data-graph-to="${escapeHtml(toKey)}" d="M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}"/>`;
+    const fromName = stagePackages().find(stage => stage.key === fromKey)?.name || "prerequisite stage";
+    const toName = stagePackages().find(stage => stage.key === toKey)?.name || "dependent stage";
+    const path = `M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}`;
+    return `<g class="graph-connection" data-graph-from="${escapeHtml(fromKey)}" data-graph-to="${escapeHtml(toKey)}" tabindex="0" role="button" aria-label="Remove branch from ${escapeHtml(fromName)} to ${escapeHtml(toName)}"><path class="graph-line-hit" d="${path}"/><path class="graph-line-visible" d="${path}"/></g>`;
   }
 
   function updateGraphConnections() {
-    qa("[data-graph-from]", $("graph")).forEach(path => {
-      const from = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === path.dataset.graphFrom);
-      const to = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === path.dataset.graphTo);
+    qa("[data-graph-from]", $("graph")).forEach(connection => {
+      const from = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === connection.dataset.graphFrom);
+      const to = qa("[data-graph-stage]", $("graph")).find(node => node.dataset.graphStage === connection.dataset.graphTo);
       if (!from || !to) return;
       const x1 = Number(from.getAttribute("x")) + 89;
       const y1 = Number(from.getAttribute("y"));
       const x2 = Number(to.getAttribute("x")) + 89;
       const y2 = Number(to.getAttribute("y")) + 52;
       const middle = Math.round((y1 + y2) / 2);
-      path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}`);
+      qa("path", connection).forEach(path => path.setAttribute("d", `M ${x1} ${y1} C ${x1} ${middle}, ${x2} ${middle}, ${x2} ${y2}`));
+    });
+  }
+
+  function updateGraphConnectionControls() {
+    const connecting = Boolean(state.graphConnectFrom);
+    $("connectGraphStages")?.classList.toggle("active", connecting);
+    $("cancelGraphConnection")?.classList.toggle("hidden", !connecting);
+    if ($("connectGraphStages")) $("connectGraphStages").textContent = state.graphConnectFrom === "__choose_source__"
+      ? "Choose prerequisite" : connecting ? "Choose destination" : "Connect stages";
+  }
+
+  function beginGraphConnection() {
+    if (state.graphConnectFrom) {
+      state.graphConnectFrom = "";
+      renderGraph();
+      return;
+    }
+    openModal(`<h2 id="modalTitle">Draw a progression branch</h2><p>First select the prerequisite stage. Then select the stage that requires it. The editor prevents duplicate branches and progression loops.</p><div class="modal-actions"><button type="button" data-close-modal class="ghost">Cancel</button><button id="startGraphConnection" type="button" class="primary">Choose prerequisite stage</button></div>`, () => {
+      $("startGraphConnection").onclick = () => {
+        closeModal();
+        state.graphConnectFrom = "__choose_source__";
+        renderGraph();
+      };
+    });
+  }
+
+  function cancelGraphConnection() {
+    state.graphConnectFrom = "";
+    renderGraph();
+  }
+
+  async function connectGraphStage(stageKey) {
+    const clicked = stagePackages().find(stage => stage.key === stageKey);
+    if (!clicked) return;
+    if (state.graphConnectFrom === "__choose_source__") {
+      state.graphConnectFrom = clicked.key;
+      renderGraph();
+      return;
+    }
+    const source = stagePackages().find(stage => stage.key === state.graphConnectFrom);
+    const target = clicked;
+    if (!source) return cancelGraphConnection();
+    if (source.id === target.id) return toast("A stage cannot require itself");
+    const content = state.boot.draft.files[target.stagePath] || "";
+    const dependencies = dependenciesFor(content, target.legacy);
+    if (dependencies.includes(source.id)) return toast("That progression branch already exists");
+    if (stageDependsOn(source.id, target.id)) return toast("That branch would create a progression loop");
+    let updated = upsertToml(content, target.legacy ? "stage.dependency" : "stage.dependencies", [...dependencies, source.id]);
+    if (!dependencies.length) {
+      updated = upsertToml(updated, "stage.dependency_mode", "all");
+      updated = upsertToml(updated, "stage.dependency_count", 1);
+    }
+    state.graphConnectFrom = "";
+    try {
+      await mutate(target.stagePath, updated);
+      toast(`${target.name} now branches from ${source.name}`);
+    } catch (error) {
+      toast(`The branch was not saved. ${error.message}`);
+    }
+  }
+
+  function removeGraphConnection(fromKey, toKey) {
+    const source = stagePackages().find(stage => stage.key === fromKey);
+    const target = stagePackages().find(stage => stage.key === toKey);
+    if (!source || !target) return;
+    openModal(`<h2 id="modalTitle">Remove progression branch</h2><p>Remove the branch from <strong>${escapeHtml(source.name)}</strong> into <strong>${escapeHtml(target.name)}</strong>. This changes the required stages for ${escapeHtml(target.name)}.</p><div class="modal-actions"><button type="button" data-close-modal class="ghost">Keep branch</button><button id="confirmRemoveGraphConnection" type="button" class="danger">Remove branch</button></div>`, () => {
+      $("confirmRemoveGraphConnection").onclick = async () => {
+        const content = state.boot.draft.files[target.stagePath] || "";
+        const dependencies = dependenciesFor(content, target.legacy).filter(id => id !== source.id);
+        let updated = upsertToml(content, target.legacy ? "stage.dependency" : "stage.dependencies", dependencies);
+        const mode = stringValue(readTomlValue(updated, "stage.dependency_mode")) || "all";
+        const count = mode === "at_least" ? Math.max(1, Math.min(dependencies.length || 1,
+          Number(readTomlValue(updated, "stage.dependency_count") || 1))) : 1;
+        updated = upsertToml(updated, "stage.dependency_mode", dependencies.length ? mode : "all");
+        updated = upsertToml(updated, "stage.dependency_count", count);
+        try {
+          await mutate(target.stagePath, updated);
+          closeModal();
+          toast(`Branch removed from ${source.name} to ${target.name}`);
+        } catch (error) {
+          toast(`The branch was not removed. ${error.message}`);
+        }
+      };
     });
   }
 
@@ -1408,7 +1512,7 @@
       viewport.scrollTop = localY * ratio - (event.clientY - bounds.top);
     }, { passive: false });
     viewport.onpointerdown = event => {
-      if (event.button !== 0 || event.target.closest?.("[data-graph-stage]")) return;
+      if (event.button !== 0 || event.target.closest?.("[data-graph-stage], [data-graph-from]")) return;
       event.preventDefault();
       const startX = event.clientX;
       const startY = event.clientY;
@@ -1858,7 +1962,10 @@
   async function review() {
     const review = await api({ action: "review" });
     const diff = review.diff.map(entry => `<div class="diff"><strong class="change-${entry.change}">${entry.change}</strong><span>${escapeHtml(entry.path)}</span><small>${entry.beforeBytes} → ${entry.afterBytes} bytes</small></div>`).join("");
-    openDrawer(`${validationHtml(review.validation)}<h3>Stage file changes</h3>${diff || "<p>No changes.</p>"}<p class="muted">After a successful apply, every online operator receives this complete file list and the synchronization result in Minecraft chat.</p><div id="applyStatus" aria-live="polite"></div><div class="source-actions"><button id="confirmApply" class="primary" ${review.validation.valid ? "" : "disabled"}>Confirm and apply to server</button></div>`);
+    const chatNotice = review.diff.length
+      ? `<p class="muted">After a successful apply, online operators receive this change list in Minecraft chat. Added files are green, modified files are yellow, and removed files are red.</p>`
+      : `<p class="muted">Nothing changed, so no operator chat message will be sent.</p>`;
+    openDrawer(`${validationHtml(review.validation)}<h3>Stage file changes</h3>${diff || "<p>No changes.</p>"}${chatNotice}<div id="applyStatus" aria-live="polite"></div><div class="source-actions"><button id="confirmApply" class="primary" ${review.validation.valid ? "" : "disabled"}>Confirm and apply to server</button></div>`);
     q("#confirmApply")?.addEventListener("click", () => apply());
   }
 
@@ -1881,7 +1988,10 @@
       toast("Applied and synchronized to every client");
       const rollback = result.transactionId ? `<button id="rollback">Rollback this transaction</button>` : "";
       const appliedDiff = (result.diff || []).map(entry => `<div class="diff"><strong class="change-${entry.change}">${entry.change}</strong><span>${escapeHtml(entry.path)}</span><small>${entry.beforeBytes} → ${entry.afterBytes} bytes</small></div>`).join("");
-      openDrawer(`<div class="validation-ok"><strong>Applied and synchronized</strong><p>Server revision ${result.configurationRevision}. Every online operator received the complete change list and synchronization result in Minecraft chat.</p>${rollback}</div><h3>Applied file changes</h3>${appliedDiff || "<p>No file content changed. The live configuration was already current.</p>"}`);
+      const operatorNotice = (result.diff || []).length
+        ? "Online operators received the color coded change list in Minecraft chat."
+        : "No file content changed, so no operator chat message was sent.";
+      openDrawer(`<div class="validation-ok"><strong>Applied and synchronized</strong><p>Server revision ${result.configurationRevision}. ${operatorNotice}</p>${rollback}</div><h3>Applied file changes</h3>${appliedDiff || "<p>No file content changed. The live configuration was already current.</p>"}`);
       if (result.transactionId) {
         $("rollback").onclick = async () => {
           if (!confirm("Rollback this applied transaction")) return;
@@ -2307,6 +2417,8 @@
   $("autoArrangeGraph").onclick = () => autoArrangeGraph().catch(error => toast(error.message));
   $("resetGraphLayout").onclick = () => resetGraphLayout().catch(error => toast(error.message));
   $("fitGraph").onclick = fitGraphViewport;
+  $("connectGraphStages").onclick = beginGraphConnection;
+  $("cancelGraphConnection").onclick = cancelGraphConnection;
   $("graphZoomOut").onclick = () => changeGraphZoom(-0.1);
   $("graphZoomIn").onclick = () => changeGraphZoom(0.1);
   $("graphCategory").onchange = () => { renderGraph(); requestAnimationFrame(fitGraphViewport); };

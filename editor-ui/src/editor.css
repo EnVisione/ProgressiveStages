@@ -180,9 +180,13 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 9px; bac
 .graph-viewport { width: 100%; height: calc(100vh - 245px); min-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: radial-gradient(circle, var(--line) 1px, transparent 1px); background-size: 24px 24px; }
 .graph-sizer { min-width: 100%; min-height: 100%; }
 .graph { display: block; overflow: visible; }
-.graph-lines { pointer-events: none; }
-.graph-lines path { fill: none; stroke: color-mix(in srgb, var(--accent) 62%, var(--line)); stroke-width: 3; stroke-linecap: round; }
+.graph-lines { pointer-events: visiblePainted; }
+.graph-connection { cursor: pointer; outline: none; }
+.graph-line-hit { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; }
+.graph-line-visible { fill: none; stroke: color-mix(in srgb, var(--accent) 62%, var(--line)); stroke-width: 3; stroke-linecap: round; pointer-events: none; }
+.graph-connection:hover .graph-line-visible, .graph-connection:focus .graph-line-visible { stroke: var(--danger); stroke-width: 5; }
 .graph-node-shell { overflow: visible; touch-action: none; cursor: grab; }
+.graph-node-shell.graph-connect-source .graph-node { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .graph-node { display: flex; align-items: center; width: 100%; height: 100%; min-height: 52px; touch-action: none; cursor: grab; text-align: left; user-select: none; }
 .graph-node::before { content: "◆"; color: var(--accent); margin-right: 7px; }
 .graph-node:active { cursor: grabbing; }

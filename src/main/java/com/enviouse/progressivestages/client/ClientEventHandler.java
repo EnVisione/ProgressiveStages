@@ -160,6 +160,7 @@ public class ClientEventHandler {
         ClientTriggerProgress.clear();
         ClientUnlockJuice.clear();
         ClientChallengeHud.clear();
+        ClientAbilityState.clear();
         OreSpoofClientState.clear();
         ClientCompiledSnapshotCache.clear();
         com.enviouse.progressivestages.client.editor.LoopbackEditorBridge.closeActive();
@@ -167,7 +168,13 @@ public class ClientEventHandler {
 
     /** v2.3: poll the stage-tree keybind; request a progress snapshot, which opens the GUI. */
     @SubscribeEvent
+    public static void onClientTickPre(net.neoforged.neoforge.client.event.ClientTickEvent.Pre event) {
+        enforceAbilityState();
+    }
+
+    @SubscribeEvent
     public static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+        enforceAbilityState();
         // Drain all queued presses (so the keymapping counter is reset) but send at most one
         // request per tick to avoid flooding the server on a double-tap.
         boolean pressed = false;
@@ -176,6 +183,29 @@ public class ClientEventHandler {
         }
         if (pressed) {
             ClientTriggerProgress.requestFromServer();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onClientJump(net.neoforged.neoforge.event.entity.living.LivingEvent.LivingJumpEvent event) {
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (event.getEntity() != minecraft.player || !ClientAbilityState.isLocked("jump")) return;
+        var movement = minecraft.player.getDeltaMovement();
+        if (movement.y > 0.0D) minecraft.player.setDeltaMovement(movement.x, 0.0D, movement.z);
+    }
+
+    private static void enforceAbilityState() {
+        var player = net.minecraft.client.Minecraft.getInstance().player;
+        if (player == null || ClientLockCache.isCreativeBypass()) return;
+        if (ClientAbilityState.isLocked("elytra") && player.isFallFlying()) player.stopFallFlying();
+        if (ClientAbilityState.isLocked("sprint") && player.isSprinting()) player.setSprinting(false);
+        if (ClientAbilityState.isLocked("swim")) {
+            player.setSwimming(false);
+            if (player.isInWater()) player.setSprinting(false);
+        }
+        if (ClientAbilityState.isLocked("climb") && player.onClimbable()) {
+            var movement = player.getDeltaMovement();
+            if (movement.y > 0.0D) player.setDeltaMovement(movement.x, 0.0D, movement.z);
         }
     }
 

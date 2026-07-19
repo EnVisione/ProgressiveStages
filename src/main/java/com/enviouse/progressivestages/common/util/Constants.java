@@ -24,6 +24,7 @@ public final class Constants {
     public static final ResourceLocation STAGE_UPDATE_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "stage_update");
     public static final ResourceLocation LOCK_REGISTRY_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "lock_registry_sync");
     public static final ResourceLocation LOCK_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "lock_sync");
+    public static final ResourceLocation ABILITY_STATE_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "ability_state");
     public static final ResourceLocation STAGE_DEFINITIONS_SYNC_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "stage_definitions_sync");
     public static final ResourceLocation CREATIVE_BYPASS_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "creative_bypass");
     public static final ResourceLocation REVEAL_POLICY_PACKET = ResourceLocation.fromNamespaceAndPath(MOD_ID, "reveal_policy");
