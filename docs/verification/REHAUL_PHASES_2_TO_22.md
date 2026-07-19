@@ -23,7 +23,7 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 | 17 | Revisioned permission-filtered compressed chunked client snapshot, safe deltas, exact base verification, decompression bounds, checksum, atomic activation, request, and acknowledgement | `ClientSnapshotAssemblerTest`, client cache tests |
 | 18 | Integrated and dedicated server operator authorization, expiring secrets, client loopback bridge, CSP, host and origin checks, limits, and cleanup | `EditorAvailabilityTest`, `PackagedEditorAssetsTest`, and bridge security inspection |
 | 19 | Server drafts, revisions, undo, redo, recovery, collaboration, diff, validation, conflict, atomic apply, backup, audit, and rollback | `EditorDraftTest` and editor apply tests |
-| 20 | Packaged Preact and TypeScript shell, neutral dark gray and gold stage-first easy builder, inline plain-name stage creation, visual all, any, and minimum dependency path policies, ancestry preview, cycle prevention, guided slot limits and stacking policies, player UI layout with compact map coordinates, exact X and Y editing, category and search filtering, crossing-reduced arrange and save, true automatic reset, curved live drag connectors, zoom and fit controls, category and mod filtered live-registry rule cards, action, effect, priority, exception, JEI and EMI, temporary condition and lifetime controls, guided grants, revokes, rewards, searchable item purchases, targeted mining bonuses, challenges, variables, modifiers, formulas, states, profiles, templates, draggable rules, optional three-tab source, inspector, create, duplicate, rename, move, archive, restore, import, export, delete, collaborator, priority analyzer, simulation, review, and apply | `npm run check`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
+| 20 | Packaged React and TypeScript stage studio, real mod logo, dark gray and gold design system, overview dashboard, focused stage tabs, contextual inspector, plain name creation, interchangeable namespaces, visual all, any, and minimum dependency policies, cycle prevention, slot limits, every rule category, prefixes, live registries, mod filters, JEI and EMI controls, priorities, exceptions, temporary conditions, grants, revokes, purchases, rewards, abilities, attributes, item modifiers, drop modifiers, challenges, variables, formulas, states, profiles, templates, optional source, settings, extensions, collaboration, simulation, movable and zoomable player layout, direct branch creation and removal, validation, review, apply, and rollback | `npm run check`, `npm test`, `npm run build`, `EditorSchemaRegistryTest`, `PackagedEditorAssetsTest` |
 | 21 | Advancement style player screen, centered upward automatic layout, author coordinates, panning, scroll, layering, background, triggers, why, readable pluralized purchase costs, live challenge HUD, effective held-item modifier and affinity preview, history, docs, and tested starter, Diamond, mage, knight, structure, End, Wither, migration, KubeJS, and Java examples | `StageTreeLayoutTest`, `NetworkCostSummaryTest`, UI regression tests, `RehaulExamplesTest`, `RehaulDocumentationTest` |
 | 22 | Restart saved data, dependency audit, fifty stage and one hundred fifty file first-launch showcase validation, stage slot runtime validation, full unit suite, clean build, and JAR inspection | `RehaulStateCodecTest`, `DefaultShowcaseStagesTest`, `StageSlotResolverTest`, and final evidence below |
 
@@ -33,10 +33,12 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 
 ### Frontend
 
-- `node --check editor-ui/public/legacy.js` passed.
 - `npm run check` passed with TypeScript emitting no files and no errors.
+- `npm test` passed eight React editor model and TOML preservation tests.
 - `npm run build` passed with Vite 6.4.3.
-- Production output contains `index.html`, `app.css`, `app.js`, and `legacy.js`.
+- Production output contains `index.html`, `app.css`, `app.js`, and `favicon.svg`.
+- The application uses React 19.1.1. The previous Preact shell and `legacy.js` controller were removed.
+- The loopback bridge serves the existing 512 by 512 mod logo at `/logo.png` from the JAR.
 - `npm audit --audit-level=high` reported zero vulnerabilities.
 
 ### Java and dedicated server
@@ -67,10 +69,10 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 ### Release artifact
 
 - Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,644,938 bytes.
-- SHA-256: `376320a74d36b9a1747716f43b21571a194e346eb6c3f4f561d18aa4eca408c7`.
+- Size: 1,702,517 bytes.
+- SHA-256: `3eb2116db42d429c97001f4c6b5f8d28460892815ef2b8e0c57fb38743640735`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
-  logo, `assets/progressivestages/lang/en_us.json`, and all four production editor assets.
+  logo, `assets/progressivestages/lang/en_us.json`, and all four production React editor assets.
 - The source logo SHA-256 is
   `7c38835022f7ace8aa94070801272d190ab8bcd49b38e252fec6d7ea6f7af992`.
 

@@ -216,7 +216,10 @@ public final class EditorSessionService {
         ResourceLocation stage = ResourceLocation.parse(string(request, "stage", ""));
         String folder = stage.toString().replace(':', '_').replace('/', '_');
         long revision = number(request, "revision", -1);
-        String stageToml = "[schema]\nversion = 4\n\n[stage]\nid = \"" + stage + "\"\ndisplay_name = \"New Stage\"\ndescription = \"Describe this stage\"\n";
+        String displayName = string(request, "displayName", "New Stage").replace("\\", "\\\\").replace("\"", "\\\"");
+        String icon = string(request, "icon", "minecraft:stone").replace("\\", "\\\\").replace("\"", "\\\"");
+        String stageToml = "[schema]\nversion = 4\n\n[stage]\nid = \"" + stage + "\"\ndisplay_name = \""
+            + displayName + "\"\ndescription = \"Describe this stage\"\nicon = \"" + icon + "\"\n";
         revision = draft.mutate(operator.getUUID(), revision, "stages/" + folder + "/stage.toml", stageToml);
         revision = draft.mutate(operator.getUUID(), revision, "stages/" + folder + "/rules.toml", "[items]\nlocked = []\n");
         revision = draft.mutate(operator.getUUID(), revision, "stages/" + folder + "/progression.toml", "# Add grants, revokes, rewards, and challenges here.\n");

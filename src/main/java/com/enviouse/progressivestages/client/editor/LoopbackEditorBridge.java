@@ -67,8 +67,8 @@ public final class LoopbackEditorBridge {
             if (path.equals("/") || path.equals("/index.html")) { staticAsset(exchange, "index.html", "text/html; charset=utf-8"); return; }
             if (path.equals("/app.css")) { staticAsset(exchange, "app.css", "text/css; charset=utf-8"); return; }
             if (path.equals("/app.js")) { staticAsset(exchange, "app.js", "text/javascript; charset=utf-8"); return; }
-            if (path.equals("/legacy.js")) { staticAsset(exchange, "legacy.js", "text/javascript; charset=utf-8"); return; }
             if (path.equals("/favicon.svg") || path.equals("/favicon.ico")) { staticAsset(exchange, "favicon.svg", "image/svg+xml; charset=utf-8"); return; }
+            if (path.equals("/logo.png")) { binaryAsset(exchange, "/progressivestages.png", "image/png"); return; }
             if (path.equals("/api/request")) { api(exchange); return; }
             send(exchange, 404, "Not found", "text/plain; charset=utf-8");
         } catch (RuntimeException failure) {
@@ -115,6 +115,17 @@ public final class LoopbackEditorBridge {
         try (InputStream input = LoopbackEditorBridge.class.getResourceAsStream("/assets/progressivestages/editor/" + name)) {
             if (input == null) { send(exchange, 404, "Missing editor asset", "text/plain"); return; }
             send(exchange, 200, new String(input.readAllBytes(), StandardCharsets.UTF_8), type);
+        }
+    }
+
+    private void binaryAsset(HttpExchange exchange, String resource, String type) throws IOException {
+        if (!exchange.getRequestMethod().equals("GET")) { send(exchange, 405, "Method not allowed", "text/plain"); return; }
+        try (InputStream input = LoopbackEditorBridge.class.getResourceAsStream(resource)) {
+            if (input == null) { send(exchange, 404, "Missing editor asset", "text/plain"); return; }
+            byte[] bytes = input.readAllBytes();
+            exchange.getResponseHeaders().set("Content-Type", type);
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
         }
     }
 

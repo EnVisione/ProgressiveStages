@@ -1,12 +1,12 @@
 import { defineConfig } from "vite";
-import preact from "@preact/preset-vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  plugins: [preact()],
+  plugins: [react()],
   base: "/",
   build: {
     outDir: new URL("../src/main/resources/assets/progressivestages/editor", import.meta.url).pathname,
-    emptyOutDir: false,
+    emptyOutDir: true,
     sourcemap: false,
     cssCodeSplit: false,
     rollupOptions: {

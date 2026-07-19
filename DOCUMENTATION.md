@@ -359,17 +359,31 @@ An operator at permission level 3 may run `/pstages editor` in an integrated sin
 or while connected to a dedicated server. The client opens a private loopback website. It does not
 expose a public server port, and no configuration is sent to a hosted editing service.
 
-The editor begins with stages, not files. The left side contains one card for each stage. A schema
-4 stage may use `stage.toml`, `rules.toml`, and `progression.toml` internally, but those filenames
-only appear in the optional `TOML source` view.
+The editor is a React application designed around complete tasks instead of config files. The
+header always shows the real mod logo, connection state, draft revision, live server revision,
+undo, redo, validation, and review controls. The first navigation column opens Overview, Stages,
+Player layout, Main settings, Registry, and Extensions. The stage library appears only while the
+Stages page is open, which leaves the other tools enough room to explain their purpose.
+
+Overview shows active stage, rule, trigger, and changed file totals. Stages opens one focused
+workspace with Essentials, Rules, Progression, Rewards and effects, Advanced, and TOML source tabs.
+Player layout edits both icon positions and dependency branches. Main settings is generated from
+the connected server schema. Registry searches installed content by type, mod, identifier, tag, or
+name. Extensions lists the Java and KubeJS capabilities advertised by the running server.
+
+A schema 4 stage may use `stage.toml`, `rules.toml`, and `progression.toml` internally. Those
+filenames only appear in the optional `TOML source` tab and the final change review. The visual
+forms preserve unknown sections and extension values.
 
 To create a stage without knowing TOML:
 
-1. Click the gold plus button beside `Stages`.
+1. Open Overview and click `Create a stage`, or open Stages and click `New` in the stage library.
 2. Type `Iron Age` in `Stage name`. Do not type `pack:` and do not add `.toml`.
-3. Leave the collapsed pack name at `pack`, or change it to the modpack namespace.
+3. Leave Namespace at `pack`, or change it to the modpack namespace. A namespace may be anything
+   valid, such as `wizard`. This permits `wizard:wizard` and `wizard:warlock` without forcing a
+   literal `pack` prefix.
 4. Confirm the preview, such as `pack:iron_age`, and click `Create stage`.
-5. Fill out the stage name, description, icon, required stages, stage slots, team or server ownership, map
+5. Open Essentials. Fill out the stage name, description, icon, required stages, stage slots, team or server ownership, map
    category, color, frame, reveal policy, advancement background, and optional player UI position.
    `Required stages` is a visual branch builder. It lists existing stages as selectable cards,
    explains each card's parents, prevents dependency cycles, and previews selected paths flowing
@@ -393,7 +407,7 @@ To create a stage without knowing TOML:
    activation condition. Structure choices include entering, leaving, being inside, and remaining
    inside for a required number of seconds. The help text beside the condition explains whether a
    target and amount are required.
-9. Use **How players obtain this stage** to add grants. Use **How players lose this stage** to add
+9. Open Progression. Use **How players obtain this stage** to add grants. Use **How players lose this stage** to add
    revokes. Both sections use the same trigger library and ask for the amount, repeat policy, player,
    team, or server scope, priority, and cooldown. `Player dies` means the stage owner dies.
    `Another player dies` means any other online player dies, even when the stage owner is not the
@@ -403,14 +417,22 @@ To create a stage without knowing TOML:
    Choose **Set up purchase**, search the live item registry, click payment items, and set each
    amount plus optional XP, cooldown, refund, and trigger bypass. Use reward cards for items,
    effects, commands, teleportation, and XP granted after ownership changes.
-10. Choose **Targeted mining bonus** to select a broken block, final output item, optional tool,
-    optional enchantment and level, multiplier, addition, priority, and exclusive stacking. This
+10. Open Rewards and effects. Configure items, effects, commands, teleportation, and experience
+    granted after ownership changes. Choose ability restrictions for jump, sprint, swim, climb,
+    elytra, or abilities registered by an extension. Add a stage attribute or an item modifier that
+    depends on item context, owned stages, missing stages, a condition, aggregation, stack limit,
+    and priority. Choose **Add drop modifier** to select a broken block, final output item, optional tool,
+    optional enchantment and level, owned stages, missing stages, condition, multiplier, addition,
+    minimum, maximum, priority, and exclusive stacking. This
     creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates 32-diamond purchase
     plus a Fortune-only double-diamond rule.
-11. Drag advanced rule cards to organize them. Open `Player UI layout`, filter by category, search
-    with prerequisite ancestry, zoom, fit the complete graph, or drag nodes to save their in game
-    coordinates. Drag empty graph space to pan. Scroll to move through a large graph. Hold Control
-    while scrolling to zoom around the mouse pointer. Curved connectors follow at every zoom.
+11. Open Advanced for guided challenge, variable, formula, lifecycle state, affinity profile, and
+    reusable template builders. A challenge can define start, success, and end conditions, retries,
+    timeout, hit limit, measured budget, ordered step, and detailed HUD presentation. Registered
+    Java and KubeJS data remains available through Extensions and the exact source tab.
+12. Open `Player layout`, filter by category, search, zoom, fit the complete graph, or drag nodes to
+    save their in game coordinates. Drag empty graph space to pan. Scroll to zoom around the mouse
+    pointer. Curved connectors follow at every zoom.
     Click `Connect stages` to edit progression directly on the graph. Select the prerequisite stage
     first. Then select the stage that should require it. The editor writes the dependency into the
     destination stage and refuses duplicate branches, self references, and dependency loops. To
@@ -423,7 +445,7 @@ To create a stage without knowing TOML:
     complete crossing-reduced layout. `Use automatic layout` removes every manual position. The
     Stage details card also has `Edit player UI position` for exact X and Y values or a one-stage
     reset. The browser scales cards for editing but stores the compact coordinates Minecraft uses.
-12. Click `Check my work`. Then click `Review and apply`, inspect every file in the diff, and confirm.
+13. Click `Check my work`. Then click `Review and apply`, inspect every file in the diff, and confirm.
     After the server validates, writes, reloads, and synchronizes the result, every online operator
     receives the complete file change list in Minecraft chat. Added files appear in green. Modified
     files appear in yellow. Removed files appear in red. The heading appears in gold and the final

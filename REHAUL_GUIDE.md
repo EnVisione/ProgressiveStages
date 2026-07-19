@@ -39,13 +39,15 @@ This workflow works in an integrated single-player world and on a dedicated serv
 2. Make sure your account has operator permission level 3 or higher.
 3. Run `/pstages editor`.
 4. Your Minecraft client starts a temporary web server on `127.0.0.1` and opens your browser.
-5. Click the gold plus button beside `Stages`.
+5. On Overview, click `Create a stage`. You may also open Stages and click `New` in the stage
+   library.
 6. Enter the friendly name `Iron Age`. Do not type `pack:` or write a file name. The editor turns
-   it into `pack:iron_age` and creates the complete three-file package. Expand `Pack name` only when
-   you want a namespace other than `pack`.
-7. Select the new stage card. The easy builder shows `Stage details`, `Rules`, `Progression`, and
-   `More stage features`. It never makes the three backing files part of the normal workflow.
-8. Fill in the name, description, icon, required stages, ownership scope, stage slots, map category,
+   it into `pack:iron_age` and creates the complete three file package. Change Namespace when you
+   want another prefix. For example, Namespace `wizard` and name `Warlock` create
+   `wizard:warlock`.
+7. Select the new stage card. Its workspace contains Essentials, Rules, Progression, Rewards and
+   effects, Advanced, and TOML source. The three backing files are not part of the normal workflow.
+8. In Essentials, fill in the name, description, icon, required stages, ownership scope, stage slots, map category,
    color, frame, reveal policy, advancement background, and player UI position. Use `Browse` to choose an icon from the live
    item registry. `Required stages` opens a visual path builder rather than a text field. Select
    parent stage cards, then choose `Require every selected path`, `Require any one selected path`,
@@ -59,12 +61,16 @@ This workflow works in an integrated single-player world and on a dedicated serv
     EMI visibility, an optional higher-priority exception, and an optional live, timed, session,
     latched, or scheduled condition. The editor translates the card to `[[rules]]` or
     `[[temporary_rules]]` TOML. Drag rule cards to keep the advanced rule order readable.
-11. Click `Add progression` to grant or revoke the stage from a kill, mined block, crafted item,
+11. Open Progression to grant or revoke the stage from a kill, mined block, crafted item,
     advancement, dimension, structure, KubeJS event, or another listed condition. Select count,
     repeat policy, player/team/server scope, priority, and cooldown. Rewards and costs have their
     own guided forms.
-12. Use `Player UI layout` to inspect or drag the actual in-game dependency map. The graph opens fitted inside its
-    scrollable canvas. Filter by category, search while retaining prerequisite context, zoom with
+12. Open Rewards and effects to configure grant rewards, movement abilities, attributes, contextual
+    item modifiers, and targeted drop changes. Open Advanced for challenges, variables, formulas,
+    lifecycle states, affinity profiles, and templates. Every builder writes the normal server
+    schema and remains compatible with exact source editing.
+13. Use `Player layout` to inspect or drag the actual in game dependency map. The graph opens fitted inside its
+    movable canvas. Filter by category, search, zoom with
     the minus and plus buttons, or press `Fit graph` to restore a complete overview. Automatic
     layout puts independent beginner paths at the bottom, their evolutions above them, and hybrid
     stages above every branch they join. Curved connectors follow dragged nodes at every zoom.
@@ -75,18 +81,18 @@ This workflow works in an integrated single-player world and on a dedicated serv
     To change the progression itself, click `Connect stages`, select the prerequisite stage, then
     select the stage that should require it. Select an existing curved connector to remove that
     dependency. The editor refuses duplicate branches, self references, and dependency loops.
-13. Use `TOML source` only when you want direct control. `stage.toml`, `rules.toml`, and
+14. Use `TOML source` only when you want direct control. `stage.toml`, `rules.toml`, and
     `progression.toml` remain available as separate advanced tabs, and unknown extension fields are
     preserved.
-14. Click `Check my work`. Fix every red error.
-15. Click `Review and apply`. Read the semantic file diff.
-16. Confirm apply. The server writes one transaction, reloads once, and synchronizes connected
+15. Click `Check my work`. Fix every red error.
+16. Click `Review and apply`. Read the semantic file diff.
+17. Confirm apply. The server writes one transaction, reloads once, and synchronizes connected
     clients. A later player receives the same compiled revision during login. Every online operator
     receives added file messages in green, modified file messages in yellow, and removed file
     messages in red. Players without operator permission receive nothing. An apply with no file
     changes also sends no chat message.
 
-Nothing is live before step 16. The editor owns a server-side draft with a revision number. Undo,
+Nothing is live before step 17. The editor owns a server side draft with a revision number. Undo,
 redo, source mode, validation, graph view, registry search, stage create, duplicate, rename, move,
 archive, restore, import, export, delete, collaboration, simulation, apply, backup, audit, and
 rollback all operate on that draft. Archived and migration-backup folders are ignored by package
@@ -786,6 +792,7 @@ Run:
 cd editor-ui
 npm ci --ignore-scripts
 npm run check
+npm test
 npm run build
 npm audit --audit-level=high
 cd ..
@@ -794,8 +801,9 @@ cd ..
 jar tf build/libs/progressivestages-3.0.1.jar
 ```
 
-The JAR must contain the mod logo, NeoForge metadata, language data, generated editor `index.html`,
-`app.css`, `app.js`, and `legacy.js`. The editor dependency audit must report zero vulnerabilities.
+The JAR must contain the mod logo, NeoForge metadata, language data, and the generated React editor
+assets `index.html`, `favicon.svg`, `app.css`, and `app.js`. It must not contain `legacy.js`. The
+editor dependency audit must report zero vulnerabilities.
 The Gradle suite must report zero failures. The final manual gate is a dedicated server with two
 clients: open the editor, apply a stage, confirm both current clients activate one revision, join a
 third client, confirm it receives the same revision, then roll the transaction back. In the player
