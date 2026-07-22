@@ -57,6 +57,7 @@ class EditorSchemaRegistryTest {
             "progression.toml:templates",
             "progression.toml:states",
             "progressivestages.toml:general.starting_stages",
+            "progressivestages.toml:client.show_inventory_button",
             "progressivestages.toml:enforcement.block_item_use",
             "progressivestages.toml:emi.enabled",
             "progressivestages.toml:performance.enable_lock_cache",

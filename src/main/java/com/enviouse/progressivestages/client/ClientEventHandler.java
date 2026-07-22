@@ -26,7 +26,8 @@ public class ClientEventHandler {
 
     @SubscribeEvent
     public static void onInventoryScreenInit(ScreenEvent.Init.Post event) {
-        if (event.getScreen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen inventory) {
+        if (StageConfig.isShowInventoryButton()
+                && event.getScreen() instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen inventory) {
             event.addListener(new com.enviouse.progressivestages.client.gui.StageTreeInventoryButton(inventory));
         }
     }

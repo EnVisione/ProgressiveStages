@@ -50,6 +50,15 @@ public class StageConfig {
                  "Idempotent — already-granted stages are not re-granted. Default false to preserve original behavior.")
         .define("general.reapply_starting_stages_on_login", false);
 
+    // client settings.
+
+    private static final ModConfigSpec.BooleanValue SHOW_INVENTORY_BUTTON = BUILDER
+        .comment("Show the progression map button beside the recipe book in the survival inventory.",
+                 "Set this to false to remove the inventory button.",
+                 "The stage commands and optional keybind remain available.",
+                 "Close and reopen the inventory after changing this option.")
+        .define("client.show_inventory_button", true);
+
     // ============ Enforcement Settings ============
 
     private static final ModConfigSpec.BooleanValue BLOCK_ITEM_USE = BUILDER
@@ -735,6 +744,7 @@ public class StageConfig {
     private static boolean debugLogging;
     private static boolean linearProgression;
     private static boolean reapplyStartingStagesOnLogin;
+    private static boolean showInventoryButton = true;
     private static boolean blockItemUse;
     private static boolean blockItemPickup;
     private static boolean blockItemHotbar;
@@ -897,6 +907,7 @@ public class StageConfig {
         debugLogging = DEBUG_LOGGING.get();
         linearProgression = LINEAR_PROGRESSION.get();
         reapplyStartingStagesOnLogin = REAPPLY_STARTING_STAGES_ON_LOGIN.get();
+        showInventoryButton = SHOW_INVENTORY_BUTTON.get();
         blockItemUse = BLOCK_ITEM_USE.get();
         blockItemPickup = BLOCK_ITEM_PICKUP.get();
         blockItemHotbar = BLOCK_ITEM_HOTBAR.get();
@@ -1075,6 +1086,7 @@ public class StageConfig {
     public static boolean isDebugLogging() { return debugLogging; }
     public static boolean isLinearProgression() { return linearProgression; }
     public static boolean isReapplyStartingStagesOnLogin() { return reapplyStartingStagesOnLogin; }
+    public static boolean isShowInventoryButton() { return showInventoryButton; }
     public static boolean isBlockItemUse() { return blockItemUse; }
     public static boolean isBlockItemPickup() { return blockItemPickup; }
     public static boolean isBlockItemHotbar() { return blockItemHotbar; }

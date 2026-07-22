@@ -43,7 +43,7 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 
 ### Java and dedicated server
 
-- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in twelve seconds.
+- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in seven seconds.
 - The clean suite ran 150 tests with zero failures, zero errors, and zero
   skipped tests.
 - `DefaultShowcaseStagesTest` wrote all one hundred fifty generated files into an empty temporary
@@ -53,7 +53,10 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
   mutually exclusive mining modes, temporary stages, exact kill-with-item conditions, and the
   Diamond Engineer cost and Fortune multiplier.
 - `StageTreeLayoutTest` verifies that automatic player nodes grow upward and center narrow layers.
-  `NetworkCostSummaryTest` verifies readable singular, plural, and uncountable payment names.
+  `StageTreeInventoryButtonTest` verifies that `client.show_inventory_button` defaults to true and
+  gates survival inventory button registration. The editor schema
+  coverage test verifies that Settings exposes the option. `NetworkCostSummaryTest` verifies
+  readable singular, plural, and uncountable payment names.
 - `StageSlotResolverTest`, `StageFileParserTest`, and `StageOrderTest` verify unlimited stacking,
   denial, oldest and priority replacement, schema parsing, and consistent group validation.
 - `LoopbackRequestGuardTest` verifies single player browser host aliases, absent and opaque origin headers,
@@ -76,8 +79,8 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 ### Release artifact
 
 - Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,716,314 bytes.
-- SHA-256: `229bf15fbd9e00e7ce62e25b350fbe095e314e9c4574991358cc3b8b931520b8`.
+- Size: 1,716,583 bytes.
+- SHA-256: `439b6a58924f1e1bcf121c29bc0a6ef31bcfeafc2e67a9562317c23999cc6ec4`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
   logo, `assets/progressivestages/lang/en_us.json`, and all four production React editor assets.
 - The source logo SHA-256 is

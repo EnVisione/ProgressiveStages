@@ -2972,6 +2972,17 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
   `/pstages`, `/stage gui`, or the lock button immediately to the right of the
   recipe-book button in the survival inventory.
 
+  To remove only the inventory button, open
+  `config/progressivestages/progressivestages.toml` and set:
+
+  ```toml
+  [client]
+  show_inventory_button = false
+  ```
+
+  Close and reopen the inventory after changing this option. The commands and optional keybind
+  continue to open the progression map.
+
 **Navigation.** Hold the left mouse button and drag from empty map space or from
 a stage node. A short click opens that node, while movement pans the map like
 the vanilla advancement screen and the ProgressiveSkills skill tree. Roll the
@@ -3068,7 +3079,18 @@ Default values are shown below.
 | `debug_logging` | `false` | Verbose logging for stage checks, lock queries, team operations. |
 | `linear_progression` | `false` | If true, granting a stage auto-grants all missing dependencies recursively. |
 
-### 6.2 `[enforcement]` — global toggles
+### 6.2 `[client]`
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `show_inventory_button` | `true` | Show the progression map button beside the recipe book in the survival inventory. Set it to `false` to remove the button. Commands and the optional keybind continue to work. Close and reopen the inventory after changing it. |
+
+This setting controls the local Minecraft client. In single player, edit the generated main config
+normally. For a modpack, include the same setting in the client copy of
+`config/progressivestages/progressivestages.toml`. A dedicated server cannot change a player's
+local interface preference unless that config is also distributed to the player's client.
+
+### 6.3 `[enforcement]` — global toggles
 
 Every category has a master toggle. Setting any of these to `false` disables
 that enforcement path for every stage, regardless of stage file content.
@@ -3114,7 +3136,7 @@ that enforcement path for every stage, regardless of stage file content.
 | `lock_sound_pitch` | `1.0` | 0.5 – 2.0 |
 | `show_creative_bypass_popup` | `true` | Warn a player on creative-mode entry that bypass is on |
 
-### 6.3 `[emi]` — recipe-viewer feedback
+### 6.4 `[emi]` — recipe-viewer feedback
 
 | Key | Default | Meaning |
 |-----|---------|---------|
@@ -3128,20 +3150,20 @@ that enforcement path for every stage, regardless of stage file content.
 | `show_stage_description_on_tooltip` | `false` | **New in 2.3.** Append a locked item's gating stage `[stage].description` to its tooltip (rendered via `messages.tooltip_stage_description`). Global default for the per-stage `[display].show_description_on_tooltip`. |
 | `show_locked_recipes` | `false` | If `false`, locked items / recipes are hidden from the EMI index entirely; if `true`, they are shown with overlays |
 
-### 6.4 `[performance]`
+### 6.5 `[performance]`
 
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `enable_lock_cache` | `true` | Cache lock-query results per (player, item) |
 | `lock_cache_size` | `1024` | Cache entries per player (128–8192) |
 
-### 6.5 `[team]`
+### 6.6 `[team]`
 
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `persist_stages_on_leave` | `true` | Stages persist on the player record when they leave their team |
 
-### 6.6 `[integration]`
+### 6.7 `[integration]`
 
 | Key | Default | Meaning |
 |-----|---------|---------|
@@ -3150,7 +3172,7 @@ that enforcement path for every stage, regardless of stage file content.
 | `integration.ftbquests.recheck_budget_per_tick` | `10` | Max stage-task rechecks per tick (1–100) |
 | `integration.ftbquests.team_mode` | `false` | Delegate FTB Quests stage operations to FTB Teams' `TeamStagesHelper` instead of the local backend |
 
-### 6.7 `[messages]`
+### 6.8 `[messages]`
 
 Every player-facing message — tooltips, chat lines, command outputs, validate
 output, FTB-status output, type labels (`"This block"`, `"This dimension"`,
