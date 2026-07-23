@@ -4,7 +4,7 @@
 
 A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression. Define stages as TOML files; ProgressiveStages locks items, blocks, entities, fluids, dimensions, recipes, enchantments, crops, mob spawns, pets, regions, structures, screens, and player interactions until the player has earned the right stage(s).
 
-**ProgressiveStages 3.0** turns that foundation into a fully authorable progression platform: declarative per-stage triggers, graph-based stage scope, scripting and command APIs, broad content enforcement, and a vanilla advancement-style in-game map.
+**ProgressiveStages 3.0.2** turns that foundation into a fully authorable progression platform: declarative per-stage triggers, graph-based stage scope, scripting and command APIs, broad content enforcement, and a vanilla advancement-style in-game map.
 
 ---
 
@@ -45,6 +45,24 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 The older [`diamond_stage.toml`](examples/reference/diamond_stage.toml) remains the fully commented
 one-file reference. It is no longer generated into new installations because the fifty stage
 schema 4 showcase now demonstrates the editor and class tree directly.
+
+---
+
+## What's new in 3.0.2
+
+- **Reliable single-player editor access.** `/pstages editor` now accepts the authenticated
+  loopback browser flow while connected to an integrated single-player server. Permission level 3
+  is still required, and remote browser requests remain rejected.
+- **Simpler stage editor.** The editor uses a restrained dark gray and gold layout centered on
+  stages, the easy builder, player layout, TOML source, validation, and review. Advanced tools
+  remain available without crowding the primary workflow.
+- **Optional inventory button.** Set `client.show_inventory_button = false` to remove the
+  progression map button from the survival inventory without disabling commands or the optional
+  keybind.
+- **Move and resize the inventory button.** Configure `inventory_button_x`,
+  `inventory_button_y`, `inventory_button_width`, `inventory_button_height`, and
+  `inventory_button_icon_size` under `[client]`. Positions are relative to the inventory, and the
+  centered lock icon automatically shrinks to fit.
 
 ---
 
@@ -366,7 +384,7 @@ Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`,
 
 ## Stage Tree Viewer & Per-Stage `[display]`
 
-Players can open the **vanilla style progression map** with `/stage`, `/stages`, `/pstages`, `/stage gui`, the "Open Progression Tree" keybind, or the lock button beside the recipe book button in the survival inventory. Set `client.show_inventory_button = false` in `progressivestages.toml` to remove the inventory button without disabling the commands or keybind. Drag from empty space or a stage node to pan. Roll the mouse wheel over the map to zoom toward the pointer, from 65 percent through 165 percent. Stage icons stay at a readable size while their positions and connector paths zoom. WASD and the arrow keys pan by the same visible distance at every zoom level. Press Space or use the header home button to center and fit the complete graph. Hover a framed node for its stage card, and click without dragging to pin prerequisites, clearly grouped live trigger routes, unlock previews, and any purchase button. Search matches stage text and locked item ids. The Owned control filters completed stages.
+Players can open the **vanilla style progression map** with `/stage`, `/stages`, `/pstages`, `/stage gui`, the "Open Progression Tree" keybind, or the lock button beside the recipe book button in the survival inventory. The `[client]` config can hide the button or customize its inventory relative X position, Y position, width, height, and centered icon size. Drag from empty space or a stage node to pan. Roll the mouse wheel over the map to zoom toward the pointer, from 65 percent through 165 percent. Stage icons stay at a readable size while their positions and connector paths zoom. WASD and the arrow keys pan by the same visible distance at every zoom level. Press Space or use the header home button to center and fit the complete graph. Hover a framed node for its stage card, and click without dragging to pin prerequisites, clearly grouped live trigger routes, unlock previews, and any purchase button. Search matches stage text and locked item ids. The Owned control filters completed stages.
 
 Each stage can override the global tooltip/icon defaults for its own locked items with a `[display]` block — all keys optional, inheriting the global default when omitted:
 
@@ -452,7 +470,7 @@ Every line of every command's output is a configurable template via `messages.cm
 `config/progressivestages/progressivestages.toml` — high-level groups. Stage files live beside it in `config/progressivestages/stages/`:
 
 - **`[general]`** — `starting_stages`, `team_mode` (`ftb_teams` / `solo`), `linear_progression`, `reapply_starting_stages_on_login`, `debug_logging`.
-- **`[client]`** — `show_inventory_button`. Set it to `false` to remove the progression map button from the survival inventory. Commands and the optional keybind still open the map.
+- **`[client]`** — `show_inventory_button`, `inventory_button_x`, `inventory_button_y`, `inventory_button_width`, `inventory_button_height`, and `inventory_button_icon_size`. Hide, move, or resize the survival inventory progression button without affecting commands or the optional keybind.
 - **`[enforcement]`** — every per-category enforcement toggle (`block_item_use`, `block_block_placement`, `block_dimension_travel`, `block_enchants`, `block_crop_growth`, `block_pet_interact`, `block_loot_drops`, `block_mob_spawns`, `block_mob_replacements`, `block_region_entry`, `block_structure_entry`, `block_screen_open`, ...), plus `allow_creative_bypass`, `mask_locked_item_names`, `obscure_locked_item_icons` (new — replace a locked item's icon with a `?`), `trigger_poll_interval` (new — `[[triggers]]` poll cadence in ticks), `notification_cooldown`, `reveal_stage_names_only_to_operators`, lock-sound config, eject-blocked-inventory frequency.
 - **`[messages]`** — every player-facing string. Supports `&` color codes (`&0`–`&f`, `&l/m/n/o/k/r`) and named placeholders. Generic `*_generic` variants are emitted when `reveal_stage_names_only_to_operators = true` and the player is non-op. Includes the `messages.prefix` template, `messages.tooltip_*` (now including `tooltip_stage_description`), `messages.cmd_*`, `messages.type_label_*`, and `messages.cmd_ftb_status_*` families.
 - **`[emi]`** — `enabled`, `show_lock_icon`, `lock_icon_position`, `lock_icon_size`, `show_highlight`, `highlight_color`, `show_tooltip`, `show_stage_description_on_tooltip` (new — append the gating stage's description to a locked item's tooltip), `show_locked_recipes`.
@@ -529,6 +547,17 @@ compat/
 ---
 
 ## Changelog
+
+### v3.0.2
+- **Integrated-server editor repair** — authenticated localhost editor requests now work for
+  permission level 3 operators in single-player worlds while remote hosts, origins, ports, and
+  incorrect session secrets remain rejected.
+- **Focused editor design** — a restrained dark gray and gold stage-first workspace keeps the easy
+  builder, player layout, TOML source, review, and advanced tools available without crowding the
+  normal stage workflow.
+- **Inventory button controls** — the progression map button can be hidden, moved relative to the
+  survival inventory, resized, and given a custom centered icon size. Commands and the optional
+  keybind remain available when the button is hidden.
 
 ### v3.0.1
 - **Generic exact-structure session API** — one-way provider registration for assignment and dungeon mods, immutable instance/bounds/session contracts, three-way `PASS`/`PERMIT`/`DENY` arbitration, cached fail-closed claims, and no hard dependency on companion mods.

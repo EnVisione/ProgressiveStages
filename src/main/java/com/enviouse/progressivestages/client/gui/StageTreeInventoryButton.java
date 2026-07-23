@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages.client.gui;
 
 import com.enviouse.progressivestages.client.ClientTriggerProgress;
+import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.util.Constants;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,19 +13,18 @@ import net.minecraft.resources.ResourceLocation;
 
 public final class StageTreeInventoryButton extends Button {
 
-    private static final int WIDTH = 20;
-    private static final int HEIGHT = 18;
-    private static final int X_OFFSET = 126;
     private static final ResourceLocation LOCK_TEXTURE = ResourceLocation.fromNamespaceAndPath(
         Constants.MOD_ID, "textures/gui/lock_icon.png");
 
     private final InventoryScreen inventory;
+    private final int iconSize;
 
     public StageTreeInventoryButton(InventoryScreen inventory) {
-        super(0, 0, WIDTH, HEIGHT,
+        super(0, 0, StageConfig.getInventoryButtonWidth(), StageConfig.getInventoryButtonHeight(),
             Component.translatable("gui.progressivestages.tree.inventory_button"),
             button -> ClientTriggerProgress.requestFromServer(), DEFAULT_NARRATION);
         this.inventory = inventory;
+        this.iconSize = StageConfig.getInventoryButtonIconSize();
         setTooltip(Tooltip.create(Component.translatable("gui.progressivestages.tree.inventory_button.tooltip")));
         updatePosition();
     }
@@ -33,9 +33,12 @@ public final class StageTreeInventoryButton extends Button {
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         updatePosition();
         super.renderWidget(graphics, mouseX, mouseY, partialTick);
+        int renderedIconSize = Math.min(iconSize, Math.max(1, Math.min(getWidth() - 2, getHeight() - 2)));
+        int iconX = getX() + (getWidth() - renderedIconSize) / 2;
+        int iconY = getY() + (getHeight() - renderedIconSize) / 2;
         graphics.pose().pushPose();
         graphics.pose().translate(0.0F, 0.0F, 1.0F);
-        graphics.blit(LOCK_TEXTURE, getX() + 3, getY() + 2, 14, 14,
+        graphics.blit(LOCK_TEXTURE, iconX, iconY, renderedIconSize, renderedIconSize,
             0.0F, 0.0F, 23, 23, 23, 23);
         graphics.pose().popPose();
     }
@@ -45,6 +48,7 @@ public final class StageTreeInventoryButton extends Button {
     }
 
     private void updatePosition() {
-        setPosition(inventory.getGuiLeft() + X_OFFSET, inventory.height / 2 - 22);
+        setPosition(inventory.getGuiLeft() + StageConfig.getInventoryButtonX(),
+            inventory.getGuiTop() + StageConfig.getInventoryButtonY());
     }
 }

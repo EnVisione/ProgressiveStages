@@ -1,6 +1,6 @@
-# ProgressiveStages 3.0 — Complete Documentation
+# ProgressiveStages 3.0.2 — Complete Documentation
 
-> ProgressiveStages **3.0** for NeoForge 1.21.1, Java 21.  
+> ProgressiveStages **3.0.2** for NeoForge 1.21.1, Java 21.
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -8,6 +8,12 @@
 > authority and this document is a bug.
 >
 > **Project, support, and community:** [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) · [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires in the CurseForge project and GitHub issue tracker through `displayURL` and `issueTrackerURL`.
+
+> **3.0.2 maintenance release:** The authenticated localhost editor now works for permission level
+> 3 operators in integrated single-player worlds as well as dedicated servers. The editor has a
+> simpler dark gray and gold stage-first layout. The survival inventory progression button can be
+> hidden, moved relative to the inventory, resized, and given a custom centered icon size through
+> the `[client]` section of `progressivestages.toml`.
 
 > **New to stage mods?** Start with [GETTING_STARTED.md](GETTING_STARTED.md), copy the tested
 > [beginner pack](examples/beginner_pack/README.md), and return here when the beginner guide links
@@ -2972,16 +2978,25 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
   `/pstages`, `/stage gui`, or the lock button immediately to the right of the
   recipe-book button in the survival inventory.
 
-  To remove only the inventory button, open
-  `config/progressivestages/progressivestages.toml` and set:
+  To hide, move, or resize the inventory button, open
+  `config/progressivestages/progressivestages.toml` and configure:
 
   ```toml
   [client]
-  show_inventory_button = false
+  show_inventory_button = true
+  inventory_button_x = 126
+  inventory_button_y = 61
+  inventory_button_width = 20
+  inventory_button_height = 18
+  inventory_button_icon_size = 14
   ```
 
-  Close and reopen the inventory after changing this option. The commands and optional keybind
-  continue to open the progression map.
+  The X and Y values are measured from the top left corner of the survival
+  inventory. Negative X values move the button left of the inventory. Negative Y
+  values move it above the inventory. The icon remains centered and shrinks when
+  needed to fit the configured button size. Set `show_inventory_button = false`
+  to remove the button. Close and reopen the inventory after changing these
+  options. The commands and optional keybind continue to open the progression map.
 
 **Navigation.** Hold the left mouse button and drag from empty map space or from
 a stage node. A short click opens that node, while movement pans the map like
@@ -3084,6 +3099,11 @@ Default values are shown below.
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `show_inventory_button` | `true` | Show the progression map button beside the recipe book in the survival inventory. Set it to `false` to remove the button. Commands and the optional keybind continue to work. Close and reopen the inventory after changing it. |
+| `inventory_button_x` | `126` | Horizontal position measured from the left edge of the survival inventory. The accepted range is `-4096` through `4096`. |
+| `inventory_button_y` | `61` | Vertical position measured from the top edge of the survival inventory. The accepted range is `-4096` through `4096`. |
+| `inventory_button_width` | `20` | Button width in GUI pixels. The accepted range is `8` through `256`. |
+| `inventory_button_height` | `18` | Button height in GUI pixels. The accepted range is `8` through `256`. |
+| `inventory_button_icon_size` | `14` | Requested centered lock icon size in GUI pixels. The accepted range is `4` through `256`. Oversized icons shrink to fit inside the button. |
 
 This setting controls the local Minecraft client. In single player, edit the generated main config
 normally. For a modpack, include the same setting in the client copy of

@@ -59,6 +59,29 @@ public class StageConfig {
                  "Close and reopen the inventory after changing this option.")
         .define("client.show_inventory_button", true);
 
+    private static final ModConfigSpec.IntValue INVENTORY_BUTTON_X = BUILDER
+        .comment("Horizontal button position measured from the left edge of the survival inventory.",
+                 "Negative values place the button left of the inventory.")
+        .defineInRange("client.inventory_button_x", 126, -4096, 4096);
+
+    private static final ModConfigSpec.IntValue INVENTORY_BUTTON_Y = BUILDER
+        .comment("Vertical button position measured from the top edge of the survival inventory.",
+                 "Negative values place the button above the inventory.")
+        .defineInRange("client.inventory_button_y", 61, -4096, 4096);
+
+    private static final ModConfigSpec.IntValue INVENTORY_BUTTON_WIDTH = BUILDER
+        .comment("Width of the inventory progression button in GUI pixels.")
+        .defineInRange("client.inventory_button_width", 20, 8, 256);
+
+    private static final ModConfigSpec.IntValue INVENTORY_BUTTON_HEIGHT = BUILDER
+        .comment("Height of the inventory progression button in GUI pixels.")
+        .defineInRange("client.inventory_button_height", 18, 8, 256);
+
+    private static final ModConfigSpec.IntValue INVENTORY_BUTTON_ICON_SIZE = BUILDER
+        .comment("Requested size of the centered lock icon in GUI pixels.",
+                 "The icon is reduced automatically when needed to fit inside the button.")
+        .defineInRange("client.inventory_button_icon_size", 14, 4, 256);
+
     // ============ Enforcement Settings ============
 
     private static final ModConfigSpec.BooleanValue BLOCK_ITEM_USE = BUILDER
@@ -745,6 +768,11 @@ public class StageConfig {
     private static boolean linearProgression;
     private static boolean reapplyStartingStagesOnLogin;
     private static boolean showInventoryButton = true;
+    private static int inventoryButtonX = 126;
+    private static int inventoryButtonY = 61;
+    private static int inventoryButtonWidth = 20;
+    private static int inventoryButtonHeight = 18;
+    private static int inventoryButtonIconSize = 14;
     private static boolean blockItemUse;
     private static boolean blockItemPickup;
     private static boolean blockItemHotbar;
@@ -908,6 +936,11 @@ public class StageConfig {
         linearProgression = LINEAR_PROGRESSION.get();
         reapplyStartingStagesOnLogin = REAPPLY_STARTING_STAGES_ON_LOGIN.get();
         showInventoryButton = SHOW_INVENTORY_BUTTON.get();
+        inventoryButtonX = INVENTORY_BUTTON_X.get();
+        inventoryButtonY = INVENTORY_BUTTON_Y.get();
+        inventoryButtonWidth = INVENTORY_BUTTON_WIDTH.get();
+        inventoryButtonHeight = INVENTORY_BUTTON_HEIGHT.get();
+        inventoryButtonIconSize = INVENTORY_BUTTON_ICON_SIZE.get();
         blockItemUse = BLOCK_ITEM_USE.get();
         blockItemPickup = BLOCK_ITEM_PICKUP.get();
         blockItemHotbar = BLOCK_ITEM_HOTBAR.get();
@@ -1087,6 +1120,11 @@ public class StageConfig {
     public static boolean isLinearProgression() { return linearProgression; }
     public static boolean isReapplyStartingStagesOnLogin() { return reapplyStartingStagesOnLogin; }
     public static boolean isShowInventoryButton() { return showInventoryButton; }
+    public static int getInventoryButtonX() { return inventoryButtonX; }
+    public static int getInventoryButtonY() { return inventoryButtonY; }
+    public static int getInventoryButtonWidth() { return inventoryButtonWidth; }
+    public static int getInventoryButtonHeight() { return inventoryButtonHeight; }
+    public static int getInventoryButtonIconSize() { return inventoryButtonIconSize; }
     public static boolean isBlockItemUse() { return blockItemUse; }
     public static boolean isBlockItemPickup() { return blockItemPickup; }
     public static boolean isBlockItemHotbar() { return blockItemHotbar; }

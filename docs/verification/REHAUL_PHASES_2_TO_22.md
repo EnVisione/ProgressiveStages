@@ -29,7 +29,7 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 
 ## Final evidence
 
-Recorded on July 19, 2026 from branch `envy/3.0.1`.
+Recorded on July 22, 2026 from branch `envy/3.0.2`.
 
 ### Frontend
 
@@ -43,7 +43,8 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 
 ### Java and dedicated server
 
-- `./gradlew clean test build --no-daemon` completed with `BUILD SUCCESSFUL` in seven seconds.
+- `./gradlew clean test build --rerun-tasks --no-daemon` completed with `BUILD SUCCESSFUL` in
+  fifteen seconds. Every task executed instead of using Gradle task output from the build cache.
 - The clean suite ran 150 tests with zero failures, zero errors, and zero
   skipped tests.
 - `DefaultShowcaseStagesTest` wrote all one hundred fifty generated files into an empty temporary
@@ -54,9 +55,11 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
   Diamond Engineer cost and Fortune multiplier.
 - `StageTreeLayoutTest` verifies that automatic player nodes grow upward and center narrow layers.
   `StageTreeInventoryButtonTest` verifies that `client.show_inventory_button` defaults to true and
-  gates survival inventory button registration. The editor schema
-  coverage test verifies that Settings exposes the option. `NetworkCostSummaryTest` verifies
-  readable singular, plural, and uncountable payment names.
+  gates survival inventory button registration. It also verifies the inventory-relative X and Y
+  position, configurable button width and height, configurable centered icon size, automatic icon
+  fit, and all default config values. The editor schema coverage test verifies that Settings
+  exposes all six client button options. `NetworkCostSummaryTest` verifies readable singular,
+  plural, and uncountable payment names.
 - `StageSlotResolverTest`, `StageFileParserTest`, and `StageOrderTest` verify unlimited stacking,
   denial, oldest and priority replacement, schema parsing, and consistent group validation.
 - `LoopbackRequestGuardTest` verifies single player browser host aliases, absent and opaque origin headers,
@@ -75,20 +78,29 @@ Recorded on July 19, 2026 from branch `envy/3.0.1`.
 - `./gradlew runServer --no-daemon` reached the dedicated server ready state in an isolated world.
   NeoForge applied `ChunkMapAccessor` and `ChunkMapTrackedEntityMixin`, loaded the three existing
   legacy stages, and saved every dimension cleanly during shutdown.
+- `xvfb-run -a ./gradlew runClient --no-daemon` loaded NeoForge, Minecraft, ProgressiveStages
+  3.0.2, the client event subscribers, client config, resources, GUI atlas, and client setup. The
+  client remained stable after startup. OpenAL was unavailable in the headless test environment,
+  so Minecraft disabled sound as expected.
 
 ### Release artifact
 
-- Artifact: `build/libs/progressivestages-3.0.1.jar`.
-- Size: 1,716,583 bytes.
-- SHA-256: `439b6a58924f1e1bcf121c29bc0a6ef31bcfeafc2e67a9562317c23999cc6ec4`.
+- Artifact: `build/libs/progressivestages-3.0.2.jar`.
+- Size: 1,717,440 bytes.
+- SHA-256: `80da3b9e704646ce7ece112179aa5beae474e7e0b0f35cede0438d79d7dc1098`.
+- SHA-512:
+  `302d8cfd85a90438823d981cbeacbb9b889fcadc19612bcde457ec76d3725c2c6a038c42bdc3bcce1879765e0ee0af6591a20010974ce64cf28b171668ba91fd`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
-  logo, `assets/progressivestages/lang/en_us.json`, and all four production React editor assets.
+  logo, `assets/progressivestages/lang/en_us.json`, all four production React editor assets,
+  `StageConfig.class`, and `StageTreeInventoryButton.class`. The generated mod metadata declares
+  version `3.0.2`.
 - The source logo SHA-256 is
   `7c38835022f7ace8aa94070801272d190ab8bcd49b38e252fec6d7ea6f7af992`.
 
-### Remaining human acceptance gate
+### Recommended pack acceptance check
 
-Rendering, browser interaction, narrator behavior, and current versus future multi-client visual
-agreement require interactive Minecraft clients. Follow the exact final checklist in
-`REHAUL_GUIDE.md` section 26 before publishing the JAR. This is a manual release acceptance gate,
-not an unimplemented engine or editor feature.
+The automated release gate and headless client smoke test are complete. A modpack author should
+still open the survival inventory with their normal recipe viewer and inventory replacement mods
+before distributing a pack. If another control occupies the default location, adjust the
+inventory-relative button position and size through the documented `[client]` options. The full
+interactive checklist remains in `REHAUL_GUIDE.md` section 26.
