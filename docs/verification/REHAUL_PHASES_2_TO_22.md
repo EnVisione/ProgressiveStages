@@ -29,7 +29,7 @@ commands, test totals, artifact name, size, and checksum are recorded after the 
 
 ## Final evidence
 
-Recorded on July 22, 2026 from branch `envy/3.0.2`.
+Recorded on July 24, 2026 from branch `envy/3.0.2`.
 
 ### Frontend
 
@@ -44,7 +44,7 @@ Recorded on July 22, 2026 from branch `envy/3.0.2`.
 ### Java and dedicated server
 
 - `./gradlew clean test build --rerun-tasks --no-daemon` completed with `BUILD SUCCESSFUL` in
-  fifteen seconds. Every task executed instead of using Gradle task output from the build cache.
+  seventeen seconds. Every task executed instead of using Gradle task output from the build cache.
 - The clean suite ran 150 tests with zero failures, zero errors, and zero
   skipped tests.
 - `DefaultShowcaseStagesTest` wrote all one hundred fifty generated files into an empty temporary
@@ -77,7 +77,7 @@ Recorded on July 22, 2026 from branch `envy/3.0.2`.
   concealment snapshots.
 - `./gradlew runServer --no-daemon` reached the dedicated server ready state in an isolated world.
   NeoForge applied `ChunkMapAccessor` and `ChunkMapTrackedEntityMixin`, loaded the three existing
-  legacy stages, and saved every dimension cleanly during shutdown.
+  legacy stages, and remained stable until the smoke test ended.
 - `xvfb-run -a ./gradlew runClient --no-daemon` loaded NeoForge, Minecraft, ProgressiveStages
   3.0.2, the client event subscribers, client config, resources, GUI atlas, and client setup. The
   client remained stable after startup. OpenAL was unavailable in the headless test environment,
@@ -87,9 +87,9 @@ Recorded on July 22, 2026 from branch `envy/3.0.2`.
 
 - Artifact: `build/libs/progressivestages-3.0.2.jar`.
 - Size: 1,717,440 bytes.
-- SHA-256: `80da3b9e704646ce7ece112179aa5beae474e7e0b0f35cede0438d79d7dc1098`.
+- SHA-256: `c4bdbd8677b61682c2d2d57a3ffed4f63ffbeb61d957f893e979f96c50422082`.
 - SHA-512:
-  `302d8cfd85a90438823d981cbeacbb9b889fcadc19612bcde457ec76d3725c2c6a038c42bdc3bcce1879765e0ee0af6591a20010974ce64cf28b171668ba91fd`.
+  `2da4035fd1acf6bf0ab969a808c0e95a30ae3b4f3a9803b8594ee8b179576b81894bdc218e37346b6bad608d7b878a5828c3a7085657f641cc7eca865b01f3cb`.
 - The JAR contains `META-INF/neoforge.mods.toml`, the 512 by 512 `progressivestages.png` mod-list
   logo, `assets/progressivestages/lang/en_us.json`, all four production React editor assets,
   `StageConfig.class`, and `StageTreeInventoryButton.class`. The generated mod metadata declares
