@@ -1305,7 +1305,7 @@ touch a file.
 | Recipes | Loaded recipe IDs, output items, recipe types, serializers, crafting result behavior, ingredient and output visibility, and prioritized EMI or JEI presentation. |
 | Crops | Planting, growth, bonemeal, harvest, automation policy, and replacement actions. |
 | Dimensions | Portal, teleport, command travel, entry action, exit action, and fallback destination. |
-| Enchantments | Table, anvil, villager, inventory strip, maximum levels, tags, and viewer filtering. |
+| Enchantments | Stage-aware table and loot selection, generation weights, maximum levels, anvil, villager, immediate loot sanitation, inventory safety checks, tags, and viewer filtering. |
 | Entities | Attack, interact, use-item-on-entity, mount, and target filters. |
 | Interactions | Block right click, item on block, item on entity, held item, target, hand, result, and exceptions. |
 | Loot | Chest, fishing, archaeology, mob, block, Lootr, filters, substitutions, and guarded drops. |

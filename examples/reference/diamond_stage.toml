@@ -101,7 +101,7 @@
 #   6.  [recipes]            — crafting gates (two flavors)
 #   7.  [crops]              — planting / growth / bonemeal / harvest
 #   8.  [dimensions]         — portal + teleport gating
-#   9.  [enchants]           — table / anvil / villager / inventory strip
+#   9.  [enchants]           — table / loot / anvil / villager / safety net
 #  10.  [entities]           — attacking specific mobs
 #  11.  [[interactions]]     — "player does X to Y" rules (Create-style)
 #  12.  [loot]               — GLM that filters chests/fishing/drops
@@ -374,21 +374,26 @@ locked = [
 
 
 # ============================================================================
-# 9. [enchants] — TABLE / ANVIL / VILLAGER / INVENTORY STRIP
+# 9. [enchants] — TABLE / LOOT / ANVIL / VILLAGER / INVENTORY STRIP
 # ============================================================================
 # Every enforcement surface for enchantments at once:
 #
-#   Enchanting table — locked enchants are zeroed from the preview, and the
-#                      "apply" button refuses when the primary pick is locked.
-#                      Player keeps their XP + lapis.
+#   Enchanting table — locked enchants are removed from the candidate pool
+#                      before any offer is rolled. max_levels limits generated
+#                      levels. selection_weights changes how often an exact
+#                      enchant rolls, and weight 0 prevents it from rolling.
+#   Loot generation  — player-aware chest, fishing, entity, and block loot
+#                      uses the same locked, max-level, and weight policies.
+#                      The final loot result is also stripped or capped before
+#                      delivery as a safety net.
 #   Anvil            — AnvilUpdateEvent cancelled if either input carries a
 #                      locked enchant (can't sneak it across via rename).
 #   Villager trades  — librarian offers for locked enchanted books disappear
 #                      from the merchant UI (ServerPlayerMerchantMixin
 #                      filters offers server-side before they're sent).
 #   Inventory strip  — periodic scan rewrites ItemEnchantments / stored
-#                      enchantments components, removing any locked entry.
-#                      Covers loot drops, fishing, dungeon chests, etc.
+#                      enchantments components, removing locked entries and
+#                      reducing over-cap levels. This is the final backup.
 # ----------------------------------------------------------------------------
 
 [enchants]
@@ -398,6 +403,14 @@ locked = [
     # "tag:c:curse",
     # "mod:apotheosis",
 ]
+# Exact enchantment IDs only. The final number is the highest level generated
+# or retained until this stage is owned. Level 0 removes the enchantment.
+# max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]
+#
+# Exact enchantment IDs only. The final number is the roll weight used until
+# this stage is owned. Weight 0 prevents new rolls without stripping copies a
+# player already owns. Valid range: 0 through 1024.
+# selection_weights = ["minecraft:mending:0", "minecraft:fortune:10"]
 
 
 # ============================================================================
@@ -1249,11 +1262,11 @@ crafter_check_radius = 32
 #   that distance, the spawn is allowed. If players disagree, the mob remains
 #   for allowed players and is concealed from denied players.
 #
-# "My enchant is still appearing in the enchanting table."
-#   Secondary enchants from getEnchantmentList can slip past the clue-based
-#   preview filter. The inventory scan still strips them within a tick of
-#   application, so players can't keep them — but the preview may briefly show
-#   them. Ship-level fix would need a mixin at a lower level than 2.0 attempts.
+# "My enchantment policy is not changing automated loot."
+#   Stage-aware generation requires a player in the LootContext. Normal chest
+#   opens, fishing, mob drops, and player-triggered block loot provide one.
+#   Playerless automation uses vanilla generation because there is no player
+#   whose stages can choose a policy.
 #
 # "Players are grief-breaking a locked structure's walls."
 #   Turn on [structures.rules] prevent_block_break. Players also get mining
@@ -1388,12 +1401,13 @@ crafter_check_radius = 32
 # locked = ["id:minecraft:nether/root", "mod:somemod", "name:*end*"]
 #
 # ─────────────────────────────────────────────────────────────────────────
-# 27.5b  [enchants].max_levels / [beacon] / [brewing] — finer gates (v3.0)
+# 27.5b  [enchants] selection policy / [beacon] / [brewing] — finer gates
 # ─────────────────────────────────────────────────────────────────────────
-# Cap an enchant at a level until the stage is owned (whole-enchant lock still uses
-# [enchants].locked). Over-cap levels are reduced on the next inventory scan.
+# Cap an enchant or change its generation weight until the stage is owned.
+# Whole-enchant lock still uses [enchants].locked.
 # [enchants]
 # max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]   # id:maxLevel
+# selection_weights = ["minecraft:mending:0", "minecraft:fortune:10"] # id:weight
 #
 # Beacon effects a player WITHOUT the stage simply doesn't receive (others unaffected).
 # [beacon]

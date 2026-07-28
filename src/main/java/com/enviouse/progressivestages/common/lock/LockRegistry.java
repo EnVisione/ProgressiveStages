@@ -1,6 +1,7 @@
 package com.enviouse.progressivestages.common.lock;
 
 import com.enviouse.progressivestages.common.api.StageId;
+import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine;
 import com.mojang.logging.LogUtils;
@@ -54,10 +55,15 @@ public final class LockRegistry {
     private final ResolvedCategory<EntityType<?>>     spawnCat        = new ResolvedCategory<>(Registries.ENTITY_TYPE);
     private final ResolvedCategory<net.minecraft.world.item.enchantment.Enchantment>
                                                       enchantCat      = new ResolvedCategory<>(Registries.ENCHANTMENT);
+    private volatile boolean anyEnchantLocks = false;
     /** v3.0: enchant id → (gating stage, max level). Effective cap = min over stages the player lacks. */
     private final Map<ResourceLocation, java.util.List<EnchantCapEntry>> enchantCaps = new ConcurrentHashMap<>();
     private volatile boolean anyEnchantCaps = false;
     private record EnchantCapEntry(StageId stage, int maxLevel) {}
+    private final Map<ResourceLocation, java.util.List<EnchantSelectionWeightEntry>> enchantSelectionWeights =
+        new ConcurrentHashMap<>();
+    private volatile boolean anyEnchantSelectionWeights = false;
+    private record EnchantSelectionWeightEntry(StageId stage, int weight) {}
     private final ResolvedCategory<Block>             cropCat         = new ResolvedCategory<>(Registries.BLOCK);
     private final ResolvedCategory<Block>             screenCat       = new ResolvedCategory<>(Registries.BLOCK);
     /** Mirror of {@link #screenCat} typed to Item, so item-opened GUIs (backpacks, portable crafting) also gate. */
@@ -151,8 +157,11 @@ public final class LockRegistry {
         professionCat.clear();
         advancementCat.clear();
         anyAdvancementLocks = false;
+        anyEnchantLocks = false;
         enchantCaps.clear();
         anyEnchantCaps = false;
+        enchantSelectionWeights.clear();
+        anyEnchantSelectionWeights = false;
         beaconCat.clear();
         anyBeaconLocks = false;
         brewingCat.clear();
@@ -201,6 +210,7 @@ public final class LockRegistry {
         entityCat.register(locks.entities(), id);
         spawnCat.register(locks.mobSpawns(), id);
         enchantCat.register(locks.enchants(), id);
+        if (!locks.enchants().locked().isEmpty()) anyEnchantLocks = true;
         cropCat.register(locks.crops(), id);
         screenCat.register(locks.screens(), id);
         screenItemCat.register(locks.screens(), id);
@@ -213,6 +223,11 @@ public final class LockRegistry {
             enchantCaps.computeIfAbsent(cap.enchant(), k -> new java.util.ArrayList<>())
                 .add(new EnchantCapEntry(id, cap.maxLevel()));
             anyEnchantCaps = true;
+        }
+        for (LockDefinition.EnchantSelectionWeight weight : locks.enchantSelectionWeights()) {
+            enchantSelectionWeights.computeIfAbsent(weight.enchant(), k -> new java.util.ArrayList<>())
+                .add(new EnchantSelectionWeightEntry(id, weight.weight()));
+            anyEnchantSelectionWeights = true;
         }
         beaconCat.register(locks.beacon(), id);
         if (!locks.beacon().isEmpty()) anyBeaconLocks = true;
@@ -1111,18 +1126,41 @@ public final class LockRegistry {
 
     public Optional<StageId> primaryRestrictingStageForEnchantment(net.minecraft.server.level.ServerPlayer player, ResourceLocation enchantId, Holder<net.minecraft.world.item.enchantment.Enchantment> holder) {
         if (player == null || enchantId == null) return Optional.empty();
-        return firstMissing(player, getRequiredStagesForEnchantment(enchantId, holder));
+        for (StageId stage : getRequiredStagesForEnchantment(enchantId, holder)) {
+            if (!com.enviouse.progressivestages.common.stage.StageManager.getInstance().hasStage(player, stage)
+                    && isCategoryEnforced(stage, EnforcementCategory.ENCHANTS)) {
+                return Optional.of(stage);
+            }
+        }
+        return Optional.empty();
     }
 
     public boolean isEnchantmentBlockedFor(net.minecraft.server.level.ServerPlayer player, ResourceLocation enchantId, Holder<net.minecraft.world.item.enchantment.Enchantment> holder) {
         if (player == null || enchantId == null) return false;
         Set<StageId> gating = getRequiredStagesForEnchantment(enchantId, holder);
         if (gating.isEmpty()) return false;
-        return !playerHasAllStages(player, gating);
+        return isCategoryEnforced(missingGatingStages(player, gating), EnforcementCategory.ENCHANTS);
     }
 
     /** v3.0: cheap fast-path — true if any stage declares an enchant level cap. */
     public boolean hasEnchantCaps() { return anyEnchantCaps; }
+
+    public boolean hasEnchantSelectionWeights() { return anyEnchantSelectionWeights; }
+
+    public boolean isEnchantmentEnforcementConfigured() {
+        if (!anyEnchantLocks && !anyEnchantCaps && !anyEnchantSelectionWeights) return false;
+        return StageConfig.isBlockEnchants() || hasEnforcementOverrides(EnforcementCategory.ENCHANTS);
+    }
+
+    public boolean isEnchantmentRetentionConfigured() {
+        if (!anyEnchantLocks && !anyEnchantCaps) return false;
+        return StageConfig.isBlockEnchants() || hasEnforcementOverrides(EnforcementCategory.ENCHANTS);
+    }
+
+    public boolean isEnchantmentLockConfigured() {
+        if (!anyEnchantLocks) return false;
+        return StageConfig.isBlockEnchants() || hasEnforcementOverrides(EnforcementCategory.ENCHANTS);
+    }
 
     // ---- v3.0 [beacon] (gate individual beacon effects) ----
 
@@ -1161,9 +1199,30 @@ public final class LockRegistry {
         com.enviouse.progressivestages.common.stage.StageManager sm =
             com.enviouse.progressivestages.common.stage.StageManager.getInstance();
         for (EnchantCapEntry e : list) {
-            if (!sm.hasStage(player, e.stage())) cap = Math.min(cap, e.maxLevel());
+            if (!sm.hasStage(player, e.stage())
+                    && isCategoryEnforced(e.stage(), EnforcementCategory.ENCHANTS)) {
+                cap = Math.min(cap, e.maxLevel());
+            }
         }
         return cap;
+    }
+
+    public int effectiveEnchantSelectionWeight(net.minecraft.server.level.ServerPlayer player,
+                                               ResourceLocation enchantId, int defaultWeight) {
+        int fallback = Math.max(0, defaultWeight);
+        if (!anyEnchantSelectionWeights || player == null || enchantId == null) return fallback;
+        java.util.List<EnchantSelectionWeightEntry> list = enchantSelectionWeights.get(enchantId);
+        if (list == null) return fallback;
+        int weight = Integer.MAX_VALUE;
+        com.enviouse.progressivestages.common.stage.StageManager manager =
+            com.enviouse.progressivestages.common.stage.StageManager.getInstance();
+        for (EnchantSelectionWeightEntry entry : list) {
+            if (!manager.hasStage(player, entry.stage())
+                    && isCategoryEnforced(entry.stage(), EnforcementCategory.ENCHANTS)) {
+                weight = Math.min(weight, entry.weight());
+            }
+        }
+        return weight == Integer.MAX_VALUE ? fallback : weight;
     }
 
     /** Multi-stage variant of getModLockStage — returns ALL stages locking this mod. */

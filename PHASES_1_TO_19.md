@@ -542,6 +542,7 @@ locked = ["id:minecraft:nether_wart", "mod:mysticalagriculture"]
 [enchants]
 locked = ["id:minecraft:mending"]
 max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]
+selection_weights = ["minecraft:mending:0", "minecraft:fortune:10"]
 
 [beacon]
 locked = ["id:minecraft:strength", "id:minecraft:haste"]
@@ -575,7 +576,8 @@ description = "Name skeletons"
   and recipe-viewer presentation where supported.
 - `[crops]` covers planting, growth, bonemeal, and harvest paths.
 - `[enchants].locked` gates an enchantment entirely. `max_levels` permits it only up to the listed
-  level until the stage is owned.
+  level until the stage is owned. `selection_weights` changes exact enchantment roll weights
+  without removing existing copies. Weight `0` prevents table and player-aware loot generation.
 - `[beacon]` suppresses selected beacon effects only for the missing player.
 - `[brewing]` blocks taking selected brewed potions from brewing output slots and protects hopper
   extraction on a nearest-player basis.
@@ -593,14 +595,16 @@ description = "Name skeletons"
 ### Verification
 
 Test each surface separately. A fluid existing inside a machine is not the same event as bucket
-placement. An enchantment-table preview is not the same path as dungeon loot. A screen lock is not
-the same as a block-use lock. If your pack relies on automation, test the exact pipe, hopper, and
-machine combination used by players.
+placement. Enchanting tables and player-aware vanilla loot functions share the stage selection
+policy, while the final loot pass and inventory scan provide later safety checks. Playerless
+automation cannot choose a player's stage policy. If your pack relies on automation, test the exact
+pipe, hopper, and machine combination used by players.
 
 ### Common mistakes
 
 - Putting potion IDs in `[enchants]` or mob-effect IDs in `[brewing]`.
 - Expecting `max_levels` to use the prefix grammar. Its value is `enchantment_id:max_level`.
+- Expecting `selection_weights` to strip existing copies. Use `locked` for retention enforcement.
 - Assuming a screen lock removes a machine from the world. It only denies the selected GUI path.
 - Using `target_block` for an `item_on_entity` rule.
 

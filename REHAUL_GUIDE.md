@@ -330,7 +330,8 @@ Schema 4 exposes these categories through the editor and server schemas:
 - Recipes: manual crafting, automation, result items, and viewer presentation.
 - Crops: plant, grow, bonemeal, and harvest.
 - Dimensions: portals, entry, and teleport.
-- Enchantments: table, anvil, trades, inventory stripping, and maximum levels.
+- Enchantments: stage-aware table and loot selection, generation weights, maximum levels, anvil,
+  trades, immediate loot sanitation, and inventory safety checks.
 - Entities: attack, interact, mount, and replacement targets.
 - Loot: chest, fishing, archaeology, mob, block, and Lootr-backed rolls.
 - Mobs: spawn denial and replacement.

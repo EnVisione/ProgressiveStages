@@ -1046,6 +1046,7 @@ public final class StageFileParser {
         b.entities(     parseCategory(config, "entities"));
         b.enchants(     parseCategory(config, "enchants"));
         b.enchantCaps(  parseEnchantCaps(config));
+        b.enchantSelectionWeights(parseEnchantSelectionWeights(config));
         b.crops(        parseCategory(config, "crops"));
         b.screens(      parseCategory(config, "screens"));
         b.loot(         parseCategory(config, "loot"));
@@ -1169,6 +1170,36 @@ public final class StageFileParser {
                 out.add(new LockDefinition.EnchantCap(id, Math.max(0, Integer.parseInt(lvlPart))));
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("Invalid enchantment level cap. " + raw, e);
+            }
+        }
+        return out;
+    }
+
+    private static List<LockDefinition.EnchantSelectionWeight> parseEnchantSelectionWeights(Config config) {
+        Config sec = config.get("enchants");
+        if (sec == null) return Collections.emptyList();
+        List<LockDefinition.EnchantSelectionWeight> out = new ArrayList<>();
+        java.util.Set<ResourceLocation> seen = new java.util.HashSet<>();
+        for (String raw : stringList(sec, "selection_weights")) {
+            if (raw == null) throw new IllegalArgumentException("Invalid enchantment selection weight.");
+            int idx = raw.lastIndexOf(':');
+            if (idx <= 0 || idx >= raw.length() - 1) {
+                throw new IllegalArgumentException("Invalid enchantment selection weight. " + raw);
+            }
+            String weightPart = raw.substring(idx + 1);
+            if (!weightPart.chars().allMatch(Character::isDigit)) {
+                throw new IllegalArgumentException("Invalid enchantment selection weight. " + raw);
+            }
+            ResourceLocation id = ResourceLocation.tryParse(raw.substring(0, idx));
+            if (id == null) throw new IllegalArgumentException("Invalid enchantment ID. " + raw);
+            if (!seen.add(id)) {
+                throw new IllegalArgumentException("Duplicate enchantment selection weight. " + id);
+            }
+            try {
+                int weight = Integer.parseInt(weightPart);
+                out.add(new LockDefinition.EnchantSelectionWeight(id, weight));
+            } catch (NumberFormatException error) {
+                throw new IllegalArgumentException("Invalid enchantment selection weight. " + raw, error);
             }
         }
         return out;

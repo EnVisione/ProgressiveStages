@@ -13,17 +13,8 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 import org.slf4j.Logger;
 
 /**
- * Enforces {@code [enchants] locked = [...]}.
- *
- * <p>Two entry points:
- * <ul>
- *   <li>{@link #stripLockedEnchants(ServerPlayer, ItemStack)} — called from
- *       InventoryScanner during the periodic inventory scan. Rewrites the
- *       {@link DataComponents#ENCHANTMENTS} component, dropping any enchantment
- *       the player's team hasn't unlocked.</li>
- *   <li>{@link #anyEnchantLocked(ServerPlayer, ItemStack)} — called from the
- *       AnvilUpdateEvent handler to short-circuit locked-enchantment applications.</li>
- * </ul>
+ * Applies locked enchantment removal and stage level caps to item stacks.
+ * Callers use this after generation and during periodic scans as a final safety pass.
  */
 public final class EnchantEnforcer {
 
@@ -36,7 +27,7 @@ public final class EnchantEnforcer {
      * if the stack was modified (so the caller can notify / resync).
      */
     public static boolean stripLockedEnchants(ServerPlayer player, ItemStack stack) {
-        if (!StageConfig.isBlockEnchants()) return false;
+        if (!LockRegistry.getInstance().isEnchantmentRetentionConfigured()) return false;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return false;
         if (stack.isEmpty()) return false;
 
@@ -90,7 +81,7 @@ public final class EnchantEnforcer {
      * has not unlocked. Used by the anvil hook to block locked-book applications.
      */
     public static boolean anyEnchantLocked(ServerPlayer player, ItemStack stack) {
-        if (!StageConfig.isBlockEnchants()) return false;
+        if (!LockRegistry.getInstance().isEnchantmentLockConfigured()) return false;
         if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return false;
         if (stack.isEmpty()) return false;
 

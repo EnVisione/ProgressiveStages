@@ -28,6 +28,7 @@ class DocumentationReferenceTest {
         assertTrue(reference.contains("STRUCTURE SESSION COMPATIBILITY GUIDE"));
         assertTrue(reference.contains("[active_locks]"));
         assertTrue(reference.contains("type = \"leave_structure\""));
+        assertTrue(reference.contains("selection_weights = [\"minecraft:mending:0\""));
 
         StageFileParser.ParseResult result = StageFileParser.parseWithErrors(DIAMOND_REFERENCE);
         assertTrue(result.isSuccess(), result::getErrorMessage);

@@ -83,7 +83,7 @@ public final class TradeEnforcer {
 
     /** The gating stage of the first [enchants]-locked enchantment on the stack (active or stored). */
     private static Optional<StageId> firstLockedEnchantStage(ServerPlayer player, ItemStack stack) {
-        if (!StageConfig.isBlockEnchants()) return Optional.empty();
+        if (!LockRegistry.getInstance().isEnchantmentLockConfigured()) return Optional.empty();
         LockRegistry reg = LockRegistry.getInstance();
         for (var component : List.of(DataComponents.ENCHANTMENTS, DataComponents.STORED_ENCHANTMENTS)) {
             ItemEnchantments enchants = stack.get(component);

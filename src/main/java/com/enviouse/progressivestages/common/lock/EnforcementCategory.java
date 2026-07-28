@@ -25,6 +25,7 @@ public enum EnforcementCategory {
     BLOCK_INTERACTION("block_block_interaction", StageConfig::isBlockBlockInteraction),
     DIMENSION_TRAVEL("block_dimension_travel", StageConfig::isBlockDimensionTravel),
     ENTITY_ATTACK("block_entity_attack", StageConfig::isBlockEntityAttack),
+    ENCHANTS("block_enchants", StageConfig::isBlockEnchants),
     SCREEN_OPEN("block_screen_open", StageConfig::isBlockScreenOpen),
     CROP_GROWTH("block_crop_growth", StageConfig::isBlockCropGrowth),
     PET_INTERACT("block_pet_interact", StageConfig::isBlockPetInteract);
@@ -60,6 +61,7 @@ public enum EnforcementCategory {
             case "interaction", "block_interaction" -> BLOCK_INTERACTION;
             case "dimension", "dimension_travel" -> DIMENSION_TRAVEL;
             case "attack", "entity_attack" -> ENTITY_ATTACK;
+            case "enchant", "enchants", "enchantment" -> ENCHANTS;
             case "screen", "screens", "screen_open" -> SCREEN_OPEN;
             case "crop", "crops", "crop_growth" -> CROP_GROWTH;
             case "pet", "pets", "pet_interact" -> PET_INTERACT;

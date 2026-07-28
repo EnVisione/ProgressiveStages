@@ -78,6 +78,14 @@ final class BuiltinEditorSchemas {
         category(sink, "crops", "blocks", List.of("plant", "grow", "bonemeal", "harvest"));
         category(sink, "dimensions", "dimensions", List.of("enter", "portal", "teleport"));
         category(sink, "enchants", "enchantments", List.of("table", "anvil", "trade", "hold"));
+        add(sink, "rules.enchants.max_levels", "rules.toml", "enchants.max_levels",
+            "Enchantment level limits",
+            "Exact enchantment IDs and maximum levels used until this stage is owned.",
+            SchemaValueType.LIST, List.of(), false, catalog("enchantments"), Set.of(), List.of());
+        add(sink, "rules.enchants.selection_weights", "rules.toml", "enchants.selection_weights",
+            "Enchantment selection weights",
+            "Exact enchantment IDs and roll weights used until this stage is owned. Zero prevents generation.",
+            SchemaValueType.LIST, List.of(), false, catalog("enchantments"), Set.of(), List.of());
         category(sink, "entities", "entities", List.of("presence", "attack", "interact", "mount"));
         category(sink, "interactions", "items", List.of("block_right_click", "item_on_block", "item_on_entity"));
         category(sink, "loot", "loot_tables", List.of("generate", "open", "drop"));

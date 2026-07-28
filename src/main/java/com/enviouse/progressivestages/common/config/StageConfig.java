@@ -176,9 +176,9 @@ public class StageConfig {
     // ============ 2.0 Enforcement Toggles ============
 
     private static final ModConfigSpec.BooleanValue BLOCK_ENCHANTS = BUILDER
-        .comment("Gate enchantments behind stages",
-                 "Strips locked enchantments from items in the player's inventory each scan,",
-                 "and blocks anvils from applying locked enchantment books.")
+        .comment("Gate enchantment generation and retention behind stages.",
+                 "Filters enchanting table and player aware loot candidates.",
+                 "Sanitizes generated loot and inventories, and blocks locked anvil applications.")
         .define("enforcement.block_enchants", true);
 
     private static final ModConfigSpec.BooleanValue BLOCK_SCREEN_OPEN = BUILDER

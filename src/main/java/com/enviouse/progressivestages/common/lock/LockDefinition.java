@@ -5,6 +5,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * All locks parsed from one 2.0 stage file.
@@ -35,6 +36,8 @@ import java.util.List;
  */
 public final class LockDefinition {
 
+    public static final int MAX_ENCHANT_SELECTION_WEIGHT = 1024;
+
     // ---- Unified categories (prefix-based) ----
     private final CategoryLocks items;
     private final CategoryLocks blocks;
@@ -43,6 +46,7 @@ public final class LockDefinition {
     private final CategoryLocks enchants;
     /** v3.0 [enchants].max_levels — cap an enchantment at a level until the stage is owned. */
     private final List<EnchantCap> enchantCaps;
+    private final List<EnchantSelectionWeight> enchantSelectionWeights;
     private final CategoryLocks crops;
     private final CategoryLocks screens;
     private final CategoryLocks loot;
@@ -124,6 +128,7 @@ public final class LockDefinition {
         this.entities      = b.entities;
         this.enchants      = b.enchants;
         this.enchantCaps   = List.copyOf(b.enchantCaps);
+        this.enchantSelectionWeights = List.copyOf(b.enchantSelectionWeights);
         this.crops         = b.crops;
         this.screens       = b.screens;
         this.loot          = b.loot;
@@ -172,10 +177,20 @@ public final class LockDefinition {
     public CategoryLocks entities()     { return entities; }
     public CategoryLocks enchants()     { return enchants; }
     public List<EnchantCap> enchantCaps() { return enchantCaps; }
+    public List<EnchantSelectionWeight> enchantSelectionWeights() { return enchantSelectionWeights; }
     public CategoryLocks crops()        { return crops; }
 
     /** v3.0: an enchantment level cap — {@code enchant} is limited to {@code maxLevel} until the stage is owned. */
     public record EnchantCap(ResourceLocation enchant, int maxLevel) {}
+    public record EnchantSelectionWeight(ResourceLocation enchant, int weight) {
+        public EnchantSelectionWeight {
+            Objects.requireNonNull(enchant, "enchant");
+            if (weight < 0 || weight > MAX_ENCHANT_SELECTION_WEIGHT) {
+                throw new IllegalArgumentException("Enchantment selection weight must be between 0 and "
+                    + MAX_ENCHANT_SELECTION_WEIGHT + ".");
+            }
+        }
+    }
     public CategoryLocks screens()      { return screens; }
     public CategoryLocks loot()         { return loot; }
     public CategoryLocks trades()       { return trades; }
@@ -229,7 +244,8 @@ public final class LockDefinition {
 
     public boolean isEmpty() {
         return items.isEmpty() && blocks.isEmpty() && fluids.isEmpty() && entities.isEmpty()
-            && enchants.isEmpty() && crops.isEmpty() && screens.isEmpty() && loot.isEmpty() && trades.isEmpty()
+            && enchants.isEmpty() && enchantCaps.isEmpty() && enchantSelectionWeights.isEmpty()
+            && crops.isEmpty() && screens.isEmpty() && loot.isEmpty() && trades.isEmpty()
             && professions.isEmpty() && advancements.isEmpty() && beacon.isEmpty() && brewing.isEmpty()
             && petsTaming.isEmpty() && petsBreeding.isEmpty() && petsCommanding.isEmpty() && mobSpawns.isEmpty()
             && recipeIds.isEmpty() && recipeOutputs.isEmpty()
@@ -436,6 +452,7 @@ public final class LockDefinition {
         private CategoryLocks entities = CategoryLocks.EMPTY;
         private CategoryLocks enchants = CategoryLocks.EMPTY;
         private List<EnchantCap> enchantCaps = new ArrayList<>();
+        private List<EnchantSelectionWeight> enchantSelectionWeights = new ArrayList<>();
         private CategoryLocks crops = CategoryLocks.EMPTY;
         private CategoryLocks screens = CategoryLocks.EMPTY;
         private CategoryLocks loot = CategoryLocks.EMPTY;
@@ -480,6 +497,10 @@ public final class LockDefinition {
         public Builder entities(CategoryLocks v)     { this.entities = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder enchants(CategoryLocks v)     { this.enchants = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder enchantCaps(List<EnchantCap> v) { this.enchantCaps = v != null ? v : new ArrayList<>(); return this; }
+        public Builder enchantSelectionWeights(List<EnchantSelectionWeight> v) {
+            this.enchantSelectionWeights = v != null ? v : new ArrayList<>();
+            return this;
+        }
         public Builder crops(CategoryLocks v)        { this.crops = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder screens(CategoryLocks v)      { this.screens = v != null ? v : CategoryLocks.EMPTY; return this; }
         public Builder loot(CategoryLocks v)         { this.loot = v != null ? v : CategoryLocks.EMPTY; return this; }

@@ -413,7 +413,7 @@ public class ServerEventHandler {
             }
 
             // Strip locked enchantments from every item the player is carrying.
-            if (StageConfig.isBlockEnchants()) {
+            if (registry.isEnchantmentRetentionConfigured()) {
                 boolean anyStripped = false;
                 for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
                     net.minecraft.world.item.ItemStack s = player.getInventory().getItem(i);

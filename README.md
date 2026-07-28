@@ -120,7 +120,7 @@ schema 4 showcase now demonstrates the editor and class tree directly.
 - **`[display].encrypt_blocks`** — `encrypt_blocks = true` masquerades this stage's exact-id locked **blocks** as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline (chunk rewrite, break-speed, drop replacement). Per-stage on/off.
 - **Authoring / debug commands** — `/stage simulate [player]` (dry-run: reachable-next stages with % and which conditions are short, plus dep-blocked stages); `/stage new <id>` (scaffold a stage TOML); `/stage export` (write a markdown progression guide to the config folder).
 - **Three finer-grained gates (now shipped — were "planned" in earlier 3.0 drafts):**
-  - **`[enchants].max_levels`** — `max_levels = ["minecraft:sharpness:3", "minecraft:protection:2"]` caps an enchantment at that level until the gating stage is owned (effective cap = MIN across every still-missing capping stage; level `0` removes it). Enforced in the periodic inventory scan. Whole-enchant locking via `[enchants].locked` is unchanged.
+  - **Stage-aware enchantment selection** — `[enchants].locked` removes locked candidates before enchanting-table and player-aware loot rolls. `max_levels = ["minecraft:sharpness:3"]` limits generated and retained levels. `selection_weights = ["minecraft:mending:0", "minecraft:fortune:10"]` changes exact enchantment roll weights until the stage is owned; weight `0` prevents new rolls without stripping existing copies. The immediate loot pass and periodic inventory scan remain safety nets.
   - **`[beacon].locked`** — `locked = ["id:minecraft:strength", "id:minecraft:haste"]` (MobEffect ids). A player missing the gating stage simply doesn't receive that beacon effect; other players in range are unaffected.
   - **`[brewing].locked`** — `locked = ["id:minecraft:strength", "id:minecraft:swiftness"]` (Potion ids). A player missing the gating stage can't TAKE the brewed potion out of a brewing stand's slots (it brews and sits there until they unlock it). Hopper/automation extraction is gated too, best-effort via the nearest player.
 - **Stage map search + reveal controls** — search by stage name, id, description, category, or **locked item id**; hide owned stages; use per-stage `reveal` rules to conceal future branches until prerequisites are met.
@@ -245,7 +245,7 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[dimensions]` | `locked` (exact ids only) | Cancel travel, eject players from locked dimensions |
 | `[entities]` | `locked`, `always_unlocked` | Legacy complete presence gate. Cancel spawns when every nearby player is denied. Conceal mixed access entities per player. Block attacking, interaction, mounting, mob targeting, and mob damage for denied players. Schema 4 can instead choose `presence`, `attack`, `interact`, or `mount`. |
 | `[recipes]` | `locked_ids`, `locked_items` | `locked_ids` blocks specific recipe IDs; `locked_items` blocks every recipe producing the output item |
-| `[enchants]` | `locked`, **`max_levels`** | Hide enchants in enchanting table, refuse anvil application, strip from inventory. **New in 3.0:** `max_levels = ["minecraft:sharpness:3", ...]` caps an enchant at that level (instead of locking it) until the gating stage is owned — effective cap = MIN across every missing capping stage, level `0` removes it; enforced in the inventory scan |
+| `[enchants]` | `locked`, **`max_levels`**, **`selection_weights`** | Filter table and player-aware loot candidates before they roll, refuse locked anvil and trade results, and sanitize generated loot and inventories. `max_levels = ["minecraft:sharpness:3", ...]` limits generated and retained levels. `selection_weights = ["minecraft:mending:0", ...]` changes exact enchantment roll weights until the stage is owned; weight `0` prevents generation without stripping existing copies. |
 | `[crops]` | `locked`, `always_unlocked` | Block planting, growth ticks, bonemeal application |
 | `[screens]` | `locked` | Block opening container / GUI blocks |
 | `[professions]` | `locked` | **New in 2.5.** Gate opening a villager's trade GUI by the villager's PROFESSION (`id:`/`mod:`/`name:`; no tags). Wandering traders unaffected (use `[trades]`). |
@@ -525,7 +525,9 @@ mixin/
   AnvilMenuMixin                   — clears result slot when locked
   CraftingMenuMixin                — recipe + recipe-item gate
   ResultSlotMixin                  — pickup gate
-  EnchantmentMenuMixin             — clears clues + refuses click
+  EnchantmentMenuMixin             — filters table candidates for the exact opener
+  EnchantWithLevelsFunctionMixin   — filters table-style loot enchantment rolls
+  EnchantRandomlyFunctionMixin     — filters uniformly random loot enchantments
   ServerPlayerMerchantMixin        — gates villager trades
   client/EmiStackWidgetMixin       — paints lock in EMI panel
   client/EmiScreenManagerMixin     — EMI search / sidebar
@@ -581,7 +583,7 @@ compat/
 - **Jade + WTHIT overlay** — looking at a locked block or mob shows `🔒 Requires: <stage>`. Sourced from the Modrinth Maven as `compileOnly` dev jars, inert when uninstalled. Entity locks are now synced to the client for the mob overlay.
 - **`[display].encrypt_blocks`** — masquerades this stage's exact-id locked blocks as `encrypt_as` (default `minecraft:stone`) until owned, reusing the ore-spoof pipeline. Per-stage on/off.
 - **Authoring/debug commands** — `/stage simulate [player]` (dry-run reachable-next stages + short conditions + dep-blocked stages), `/stage new <id>` (scaffold a stage TOML), `/stage export` (markdown progression guide).
-- **`[enchants].max_levels` enchant level cap** — `max_levels = ["minecraft:sharpness:3", ...]` caps an enchant at that level (instead of locking it) until the gating stage is owned; effective cap = MIN across every missing capping stage, level `0` removes it; enforced in the periodic inventory scan. `[enchants].locked` (whole-enchant) unchanged.
+- **Stage-aware enchantment generation** — `[enchants].locked` now removes every locked candidate before enchanting-table and player-aware loot rolls. `max_levels = ["minecraft:sharpness:3", ...]` limits both newly generated and retained levels. `selection_weights = ["minecraft:mending:0", "minecraft:fortune:10"]` changes exact enchantment roll weights while the declaring stage is missing; weight `0` disables new generation without deleting existing copies. Multiple missing-stage caps and weights use the strictest value. Immediate loot sanitization and the periodic inventory scan remain defense in depth.
 - **`[beacon].locked` beacon-effect gating** — `["id:minecraft:strength", ...]` (MobEffect ids). A player missing the gating stage doesn't receive that beacon effect; other players in range are unaffected.
 - **`[brewing].locked` brewed-potion gating** — `["id:minecraft:strength", ...]` (Potion ids). A player missing the gating stage can't take the brewed potion out of a brewing stand's slots; hopper/automation extraction is gated too (best-effort, via the nearest player).
 - **Stage Tree GUI search + hide** — a search box filters by stage name OR by a locked item id (type an item to find the stage(s) that gate it; flat results), an "☑ owned" toggle hides already-unlocked stages, and the detail pane shows a "Gates mods: create ×42, mekanism ×18" breakdown.

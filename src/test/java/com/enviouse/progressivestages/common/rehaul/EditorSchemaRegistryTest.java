@@ -27,6 +27,8 @@ class EditorSchemaRegistryTest {
             "rules.toml:crops.locked",
             "rules.toml:dimensions.locked",
             "rules.toml:enchants.locked",
+            "rules.toml:enchants.max_levels",
+            "rules.toml:enchants.selection_weights",
             "rules.toml:entities.locked",
             "rules.toml:interactions.locked",
             "rules.toml:loot.locked",

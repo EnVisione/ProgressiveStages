@@ -309,6 +309,77 @@ class StageFileParserTest {
     }
 
     @Test
+    void parsesEnchantmentSelectionWeights() throws IOException {
+        StageFileParser.ParseResult result = StageFileParser.parseWithErrors(write("enchant_weights.toml", """
+            [stage]
+            id = "enchant_weights"
+
+            [enchants]
+            selection_weights = ["minecraft:mending:0", "minecraft:fortune:10"]
+            """));
+
+        assertTrue(result.isSuccess(), result.getErrorMessage());
+        var weights = result.getStageDefinition().getLocks().enchantSelectionWeights();
+        assertEquals(2, weights.size());
+        assertEquals("minecraft:mending", weights.getFirst().enchant().toString());
+        assertEquals(0, weights.getFirst().weight());
+        assertEquals("minecraft:fortune", weights.getLast().enchant().toString());
+        assertEquals(10, weights.getLast().weight());
+    }
+
+    @Test
+    void rejectsInvalidEnchantmentSelectionWeights() throws IOException {
+        List<String> values = List.of(
+            "minecraft:mending",
+            "minecraft:mending:-1",
+            "minecraft:mending:1025"
+        );
+
+        for (int index = 0; index < values.size(); index++) {
+            StageFileParser.ParseResult result = StageFileParser.parseWithErrors(write(
+                "bad_enchant_weight_" + index + ".toml", """
+                    [stage]
+                    id = "bad_enchant_weight"
+
+                    [enchants]
+                    selection_weights = ["%s"]
+                    """.formatted(values.get(index))));
+            assertFalse(result.isSuccess(), values.get(index));
+            assertTrue(result.getErrorMessage().contains("selection weight"), result.getErrorMessage());
+        }
+    }
+
+    @Test
+    void rejectsDuplicateEnchantmentSelectionWeights() throws IOException {
+        StageFileParser.ParseResult result = StageFileParser.parseWithErrors(write("duplicate_enchant_weight.toml", """
+            [stage]
+            id = "duplicate_enchant_weight"
+
+            [enchants]
+            selection_weights = ["minecraft:mending:0", "minecraft:mending:4"]
+            """));
+
+        assertFalse(result.isSuccess());
+        assertTrue(result.getErrorMessage().contains("Duplicate enchantment selection weight"),
+            result.getErrorMessage());
+    }
+
+    @Test
+    void parsesPerStageEnchantmentEnforcementOverride() throws IOException {
+        StageFileParser.ParseResult result = StageFileParser.parseWithErrors(write("enchant_override.toml", """
+            [stage]
+            id = "enchant_override"
+
+            [enforcement]
+            block_enchants = false
+            """));
+
+        assertTrue(result.isSuccess(), result.getErrorMessage());
+        assertEquals(false, result.getStageDefinition().getLocks().enforcementOverrides()
+            .get(com.enviouse.progressivestages.common.lock.EnforcementCategory.ENCHANTS));
+    }
+
+    @Test
     void parsesConfigurableStageSlotsAndReplacementPolicy() throws IOException {
         StageFileParser.ParseResult result = StageFileParser.parseWithErrors(write("slots.toml", """
             [stage]

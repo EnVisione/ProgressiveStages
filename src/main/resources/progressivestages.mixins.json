@@ -8,6 +8,8 @@
     "AbstractContainerMenuMixin",
     "ResultSlotMixin",
     "EnchantmentMenuMixin",
+    "EnchantWithLevelsFunctionMixin",
+    "EnchantRandomlyFunctionMixin",
     "ServerPlayerMerchantMixin",
     "MerchantContainerMixin",
     "ServerGamePacketListenerMerchantMixin",
