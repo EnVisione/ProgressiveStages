@@ -33,6 +33,8 @@ class StageTreeInventoryButtonTest {
         assertTrue(button.contains("(getHeight() - renderedIconSize) / 2"));
         assertTrue(button.contains("ClientTriggerProgress.requestFromServer()"));
         assertTrue(button.contains("textures/gui/lock_icon.png"));
+        assertTrue(button.contains("isHoveredOrFocused()"));
+        assertTrue(button.contains("renderPixelRoundedOutline"));
         assertTrue(config.contains("define(\"client.show_inventory_button\", true)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_x\", 126, -4096, 4096)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_y\", 61, -4096, 4096)"));

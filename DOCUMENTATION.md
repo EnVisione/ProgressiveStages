@@ -3079,8 +3079,22 @@ description, category, and trigger completion. Click it to pin an inspector with
 its prerequisites, full live `[[triggers]]` condition breakdown grouped into
 clearly labeled `all_of` or `any_of` routes, unlock item preview, and purchase
 control. The inspector occupies a dedicated layer above every map node and item
-icon. Search matches display name, id, description, category, and locked item
-ids. The Owned button hides completed nodes.
+icon. Hovering or selecting a node computes the visible branch that contains its
+ancestors and descendants. Connectors and nodes outside that branch remain
+present but become subdued, so merged paths remain understandable without
+removing context. Available nodes use animated gold corner brackets. Hovered and
+selected nodes use pixel rounded outlines instead of square debug style borders.
+The inspector uses the selected stage color for its accent, progress bar, and
+scroll position, while section dividers keep requirements, triggers, challenges,
+modifiers, history, and unlocks visually separate. Search matches display name,
+id, description, category, and locked item ids. The Owned button hides completed
+nodes.
+
+The category picker, Owned control, home control, inspector close control, and
+purchase control use vanilla button sprites and button click sounds. A short
+navigation hint and zoom readout fade after the screen opens or the camera
+changes. The inventory button keeps its configurable dimensions and receives a
+gold pixel rounded focus outline when hovered or keyboard focused.
 
 **Author layout (`[display]`).** Omit coordinates for automatic dependency-DAG
 layout, or specify both `x` and `y` (pixels). `frame` is `task`, `goal`, or
