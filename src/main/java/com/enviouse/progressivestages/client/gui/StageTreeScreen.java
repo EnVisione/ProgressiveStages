@@ -14,10 +14,12 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.advancements.AdvancementWidgetType;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -100,8 +102,10 @@ public final class StageTreeScreen extends Screen {
     private int buyX, buyY, buyW, buyH;
     private boolean buyEnabled;
     private StageId buyStage;
+    private final Map<String, List<ItemStack>> selectorIconCache = new HashMap<>();
 
     private record MapNode(StageId id, int x, int y, boolean owned, boolean available) {}
+    private record PreviewRow(ItemStack icon, List<FormattedCharSequence> lines, int height) {}
 
     public StageTreeScreen() {
         super(Component.translatable("gui.progressivestages.tree.title"));
@@ -117,8 +121,8 @@ public final class StageTreeScreen extends Screen {
 
     @Override
     protected void init() {
-        int w = Math.max(230, Math.min(width - 24, 520));
-        int h = Math.max(140, Math.min(height - 38, 300));
+        int w = Math.max(230, Math.min(width - 24, 460));
+        int h = Math.max(140, Math.min(height - 38, 250));
         left = (width - w) / 2;
         top = (height - h) / 2;
         right = left + w;
@@ -676,7 +680,7 @@ public final class StageTreeScreen extends Screen {
     private void renderInspector(GuiGraphics g, int mouseX, int mouseY) {
         MapNode node = byId.get(selected);
         if (node == null) return;
-        panelW = Math.min(208, Math.max(160, mapRight - mapLeft - 20));
+        panelW = Math.min(196, Math.max(156, mapRight - mapLeft - 20));
         panelH = Math.max(90, mapBottom - mapTop - 12);
         panelX = mapRight - panelW - 6;
         panelY = mapTop + 6;
@@ -691,7 +695,7 @@ public final class StageTreeScreen extends Screen {
         int innerW = panelW - 16;
         int nameColor = stageColorOr(selected,
             node.owned() ? GREEN : node.available() ? GOLD : RED);
-        g.fill(panelX + 3, panelY + 3, panelX + 4, panelY + panelH - 3,
+        g.fill(panelX + 3, panelY + 9, panelX + 4, panelY + panelH - 9,
             withAlpha(nameColor, 210));
 
         g.renderFakeItem(iconFor(selected), x, panelY + 6);
@@ -720,7 +724,7 @@ public final class StageTreeScreen extends Screen {
                 g.drawString(font, line, x, y, 0xFFFFFFFF, false);
                 y += 10;
             }
-            y += 4;
+            y += 7;
         }
 
         List<StageId> dependencies = ClientStageCache.getDependencies(selected);
@@ -744,22 +748,28 @@ public final class StageTreeScreen extends Screen {
 
         String slotGroup = ClientStageCache.getSlotGroup(selected);
         if (!slotGroup.isBlank()) {
+            y = drawSectionHeading(g,
+                Component.translatable("gui.progressivestages.tree.slots.heading"),
+                x, y, innerW, GOLD);
+            g.drawString(font, Component.literal(humanizeIdentifier(slotGroup))
+                .withStyle(ChatFormatting.BOLD), x + 3, y, 0xFFFFD45A, false);
+            y += 11;
             int limit = ClientStageCache.getSlotLimit(selected);
             int active = ClientStageCache.getOwnedSlotCount(slotGroup);
             Component slots = limit <= 0
-                ? Component.translatable("gui.progressivestages.tree.slots.unlimited", slotGroup)
-                : Component.translatable("gui.progressivestages.tree.slots.limited", slotGroup, active, limit);
+                ? Component.translatable("gui.progressivestages.tree.slots.unlimited")
+                : Component.translatable("gui.progressivestages.tree.slots.limited", active, limit);
             for (FormattedCharSequence wrapped : font.split(slots, innerW)) {
-                g.drawString(font, wrapped, x, y, 0xFFFFD45A, false);
+                g.drawString(font, wrapped, x + 3, y, 0xFFCCCCCC, false);
                 y += 10;
             }
             if (limit > 0) {
                 Component policy = Component.translatable("gui.progressivestages.tree.slots.policy",
-                    ClientStageCache.getSlotPolicy(selected).replace('_', ' '));
+                    humanizeIdentifier(ClientStageCache.getSlotPolicy(selected)));
                 g.drawString(font, policy, x + 3, y, 0xFFAAAAAA, false);
-                y += 13;
+                y += 15;
             } else {
-                y += 3;
+                y += 6;
             }
         }
 
@@ -807,7 +817,8 @@ public final class StageTreeScreen extends Screen {
                 Component.translatable("gui.progressivestages.tree.challenges"),
                 x, y, innerW, 0xFFFFAA55);
             for (ClientTriggerProgress.Challenge challenge : data.challenges()) {
-                g.drawString(font, challenge.id().getPath() + ". " + challenge.status(), x + 3, y,
+                g.drawString(font, humanizeResource(challenge.id()) + ". "
+                        + humanizeIdentifier(challenge.status()), x + 3, y,
                     challenge.status().equals("succeeded") ? GREEN : 0xFFDDCC88, false);
                 y += 10;
                 for (String budget : challenge.budgets()) {
@@ -822,13 +833,10 @@ public final class StageTreeScreen extends Screen {
             y = drawSectionHeading(g,
                 Component.translatable("gui.progressivestages.tree.modifiers"),
                 x, y, innerW, 0xFFAA88FF);
-            for (String modifier : data.modifiers()) {
-                for (FormattedCharSequence wrapped : font.split(Component.literal(modifier), innerW - 5)) {
-                    g.drawString(font, wrapped, x + 3, y, 0xFFCCCCCC, false);
-                    y += 10;
-                }
+            for (ClientTriggerProgress.ModifierPreview modifier : data.modifiers()) {
+                y = renderModifierPreview(g, modifier, x, y, innerW);
             }
-            y += 3;
+            y += 4;
         }
 
         if (!data.why().isEmpty()) {
@@ -837,7 +845,12 @@ public final class StageTreeScreen extends Screen {
                 x, y, innerW, 0xFF55DDDD);
             for (ClientTriggerProgress.Why why : data.why().stream()
                     .skip(Math.max(0, data.why().size() - 5)).toList()) {
-                String line = why.effect() + ". " + why.category() + ". " + why.target();
+                String line = java.util.stream.Stream.of(
+                        humanizeIdentifier(why.effect()),
+                        humanizeIdentifier(why.category()),
+                        displayTarget(why.target()))
+                    .filter(value -> !value.isBlank())
+                    .collect(java.util.stream.Collectors.joining(". "));
                 for (FormattedCharSequence wrapped : font.split(Component.literal(line), innerW - 5)) {
                     g.drawString(font, wrapped, x + 3, y, why.blocked() ? 0xFFFF7777 : 0xFF77DD77, false);
                     y += 10;
@@ -852,7 +865,8 @@ public final class StageTreeScreen extends Screen {
                 x, y, innerW, TEXT_MUTED);
             for (ClientTriggerProgress.History history : data.history().stream()
                     .skip(Math.max(0, data.history().size() - 5)).toList()) {
-                String line = history.direction() + ". " + (history.committed() ? "committed" : "rejected");
+                String line = humanizeIdentifier(history.direction()) + ". "
+                    + (history.committed() ? "Committed" : "Rejected");
                 g.drawString(font, line, x + 3, y, history.committed() ? 0xFF77DD77 : 0xFFFF7777, false);
                 y += 10;
             }
@@ -914,6 +928,211 @@ public final class StageTreeScreen extends Screen {
         }
     }
 
+    private int renderModifierPreview(
+            GuiGraphics g,
+            ClientTriggerProgress.ModifierPreview preview,
+            int x,
+            int y,
+            int width
+    ) {
+        int cardX = x + 1;
+        int cardW = Math.max(40, width - 2);
+        List<PreviewRow> rows = new ArrayList<>();
+        for (ClientTriggerProgress.ModifierField field : preview.fields()) {
+            ItemStack icon = selectorIcon(field.registry(), field.selector());
+            String value = field.selector().isBlank()
+                ? humanizeFreeText(field.value())
+                : selectorDisplayName(field.registry(), field.selector(), icon);
+            Component line = Component.literal(field.label() + ": ")
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(value).withStyle(ChatFormatting.WHITE));
+            int textWidth = Math.max(20, cardW - 10 - (icon.isEmpty() ? 0 : 19));
+            List<FormattedCharSequence> wrapped = font.split(line, textWidth);
+            int height = Math.max(icon.isEmpty() ? 10 : 18, wrapped.size() * 10) + 2;
+            rows.add(new PreviewRow(icon, wrapped, height));
+        }
+
+        int cardH = 27 + rows.stream().mapToInt(PreviewRow::height).sum();
+        fillPixelRounded(g, cardX, y, cardW, cardH, 0xB0161616);
+        renderPixelRoundedOutline(g, cardX, y, cardW, cardH, 0x995D4B78);
+
+        Component title = modifierTitle(preview.kind());
+        g.drawString(font, title.copy().withStyle(ChatFormatting.BOLD),
+            cardX + 5, y + 5, 0xFFCCAAFF, false);
+        String subtitle = humanizeResource(preview.id());
+        g.drawString(font, font.plainSubstrByWidth(subtitle, cardW - 10),
+            cardX + 5, y + 15, 0xFF888888, false);
+
+        int rowY = y + 27;
+        for (PreviewRow row : rows) {
+            int textX = cardX + 5;
+            if (!row.icon().isEmpty()) {
+                g.renderItem(row.icon(), textX, rowY);
+                textX += 19;
+            }
+            int textY = rowY + (row.icon().isEmpty() ? 0 : 1);
+            for (FormattedCharSequence line : row.lines()) {
+                g.drawString(font, line, textX, textY, 0xFFFFFFFF, false);
+                textY += 10;
+            }
+            rowY += row.height();
+        }
+        return y + cardH + 5;
+    }
+
+    private Component modifierTitle(String kind) {
+        return Component.translatable(switch (kind) {
+            case "block_drop_bonus" -> "gui.progressivestages.tree.modifier.block_drop";
+            case "equipment_locked" -> "gui.progressivestages.tree.modifier.locked";
+            case "equipment_active" -> "gui.progressivestages.tree.modifier.active";
+            case "affinity" -> "gui.progressivestages.tree.modifier.affinity";
+            default -> "gui.progressivestages.tree.modifier.equipment";
+        });
+    }
+
+    private ItemStack selectorIcon(String registry, String selector) {
+        if (registry.isBlank() || selector.isBlank()) return ItemStack.EMPTY;
+        String key = registry + "|" + normalizeSelector(selector);
+        List<ItemStack> icons = selectorIconCache.computeIfAbsent(key,
+            ignored -> resolveSelectorIcons(registry, selector));
+        if (icons.isEmpty()) return ItemStack.EMPTY;
+        int cycle = (int) (Util.getMillis() / 1100L);
+        return icons.get(Math.floorMod(cycle + key.hashCode(), icons.size()));
+    }
+
+    private List<ItemStack> resolveSelectorIcons(String registry, String selector) {
+        String normalized = normalizeSelector(selector);
+        List<ItemStack> icons = new ArrayList<>();
+        if (normalized.startsWith("tag:") || normalized.startsWith("#")) {
+            String rawTag = normalized.startsWith("tag:") ? normalized.substring(4) : normalized.substring(1);
+            ResourceLocation tagId = ResourceLocation.tryParse(rawTag);
+            if (tagId == null) return List.of();
+            if ("block".equals(registry)) {
+                BuiltInRegistries.BLOCK.getTag(TagKey.create(Registries.BLOCK, tagId))
+                    .ifPresent(values -> values.forEach(holder -> addPreviewIcon(icons, holder.value().asItem())));
+            } else if ("item".equals(registry)) {
+                BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, tagId))
+                    .ifPresent(values -> values.forEach(holder -> addPreviewIcon(icons, holder.value())));
+            }
+            return List.copyOf(icons);
+        }
+        if (normalized.startsWith("mod:")) {
+            String namespace = normalized.substring(4);
+            if ("block".equals(registry)) {
+                BuiltInRegistries.BLOCK.forEach(block -> {
+                    ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+                    if (id != null && id.getNamespace().equals(namespace)) addPreviewIcon(icons, block.asItem());
+                });
+            } else if ("item".equals(registry)) {
+                BuiltInRegistries.ITEM.forEach(item -> {
+                    ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+                    if (id != null && id.getNamespace().equals(namespace)) addPreviewIcon(icons, item);
+                });
+            }
+            return List.copyOf(icons);
+        }
+        if (normalized.equals("all") || normalized.equals("*")) return List.of();
+        String rawId = normalized.startsWith("id:") ? normalized.substring(3) : normalized;
+        ResourceLocation id = ResourceLocation.tryParse(rawId);
+        if (id == null) return List.of();
+        if ("block".equals(registry)) {
+            BuiltInRegistries.BLOCK.getOptional(id).ifPresent(block -> addPreviewIcon(icons, block.asItem()));
+        } else if ("item".equals(registry)) {
+            BuiltInRegistries.ITEM.getOptional(id).ifPresent(item -> addPreviewIcon(icons, item));
+        }
+        return List.copyOf(icons);
+    }
+
+    private static void addPreviewIcon(List<ItemStack> icons, net.minecraft.world.item.Item item) {
+        if (item != Items.AIR) icons.add(new ItemStack(item));
+    }
+
+    private String selectorDisplayName(String registry, String selector, ItemStack icon) {
+        String normalized = normalizeSelector(selector);
+        if (normalized.startsWith("tag:") || normalized.startsWith("#")) {
+            String rawTag = normalized.startsWith("tag:") ? normalized.substring(4) : normalized.substring(1);
+            ResourceLocation tag = ResourceLocation.tryParse(rawTag);
+            return tag == null ? humanizeIdentifier(rawTag) : humanizeTag(tag);
+        }
+        if (normalized.startsWith("mod:")) {
+            return "All " + humanizeIdentifier(normalized.substring(4)) + " content";
+        }
+        if (normalized.startsWith("name:")) {
+            return "Names containing " + humanizeIdentifier(normalized.substring(5));
+        }
+        if (normalized.equals("all") || normalized.equals("*")) return "Everything";
+        if (!icon.isEmpty()) return icon.getHoverName().getString();
+        String rawId = normalized.startsWith("id:") ? normalized.substring(3) : normalized;
+        ResourceLocation id = ResourceLocation.tryParse(rawId);
+        return id == null ? humanizeIdentifier(rawId) : humanizeResource(id);
+    }
+
+    private static String normalizeSelector(String selector) {
+        String normalized = selector == null ? "" : selector.trim();
+        int priority = normalized.indexOf("|priority=");
+        return priority < 0 ? normalized : normalized.substring(0, priority).trim();
+    }
+
+    private static String humanizeTag(ResourceLocation tag) {
+        String[] parts = tag.getPath().split("/");
+        StringBuilder output = new StringBuilder();
+        for (int index = parts.length - 1; index >= 0; index--) {
+            if (output.length() > 0) output.append(' ');
+            output.append(humanizeIdentifier(parts[index]));
+        }
+        return output.toString();
+    }
+
+    private static String humanizeResource(ResourceLocation id) {
+        if (id == null) return "";
+        String path = id.getPath();
+        return humanizeIdentifier(path.substring(path.lastIndexOf('/') + 1));
+    }
+
+    private String displayTarget(ResourceLocation id) {
+        return BuiltInRegistries.ITEM.getOptional(id)
+            .map(item -> item.getDescription().getString())
+            .filter(value -> !value.isBlank())
+            .orElseGet(() -> BuiltInRegistries.BLOCK.getOptional(id)
+                .map(block -> block.getName().getString())
+                .filter(value -> !value.isBlank())
+                .orElseGet(() -> humanizeResource(id)));
+    }
+
+    private static String humanizeFreeText(String value) {
+        if (value == null || value.isBlank()) return "";
+        if (!value.contains("_") && !value.contains(":")) return value;
+        if (value.contains(", ")) {
+            return java.util.Arrays.stream(value.split(", "))
+                .map(StageTreeScreen::humanizeIdentifier)
+                .collect(java.util.stream.Collectors.joining(", "));
+        }
+        return humanizeIdentifier(value);
+    }
+
+    private static String humanizeIdentifier(String value) {
+        if (value == null || value.isBlank()) return "";
+        String clean = value.trim();
+        int namespace = clean.lastIndexOf(':');
+        if (namespace >= 0) clean = clean.substring(namespace + 1);
+        int path = clean.lastIndexOf('/');
+        if (path >= 0) clean = clean.substring(path + 1);
+        clean = clean.replace('_', ' ').replace('-', ' ').replace('.', ' ');
+        StringBuilder output = new StringBuilder(clean.length());
+        boolean capitalize = true;
+        for (int index = 0; index < clean.length(); index++) {
+            char character = clean.charAt(index);
+            if (Character.isWhitespace(character)) {
+                if (output.length() > 0 && output.charAt(output.length() - 1) != ' ') output.append(' ');
+                capitalize = true;
+            } else {
+                output.append(capitalize ? Character.toUpperCase(character) : character);
+                capitalize = false;
+            }
+        }
+        return output.toString().trim();
+    }
+
     private int drawSectionHeading(
             GuiGraphics g,
             Component title,
@@ -926,9 +1145,9 @@ public final class StageTreeScreen extends Screen {
         g.drawString(font, label, x, y, color, false);
         int lineX = x + font.width(label) + 4;
         if (lineX < x + width) {
-            g.fill(lineX, y + 5, x + width, y + 6, withAlpha(color, 95));
+            g.fill(lineX, y + 5, Math.min(x + width, lineX + 42), y + 6, withAlpha(color, 95));
         }
-        return y + 12;
+        return y + 14;
     }
 
     private void renderControl(

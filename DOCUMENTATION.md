@@ -3042,9 +3042,11 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
   `/pstages`, `/stage gui`, or the progression map button immediately to the
   right of the recipe-book button in the survival inventory. The button uses
   custom 20 by 18 pixel normal and highlighted backgrounds with the light,
-  rounded recipe-book silhouette. Its separate centered emblem is a gold folded
-  map with a cyan route and three stage markers. It does not reuse the generic
-  dark widget or the content-lock icon.
+  rounded recipe-book silhouette. Its separate centered emblem is a clean gold
+  parchment map with a cyan route and two endpoints. The simpler native 16 by 16
+  sprite stays readable at the default 14 pixel rendering size. It does not
+  reuse the generic dark widget or the content-lock icon. New configurations
+  leave a six-pixel wider gap after the recipe-book control.
 
   To hide, move, or resize the inventory button, open
   `config/progressivestages/progressivestages.toml` and configure:
@@ -3052,7 +3054,7 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
   ```toml
   [client]
   show_inventory_button = true
-  inventory_button_x = 126
+  inventory_button_x = 132
   inventory_button_y = 61
   inventory_button_width = 20
   inventory_button_height = 18
@@ -3082,17 +3084,43 @@ that list from the keyboard.
 description, category, and trigger completion. Click it to pin an inspector with
 its prerequisites, full live `[[triggers]]` condition breakdown grouped into
 clearly labeled `all_of` or `any_of` routes, unlock item preview, and purchase
-control. The inspector occupies a dedicated layer above every map node and item
-icon. Hovering or selecting a node computes the visible branch that contains its
+control. The window is capped at 460 by 250 GUI pixels so it retains the vanilla
+advancement-screen proportions instead of stretching across most of the display.
+The inspector occupies a dedicated layer above every map node and item icon.
+Hovering or selecting a node computes the visible branch that contains its
 ancestors and descendants. Connectors and nodes outside that branch remain
 present but become subdued, so merged paths remain understandable without
 removing context. Available nodes use animated gold corner brackets. Hovered and
 selected nodes use pixel rounded outlines instead of square debug style borders.
+
 The inspector uses the selected stage color for its accent, progress bar, and
-scroll position, while section dividers keep requirements, triggers, challenges,
-modifiers, history, and unlocks visually separate. Search matches display name,
-id, description, category, and locked item ids. The Owned button hides completed
-nodes.
+scroll position. Its accent stops short of the top and bottom edges, section
+dividers use a short 42-pixel rule, and extra vertical spacing separates the
+description, prerequisites, stage group, triggers, challenges, bonuses, history,
+and unlocks. Internal identifiers are presented as readable title text. For
+example, `engineering_tiers` appears as `Engineering Tiers`, followed by the
+plain sentence `Stages can stack together.`.
+
+Equipment modifiers, block-drop modifiers, live equipment effects, and affinity
+results travel from the authoritative server as structured preview fields. The
+client renders each result as a small card with a readable title, rule name,
+selectors, output transformation, stacking behavior, and priority. It does not
+parse or expose a concatenated implementation string. Exact item and block
+selectors render the registered item icon. A `tag:` selector resolves its
+registered item or block tag once, caches the resulting item stacks for the
+screen lifetime, and rotates the displayed icon every 1.1 seconds. A block with
+no item form is skipped. Text remains the humanized tag name, such as
+`tag:c:ores/coal` becoming `Coal Ores`, while the icon rotates through every
+registered coal ore. This keeps large modded tags understandable without
+performing registry scans on every frame.
+
+The structured preview packet uses ProgressiveStages network protocol version
+`2`. Clients and servers must use the same current mod build. A protocol
+mismatch is rejected during connection instead of allowing an older client to
+decode the changed stage-GUI payload incorrectly.
+
+Search matches display name, id, description, category, and locked item ids.
+The Owned button hides completed nodes.
 
 The category picker, Owned control, home control, inspector close control, and
 purchase control use vanilla button sprites and button click sounds. A short
@@ -3188,11 +3216,11 @@ Default values are shown below.
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `show_inventory_button` | `true` | Show the progression map button beside the recipe book in the survival inventory. Set it to `false` to remove the button. Commands and the optional keybind continue to work. Close and reopen the inventory after changing it. |
-| `inventory_button_x` | `126` | Horizontal position measured from the left edge of the survival inventory. The accepted range is `-4096` through `4096`. |
+| `inventory_button_x` | `132` | Horizontal position measured from the left edge of the survival inventory. The accepted range is `-4096` through `4096`. The default leaves a wider gap after the recipe-book button. |
 | `inventory_button_y` | `61` | Vertical position measured from the top edge of the survival inventory. The accepted range is `-4096` through `4096`. |
 | `inventory_button_width` | `20` | Button width in GUI pixels. The accepted range is `8` through `256`. |
 | `inventory_button_height` | `18` | Button height in GUI pixels. The accepted range is `8` through `256`. |
-| `inventory_button_icon_size` | `14` | Requested centered lock icon size in GUI pixels. The accepted range is `4` through `256`. Oversized icons shrink to fit inside the button. |
+| `inventory_button_icon_size` | `14` | Requested centered map-emblem size in GUI pixels. The accepted range is `4` through `256`. Oversized icons shrink to fit inside the button. |
 
 This setting controls the local Minecraft client. In single player, edit the generated main config
 normally. For a modpack, include the same setting in the client copy of

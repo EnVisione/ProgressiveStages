@@ -43,7 +43,7 @@ class StageTreeInventoryButtonTest {
         assertFalse(button.contains("super.renderWidget"));
         assertTrue(button.contains("isHoveredOrFocused()"));
         assertTrue(config.contains("define(\"client.show_inventory_button\", true)"));
-        assertTrue(config.contains("defineInRange(\"client.inventory_button_x\", 126, -4096, 4096)"));
+        assertTrue(config.contains("defineInRange(\"client.inventory_button_x\", 132, -4096, 4096)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_y\", 61, -4096, 4096)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_width\", 20, 8, 256)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_height\", 18, 8, 256)"));

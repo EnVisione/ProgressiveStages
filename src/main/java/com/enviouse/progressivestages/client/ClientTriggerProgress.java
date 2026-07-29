@@ -46,11 +46,19 @@ public final class ClientTriggerProgress {
     public record Challenge(ResourceLocation id, String status, int step, int attempts,
                             List<String> budgets, String explanation) {}
 
+    public record ModifierField(String label, String value, String registry, String selector) {}
+
+    public record ModifierPreview(String kind, ResourceLocation id, List<ModifierField> fields) {
+        public ModifierPreview {
+            fields = List.copyOf(fields);
+        }
+    }
+
     public record History(long timestamp, String direction, boolean committed, String explanation) {}
 
     public record StageData(List<Rule> rules, List<ResourceLocation> unlockSample, int unlockTotal,
                             boolean purchasable, int costXp, String costSummary, boolean canPurchase,
-                            List<Why> why, List<Challenge> challenges, List<String> modifiers,
+                            List<Why> why, List<Challenge> challenges, List<ModifierPreview> modifiers,
                             List<History> history) {
         public static final StageData EMPTY = new StageData(List.of(), List.of(), 0, false, 0, "", false,
             List.of(), List.of(), List.of(), List.of());
@@ -105,7 +113,10 @@ public final class ClientTriggerProgress {
                     line.winner(), line.effect(), line.blocked(), line.explanation())).toList(),
                 sp.challenges().stream().map(line -> new Challenge(line.id(), line.status(), line.step(),
                     line.attempts(), line.budgets(), line.explanation())).toList(),
-                sp.modifiers(), sp.history().stream().map(line -> new History(line.timestamp(), line.direction(),
+                sp.modifiers().stream().map(line -> new ModifierPreview(line.kind(), line.id(),
+                    line.fields().stream().map(field -> new ModifierField(field.label(), field.value(),
+                        field.registry(), field.selector())).toList())).toList(),
+                sp.history().stream().map(line -> new History(line.timestamp(), line.direction(),
                     line.committed(), line.explanation())).toList()));
         }
     }

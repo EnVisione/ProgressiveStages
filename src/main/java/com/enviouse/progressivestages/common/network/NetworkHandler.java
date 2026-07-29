@@ -35,7 +35,7 @@ public class NetworkHandler {
 
     @SubscribeEvent
     public static void registerPayloads(final RegisterPayloadHandlersEvent event) {
-        final PayloadRegistrar registrar = event.registrar("1");
+        final PayloadRegistrar registrar = event.registrar("2");
 
         // Stage sync packet (full snapshot)
         registrar.playToClient(
@@ -375,53 +375,128 @@ public class NetworkHandler {
                 session.explanation())).toList();
     }
 
-    private static List<String> modifierLines(ServerPlayer player, StageId stage) {
+    private static List<ModifierPreviewLine> modifierLines(ServerPlayer player, StageId stage) {
         var compiled = com.enviouse.progressivestages.server.loader.StageFileLoader.getInstance()
             .getCompiledSnapshot().stages().get(stage);
         if (compiled == null) return List.of();
-        List<String> output = new ArrayList<>();
-        compiled.progression().modifiers().stream().map(modifier -> modifier.id() + ". "
-            + modifier.items().stream().map(item -> item.raw()).toList() + ". " + modifier.contexts()
-            + ". Priority " + modifier.priority()).forEach(output::add);
-        compiled.progression().dropModifiers().stream().map(modifier -> "Block drop modifier. "
-            + modifier.id() + ". Blocks " + modifier.blocks().stream().map(item -> item.raw()).toList()
-            + ". Drops " + modifier.drops().stream().map(item -> item.raw()).toList()
-            + ". Tools " + modifier.tools().stream().map(item -> item.raw()).toList()
-            + ". Enchantment " + (modifier.requiredEnchantment() == null ? "any" : modifier.requiredEnchantment())
-            + ". Minimum level " + modifier.minimumEnchantmentLevel() + ". Add " + modifier.add()
-            + ". Multiply " + modifier.multiply() + ". Priority " + modifier.priority()
-            + ". Exclusive " + modifier.exclusive() + ".").forEach(output::add);
+        List<ModifierPreviewLine> output = new ArrayList<>();
+        for (var modifier : compiled.progression().modifiers()) {
+            List<ModifierFieldLine> fields = new ArrayList<>();
+            modifier.items().forEach(item ->
+                fields.add(new ModifierFieldLine("Items", "", "item", item.raw())));
+            if (!modifier.contexts().isEmpty()) {
+                fields.add(new ModifierFieldLine("Used while",
+                    modifier.contexts().stream()
+                        .map(context -> titleItemPath(context.name().toLowerCase(java.util.Locale.ROOT)))
+                        .sorted()
+                        .collect(java.util.stream.Collectors.joining(", ")), "", ""));
+            }
+            modifier.attributes().forEach(change -> fields.add(new ModifierFieldLine(
+                titleResource(change.attribute()),
+                signedNumber(change.amount()) + " " + titleItemPath(
+                    change.operation().name().toLowerCase(java.util.Locale.ROOT)), "", "")));
+            modifier.effects().forEach(change -> fields.add(new ModifierFieldLine(
+                "Effect", titleResource(change.effect()) + " " + (change.amplifier() + 1), "", "")));
+            modifier.transforms().forEach(transform -> fields.add(new ModifierFieldLine(
+                titleResource(transform.type()), transformSummary(transform.add(), transform.multiply()), "", "")));
+            fields.add(new ModifierFieldLine("Stacking",
+                titleItemPath(modifier.aggregation().name().toLowerCase(java.util.Locale.ROOT))
+                    + (modifier.cap() > 1 ? ", up to " + modifier.cap() : ""), "", ""));
+            fields.add(new ModifierFieldLine("Priority", Integer.toString(modifier.priority()), "", ""));
+            output.add(new ModifierPreviewLine("equipment_bonus", modifier.id(), List.copyOf(fields)));
+        }
+        for (var modifier : compiled.progression().dropModifiers()) {
+            List<ModifierFieldLine> fields = new ArrayList<>();
+            modifier.blocks().forEach(item ->
+                fields.add(new ModifierFieldLine("Blocks", "", "block", item.raw())));
+            modifier.drops().forEach(item ->
+                fields.add(new ModifierFieldLine("Drops", "", "item", item.raw())));
+            modifier.tools().forEach(item ->
+                fields.add(new ModifierFieldLine("Tools", "", "item", item.raw())));
+            if (modifier.requiredEnchantment() != null) {
+                String enchantment = titleResource(modifier.requiredEnchantment());
+                if (modifier.minimumEnchantmentLevel() > 1) {
+                    enchantment += " " + modifier.minimumEnchantmentLevel() + " or higher";
+                }
+                fields.add(new ModifierFieldLine("Requires", enchantment, "", ""));
+            }
+            fields.add(new ModifierFieldLine("Drop amount",
+                transformSummary(modifier.add(), modifier.multiply()), "", ""));
+            if (modifier.minimum() > 0) {
+                fields.add(new ModifierFieldLine("Minimum", Integer.toString(modifier.minimum()), "", ""));
+            }
+            if (modifier.maximum() < Integer.MAX_VALUE) {
+                fields.add(new ModifierFieldLine("Maximum", Integer.toString(modifier.maximum()), "", ""));
+            }
+            fields.add(new ModifierFieldLine("Priority", Integer.toString(modifier.priority()), "", ""));
+            if (modifier.exclusive()) {
+                fields.add(new ModifierFieldLine("Stacking", "Replaces lower priority bonuses", "", ""));
+            }
+            output.add(new ModifierPreviewLine("block_drop_bonus", modifier.id(), List.copyOf(fields)));
+        }
         var held = player.getMainHandItem();
         if (held.isEmpty()) return List.copyOf(output);
         ResourceLocation item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem());
         if (LockRegistry.getInstance().getRequiredStages(held.getItem()).contains(stage)
                 && !StageManager.getInstance().hasStage(player, stage)) {
-            output.add("Equipment preview. " + item + " is locked until this stage is owned.");
+            output.add(new ModifierPreviewLine("equipment_locked", item, List.of(
+                new ModifierFieldLine("Item", "", "item", item.toString()),
+                new ModifierFieldLine("Status", "Unlocks with this stage", "", ""))));
         }
         Set<ResourceLocation> modifierIds = compiled.progression().modifiers().stream()
             .map(com.enviouse.progressivestages.common.rehaul.modifier.CompiledModifier::id).collect(java.util.stream.Collectors.toSet());
         com.enviouse.progressivestages.server.enforcement.ContextualModifierApplier.preview(player).stream()
             .filter(value -> modifierIds.contains(value.sourceRule())).forEach(value -> {
-                output.add("Equipment preview. " + item + ". Active modifier " + value.sourceRule()
-                    + ". Multiplier " + value.multiplier() + ". Priority " + value.priority() + ".");
-                value.attributes().forEach(change -> output.add("Attribute " + change.attribute() + ". Amount "
-                    + change.amount() + ". Operation " + change.operation().name().toLowerCase(java.util.Locale.ROOT) + "."));
-                value.transforms().forEach(transform -> output.add("Transform " + transform.type() + ". Add "
-                    + transform.add() + ". Multiply " + transform.multiply() + "."));
+                List<ModifierFieldLine> fields = new ArrayList<>();
+                fields.add(new ModifierFieldLine("Item", "", "item", item.toString()));
+                if (value.multiplier() > 1) {
+                    fields.add(new ModifierFieldLine("Stacks", Integer.toString(value.multiplier()), "", ""));
+                }
+                value.attributes().forEach(change -> fields.add(new ModifierFieldLine(
+                    titleResource(change.attribute()),
+                    signedNumber(change.amount()) + " " + titleItemPath(
+                        change.operation().name().toLowerCase(java.util.Locale.ROOT)), "", "")));
+                value.transforms().forEach(transform -> fields.add(new ModifierFieldLine(
+                    titleResource(transform.type()), transformSummary(transform.add(), transform.multiply()), "", "")));
+                fields.add(new ModifierFieldLine("Priority", Integer.toString(value.priority()), "", ""));
+                output.add(new ModifierPreviewLine("equipment_active", value.sourceRule(), List.copyOf(fields)));
             });
         Set<ResourceLocation> profileIds = compiled.progression().profiles().stream()
             .map(com.enviouse.progressivestages.common.rehaul.profile.AffinityProfile::id).collect(java.util.stream.Collectors.toSet());
         var affinity = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().affinity(player,
             com.enviouse.progressivestages.server.enforcement.ContextualModifierApplier.target(held)).orElse(null);
         if (affinity != null && profileIds.contains(affinity.profile())) {
-            output.add("Affinity preview. " + item + ". Profile " + affinity.profile() + ". Level "
-                + affinity.level() + ". Effect " + affinity.effect().name().toLowerCase(java.util.Locale.ROOT)
-                + ". Priority " + affinity.priority() + ".");
-            affinity.transforms().forEach(transform -> output.add("Affinity transform " + transform.type()
-                + ". Add " + transform.add() + ". Multiply " + transform.multiply() + "."));
+            List<ModifierFieldLine> fields = new ArrayList<>();
+            fields.add(new ModifierFieldLine("Item", "", "item", item.toString()));
+            fields.add(new ModifierFieldLine("Level", titleItemPath(affinity.level()), "", ""));
+            fields.add(new ModifierFieldLine("Effect",
+                titleItemPath(affinity.effect().name().toLowerCase(java.util.Locale.ROOT)), "", ""));
+            affinity.transforms().forEach(transform -> fields.add(new ModifierFieldLine(
+                titleResource(transform.type()), transformSummary(transform.add(), transform.multiply()), "", "")));
+            fields.add(new ModifierFieldLine("Priority", Integer.toString(affinity.priority()), "", ""));
+            output.add(new ModifierPreviewLine("affinity", affinity.profile(), List.copyOf(fields)));
         }
-        if (output.isEmpty()) output.add("Equipment preview. " + item + " behaves normally for this stage.");
         return List.copyOf(output);
+    }
+
+    private static String titleResource(ResourceLocation id) {
+        return id == null ? "" : titleItemPath(id.getPath().substring(id.getPath().lastIndexOf('/') + 1));
+    }
+
+    private static String signedNumber(double value) {
+        return (value > 0 ? "+" : "") + formatNumber(value);
+    }
+
+    private static String transformSummary(double add, double multiply) {
+        List<String> parts = new ArrayList<>();
+        if (add != 0D) parts.add(signedNumber(add));
+        if (multiply != 1D) parts.add("×" + formatNumber(multiply));
+        return parts.isEmpty() ? "No change" : String.join(", ", parts);
+    }
+
+    private static String formatNumber(double value) {
+        if (value == Math.rint(value)) return Long.toString((long) value);
+        return java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
     }
 
     private static List<HistoryLine> historyLines(ServerPlayer player, StageId stage) {
@@ -1415,6 +1490,27 @@ public class NetworkHandler {
             HistoryLine::new);
     }
 
+    public record ModifierFieldLine(String label, String value, String registry, String selector) {
+        public static final StreamCodec<FriendlyByteBuf, ModifierFieldLine> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8, ModifierFieldLine::label,
+            ByteBufCodecs.STRING_UTF8, ModifierFieldLine::value,
+            ByteBufCodecs.STRING_UTF8, ModifierFieldLine::registry,
+            ByteBufCodecs.STRING_UTF8, ModifierFieldLine::selector,
+            ModifierFieldLine::new);
+    }
+
+    public record ModifierPreviewLine(String kind, ResourceLocation id, List<ModifierFieldLine> fields) {
+        public ModifierPreviewLine {
+            fields = List.copyOf(fields);
+        }
+
+        public static final StreamCodec<FriendlyByteBuf, ModifierPreviewLine> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8, ModifierPreviewLine::kind,
+            ResourceLocation.STREAM_CODEC, ModifierPreviewLine::id,
+            ModifierFieldLine.STREAM_CODEC.apply(ByteBufCodecs.list()), ModifierPreviewLine::fields,
+            ModifierPreviewLine::new);
+    }
+
     /**
      * Per-stage GUI data: trigger-rule progress, a preview of the items this stage unlocks
      * (a capped sample for icon rendering + the true total count), and purchase info.
@@ -1422,7 +1518,7 @@ public class NetworkHandler {
     public record StageProgress(ResourceLocation stageId, List<RuleLine> rules,
                                 List<ResourceLocation> unlockSample, int unlockTotal, CostInfo cost,
                                 List<WhyLine> why, List<ChallengeLine> challenges,
-                                List<String> modifiers, List<HistoryLine> history) {
+                                List<ModifierPreviewLine> modifiers, List<HistoryLine> history) {
         public static final StreamCodec<FriendlyByteBuf, StageProgress> STREAM_CODEC = new StreamCodec<>() {
             @Override public StageProgress decode(FriendlyByteBuf buffer) {
                 return new StageProgress(ResourceLocation.STREAM_CODEC.decode(buffer),
@@ -1431,7 +1527,7 @@ public class NetworkHandler {
                     buffer.readVarInt(), CostInfo.STREAM_CODEC.decode(buffer),
                     WhyLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
                     ChallengeLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
-                    ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).decode(buffer),
+                    ModifierPreviewLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
                     HistoryLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer));
             }
             @Override public void encode(FriendlyByteBuf buffer, StageProgress value) {
@@ -1441,7 +1537,7 @@ public class NetworkHandler {
                 buffer.writeVarInt(value.unlockTotal()); CostInfo.STREAM_CODEC.encode(buffer, value.cost());
                 WhyLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.why());
                 ChallengeLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.challenges());
-                ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()).encode(buffer, value.modifiers());
+                ModifierPreviewLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.modifiers());
                 HistoryLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.history());
             }
         };

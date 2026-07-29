@@ -56,6 +56,27 @@ class StageTreeScreenRenderOrderTest {
         assertTrue(source.contains("zoom = camera.zoom()"));
     }
 
+    @Test
+    void inspectorUsesStructuredReadableModifierCards() throws IOException {
+        String source = Files.readString(SCREEN);
+
+        assertTrue(source.contains("renderModifierPreview(g, modifier"));
+        assertTrue(source.contains("humanizeIdentifier(slotGroup)"));
+        assertTrue(source.contains("selectorIconCache.computeIfAbsent"));
+        assertTrue(source.contains("BuiltInRegistries.BLOCK.getTag"));
+        assertTrue(source.contains("BuiltInRegistries.ITEM.getTag"));
+        assertFalse(source.contains("for (String modifier : data.modifiers())"));
+    }
+
+    @Test
+    void progressionWindowUsesTheCompactAdvancementFrame() throws IOException {
+        String source = Files.readString(SCREEN);
+
+        assertTrue(source.contains("Math.min(width - 24, 460)"));
+        assertTrue(source.contains("Math.min(height - 38, 250)"));
+        assertTrue(source.contains("Math.min(x + width, lineX + 42)"));
+    }
+
     private static int occurrences(String value, String target) {
         int count = 0;
         for (int index = value.indexOf(target); index >= 0; index = value.indexOf(target, index + target.length())) {
