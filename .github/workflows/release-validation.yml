@@ -13,12 +13,6 @@ permissions:
 
 jobs:
   validate:
-    uses: EnVisione/.github/.github/workflows/release-validation.yml@main
+    uses: EnVisione/.github/.github/workflows/release-validation.yml@a955c949ac1e02c4311c683548f0ebd58ade9db5
     with:
-      java-version: "21"
-      gradle-enabled: true
-      gradle-tasks: "clean build"
-      artifact-glob: "build/libs/*.jar"
-      sbom-path: "build/libs"
-      environment: "production"
-      attest: true
+      shared-ref: "a955c949ac1e02c4311c683548f0ebd58ade9db5"

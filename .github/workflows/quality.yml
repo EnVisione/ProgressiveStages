@@ -9,21 +9,35 @@ on:
     - cron: "17 4 * * 1"
   workflow_dispatch:
 
-permissions:
-  actions: read
-  contents: write
-  security-events: write
-
 jobs:
-  quality:
-    uses: EnVisione/.github/.github/workflows/quality.yml@main
+  pull-request:
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: EnVisione/.github/.github/workflows/quality.yml@a955c949ac1e02c4311c683548f0ebd58ade9db5
     with:
-      java-version: "21"
+      shared-ref: "a955c949ac1e02c4311c683548f0ebd58ade9db5"
       gradle-enabled: true
-      gradle-tasks: "check build"
-      gametest-tasks: ""
-      node-enabled: false
-      node-version: "22"
-      codeql-languages: '["java-kotlin","javascript-typescript"]'
+      node-enabled: true
+      node-working-directory: "editor-ui"
       native-security: true
+      codeql-languages: '["java-kotlin","javascript-typescript"]'
+      enforce-docs-layout: false
+
+  trusted:
+    if: ${{ github.event_name != 'pull_request' }}
+    permissions:
+      actions: read
+      contents: write
+      security-events: write
+    uses: EnVisione/.github/.github/workflows/quality.yml@a955c949ac1e02c4311c683548f0ebd58ade9db5
+    with:
+      shared-ref: "a955c949ac1e02c4311c683548f0ebd58ade9db5"
+      gradle-enabled: true
+      node-enabled: true
+      node-working-directory: "editor-ui"
+      native-security: true
+      codeql-languages: '["java-kotlin","javascript-typescript"]'
       enforce-docs-layout: false
