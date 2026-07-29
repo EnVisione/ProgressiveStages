@@ -1,0 +1,24 @@
+name: release validation
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  validate:
+    uses: EnVisione/.github/.github/workflows/release-validation.yml@main
+    with:
+      java-version: "21"
+      gradle-enabled: true
+      gradle-tasks: "clean build"
+      artifact-glob: "build/libs/*.jar"
+      sbom-path: "build/libs"
+      environment: "production"
+      attest: true
