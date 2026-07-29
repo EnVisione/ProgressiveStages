@@ -459,7 +459,13 @@ Deliverables:
 - Preserve current config migration, merged triggers, UI, commands, KubeJS, and integrations.
 - Repair correctness, lifecycle, validation, dedicated client, and build issues found by audit.
 - Expand unit tests around dependency modes, parsing contracts, and bulk API behavior.
+- Expose enchantment level caps and selection weights in the localhost easy builder with
+  registry-backed selection, existing-value editing, duplicate and range validation, deterministic
+  TOML round trips, and verification of the embedded production bundle.
 - Complete the real client and dedicated server release matrix.
+
+The enchantment easy builder deliverable is implemented and verified on
+`envy/enchantment-selection`. It remains in review until the branch is merged.
 
 Exit gate: the current 3.0 feature set has a clean build and no known release blocking defect.
 
@@ -587,12 +593,14 @@ Every phase runs:
 
 ## Immediate next work
 
-1. Complete manual in-world UI, two-client multiplayer, and optional mod Phase A matrix testing.
-2. Build the registry and schema kernel without changing existing stage semantics.
-3. Adapt the current trigger condition types into registry entries.
-4. Introduce fully immutable compiled snapshots and atomic registry replacement.
-5. Introduce the transaction result model and move one mutation path at a time.
-6. Use the FTB Quests bridge as the first external capability integration test.
+1. Merge the verified localhost easy builder controls for enchantment level caps and selection
+   weights.
+2. Complete manual in-world UI, two-client multiplayer, and optional mod Phase A matrix testing.
+3. Build the registry and schema kernel without changing existing stage semantics.
+4. Adapt the current trigger condition types into registry entries.
+5. Introduce fully immutable compiled snapshots and atomic registry replacement.
+6. Introduce the transaction result model and move one mutation path at a time.
+7. Use the FTB Quests bridge as the first external capability integration test.
 
 The architectural constraint for every new implementation is simple. If a pack author or another
 mod could reasonably need a different behavior, core exposes a registered provider or configured

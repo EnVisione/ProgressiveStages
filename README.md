@@ -56,6 +56,12 @@ schema 4 showcase now demonstrates the editor and class tree directly.
 - **Simpler stage editor.** The editor uses a restrained dark gray and gold layout centered on
   stages, the easy builder, player layout, TOML source, validation, and review. Advanced tools
   remain available without crowding the primary workflow.
+- **Visual enchantment generation controls.** The Rules tab now loads and edits
+  `[enchants].max_levels` and `[enchants].selection_weights` without requiring TOML. Search the
+  connected server's enchantment registry, choose an exact enchantment, then set a maximum level,
+  a roll weight, or both. The form explains the difference between preventing new rolls and
+  removing retained enchantments, validates duplicates and numeric ranges, and preserves unrelated
+  rule sections.
 - **Optional inventory button.** Set `client.show_inventory_button = false` to remove the
   progression map button from the survival inventory without disabling commands or the optional
   keybind.

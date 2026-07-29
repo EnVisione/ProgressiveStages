@@ -146,7 +146,7 @@ input::placeholder, textarea::placeholder { color: #646974; }
 .rule-primer strong, .explanation-card strong { display: block; color: #ead39f; }
 .rule-primer p, .explanation-card p { margin: 3px 0 0; font-size: 11px; }
 .rule-list-new, .progression-list-new, .configured-list { display: grid; gap: 8px; }
-.rule-card-new, .progression-card-new, .configured-list article { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #121419; }
+.rule-card-new, .enchantment-setting-card, .progression-card-new, .configured-list article { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #121419; }
 .rule-card-icon, .direction-icon { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #3b3f48; border-radius: 9px; color: var(--gold); background: #202329; }
 .direction-icon.grants { color: var(--green); }
 .direction-icon.revokes { color: var(--red); }
@@ -158,6 +158,14 @@ input::placeholder, textarea::placeholder { color: #646974; }
 .rule-card-actions > button:not(.button) { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: #1c1f25; }
 .rule-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 12px; border: 1px solid #403724; border-radius: 10px; background: #1c1914; color: var(--muted); }
 .rule-sentence strong { color: #efd79f; }
+.enchantment-behavior-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.enchantment-behavior-preview > div { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #111318; }
+.enchantment-behavior-preview span, .enchantment-behavior-preview strong { display: block; }
+.enchantment-behavior-preview span { margin-bottom: 4px; color: var(--faint); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.enchantment-behavior-preview strong { color: #efd79f; font-size: 12px; }
+.form-errors { padding: 11px 13px; border: 1px solid rgba(240,111,111,.45); border-radius: 9px; color: #ffd9d9; background: rgba(240,111,111,.09); }
+.form-errors strong { display: block; margin-bottom: 5px; }
+.form-errors ul { margin: 0; padding-left: 18px; color: #ffaaaa; font-size: 11px; line-height: 1.55; }
 .acquisition-options { display: grid; gap: 8px; margin-bottom: 14px; }
 .acquisition-options > button, .acquisition-options > div { display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 11px; width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: #121419; color: var(--text); text-align: left; }
 .acquisition-options > button.configured { border-color: rgba(86,207,141,.3); }

@@ -1,5 +1,6 @@
 import { CATEGORIES } from "../data";
 import type { ProgressionModel, RuleModel, StagePackage } from "../types";
+import { enchantmentGenerationRules } from "./enchantments";
 import {
   booleanValue,
   extractArrayBlocks,
@@ -68,7 +69,8 @@ function stageSummary(files: Record<string, string>, key: string, stagePath: str
     category: stringValue(readTomlValue(stageText, "stage.category")) || "Uncategorized",
     color: stringValue(readTomlValue(stageText, "stage.color")) || "#d9a83e",
     hidden: booleanValue(readTomlValue(stageText, "stage.hidden")),
-    ruleCount: ruleModels(files[rulesPath] || "").length,
+    ruleCount: ruleModels(files[rulesPath] || "").length
+      + enchantmentGenerationRules(files[rulesPath] || "").length,
     grantCount: progression.filter(entry => entry.kind === "grants").length,
     revokeCount: progression.filter(entry => entry.kind === "revokes").length,
     dependencies,

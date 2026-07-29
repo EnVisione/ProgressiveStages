@@ -415,7 +415,24 @@ To create a stage without knowing TOML:
    activation condition. Structure choices include entering, leaving, being inside, and remaining
    inside for a required number of seconds. The help text beside the condition explains whether a
    target and amount are required.
-9. Open Progression. Use **How players obtain this stage** to add grants. Use **How players lose this stage** to add
+9. In the Rules tab, use **Enchantment generation** when a stage should change enchanting table or
+   player aware loot rolls. Click **Add enchantment**, then search the connected server's
+   enchantment registry or enter one exact identifier such as `minecraft:mending`. Set
+   **Maximum level**, **Selection weight**, or both:
+   - A positive maximum level caps newly generated enchantments and reduces retained copies above
+     that level while the stage is missing.
+   - Maximum level `0` prevents new rolls and removes retained copies.
+   - A positive selection weight changes the enchantment's relative chance without changing copies
+     already owned.
+   - Selection weight `0` prevents new rolls without stripping existing copies.
+   - An empty field keeps that half of the enchantment's normal behavior.
+
+   The builder loads existing `max_levels` and `selection_weights` entries into one card per
+   enchantment. Edit or remove those cards directly. Exact identifier validation, duplicate
+   detection, nonnegative maximum levels, and the documented selection weight range of `0..1024`
+   are checked before the draft is saved. The resulting values remain ordinary `[enchants]` fields
+   in `rules.toml`, and unrelated rules or extension sections are preserved.
+10. Open Progression. Use **How players obtain this stage** to add grants. Use **How players lose this stage** to add
    revokes. Both sections use the same trigger library and ask for the amount, repeat policy, player,
    team, or server scope, priority, and cooldown. `Player dies` means the stage owner dies.
    `Another player dies` means any other online player dies, even when the stage owner is not the
@@ -425,7 +442,7 @@ To create a stage without knowing TOML:
    Choose **Set up purchase**, search the live item registry, click payment items, and set each
    amount plus optional XP, cooldown, refund, and trigger bypass. Use reward cards for items,
    effects, commands, teleportation, and XP granted after ownership changes.
-10. Open Rewards. Configure items, effects, commands, teleportation, and experience
+11. Open Rewards. Configure items, effects, commands, teleportation, and experience
     granted after ownership changes. Choose ability restrictions for jump, sprint, swim, climb,
     elytra, or abilities registered by an extension. Add a stage attribute or an item modifier that
     depends on item context, owned stages, missing stages, a condition, aggregation, stack limit,
@@ -434,11 +451,11 @@ To create a stage without knowing TOML:
     minimum, maximum, priority, and exclusive stacking. This
     creates `[[drop_modifiers]]`; the generated Diamond Engineer demonstrates a purchase for 32
     diamonds plus a Fortune only double diamond rule.
-11. Open Advanced for guided challenge, variable, formula, lifecycle state, affinity profile, and
+12. Open Advanced for guided challenge, variable, formula, lifecycle state, affinity profile, and
     reusable template builders. A challenge can define start, success, and end conditions, retries,
     timeout, hit limit, measured budget, ordered step, and detailed HUD presentation. Registered
     Java and KubeJS data remains available through Extensions and the exact source tab.
-12. Open `Player UI`, filter by category, search, zoom, fit the complete graph, or drag nodes to
+13. Open `Player UI`, filter by category, search, zoom, fit the complete graph, or drag nodes to
     save their in game coordinates. Drag empty graph space to pan. Scroll to zoom around the mouse
     pointer. Curved connectors follow at every zoom.
     Click `Connect stages` to edit progression directly on the graph. Select the prerequisite stage
@@ -453,7 +470,7 @@ To create a stage without knowing TOML:
     complete layout with fewer crossing lines. `Use automatic layout` removes every manual position. The
     Stage details card also has `Edit player UI position` for exact X and Y values or a one stage
     reset. The browser scales cards for editing but stores the compact coordinates Minecraft uses.
-13. Click `Apply changes`. This action validates every stage before it opens the review. Inspect
+14. Click `Apply changes`. This action validates every stage before it opens the review. Inspect
     every file in the diff, then confirm.
     After the server validates, writes, reloads, and synchronizes the result, every online operator
     receives the complete file change list in Minecraft chat. Added files appear in green. Modified

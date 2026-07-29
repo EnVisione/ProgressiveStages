@@ -1,11 +1,20 @@
 import { useMemo, useState } from "react";
 import { ACTION_LABELS, CATEGORIES, CONDITIONS, EFFECTS } from "../../data";
 import { InlineCatalogSearch } from "../../components/CatalogPicker";
-import { Badge, Button, EmptyState, Field, Section, Toggle } from "../../components/ui";
+import { Badge, Button, EmptyState, Field, Section } from "../../components/ui";
 import { Icon } from "../../components/Icon";
+import {
+  enchantmentGenerationRules,
+  MAX_ENCHANTMENT_LEVEL,
+  MAX_ENCHANTMENT_SELECTION_WEIGHT,
+  normalizeEnchantmentId,
+  validateEnchantmentGenerationRule,
+  writeEnchantmentGenerationRules
+} from "../../lib/enchantments";
 import { ruleModels, selectorMode, title } from "../../lib/model";
 import { appendTomlBlock, conditionToml, encodeToml, parseSimpleArray, readTomlValue, upsertToml } from "../../lib/toml";
 import { useEditor } from "../../store/EditorContext";
+import type { EnchantmentGenerationRule } from "../../lib/enchantments";
 import type { RuleModel, StagePackage } from "../../types";
 
 interface RuleDraft {
@@ -195,11 +204,87 @@ function RuleCard({ stage, rule, index, total, onEdit, onDelete, onMove }:
   </article>;
 }
 
+function EnchantmentGenerationForm({ stage, rule, rules }:
+  { stage: StagePackage; rule?: EnchantmentGenerationRule; rules: EnchantmentGenerationRule[] }) {
+  const { boot, mutateFile, closeDialog } = useEditor();
+  const [enchantment, setEnchantment] = useState(rule?.enchantment || "");
+  const [maxLevel, setMaxLevel] = useState(rule?.maxLevel === null || rule?.maxLevel === undefined
+    ? "" : String(rule.maxLevel));
+  const [selectionWeight, setSelectionWeight] = useState(
+    rule?.selectionWeight === null || rule?.selectionWeight === undefined ? "" : String(rule.selectionWeight));
+  const [errors, setErrors] = useState<string[]>([]);
+  const candidate = (): EnchantmentGenerationRule => ({
+    enchantment: normalizeEnchantmentId(enchantment),
+    maxLevel: maxLevel.trim() === "" ? null : Number(maxLevel),
+    selectionWeight: selectionWeight.trim() === "" ? null : Number(selectionWeight)
+  });
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const nextRule = candidate();
+    const validation = validateEnchantmentGenerationRule(nextRule, rules, rule?.enchantment);
+    if (validation.length) {
+      setErrors(validation);
+      return;
+    }
+    const next = [...rules];
+    if (rule) {
+      const index = next.findIndex(entry => entry.enchantment === rule.enchantment);
+      if (index >= 0) next[index] = nextRule;
+      else next.push(nextRule);
+    } else next.push(nextRule);
+    const content = boot?.draft.files[stage.rulesPath] || "";
+    await mutateFile(stage.rulesPath, writeEnchantmentGenerationRules(content, next),
+      "Enchantment generation settings saved");
+    closeDialog();
+  };
+  return <form className="dialog-form" onSubmit={save}>
+    <div className="explanation-card"><Icon name="spark" size={22}/><div><strong>Control enchantments before the game rolls them.</strong><p>Maximum level affects new rolls and enchantments players already hold. Selection weight changes new enchanting table and player aware loot rolls only.</p></div></div>
+    {errors.length ? <div className="form-errors" role="alert"><strong>Fix these fields before saving.</strong><ul>{errors.map(error => <li key={error}>{error}</li>)}</ul></div> : null}
+    <section className="dialog-section"><header><span className="step-number">1</span><div><h3>Choose one enchantment</h3><p>Generation controls use exact enchantment identifiers so the result is predictable.</p></div></header><div className="form-grid">
+      <Field label="Exact enchantment" help="Choose from the running server registry or enter namespace:id." wide><input value={enchantment} onChange={event => setEnchantment(event.target.value)} placeholder="minecraft:mending" autoFocus required/></Field>
+      <div className="field-wide"><InlineCatalogSearch catalogId="enchantments" mode="id" onPick={value => setEnchantment(normalizeEnchantmentId(value))}/></div>
+    </div></section>
+    <section className="dialog-section"><header><span className="step-number">2</span><div><h3>Choose what changes until this stage is owned</h3><p>Leave either field empty when that part should keep its normal behavior.</p></div></header><div className="form-grid">
+      <Field label="Maximum level" help="Zero prevents new rolls and removes existing copies. A positive value caps generated and retained levels."><input type="number" min={0} max={MAX_ENCHANTMENT_LEVEL} step={1} value={maxLevel} onChange={event => setMaxLevel(event.target.value)} placeholder="Normal maximum"/></Field>
+      <Field label="Selection weight" help="Zero prevents new rolls without stripping existing copies. Larger values make this enchantment more likely."><input type="number" min={0} max={MAX_ENCHANTMENT_SELECTION_WEIGHT} step={1} value={selectionWeight} onChange={event => setSelectionWeight(event.target.value)} placeholder="Normal weight"/></Field>
+    </div></section>
+    <div className="enchantment-behavior-preview">
+      <div><span>Existing enchantments</span><strong>{maxLevel === "" ? "Keep normal levels" : Number(maxLevel) === 0 ? "Remove this enchantment" : `Cap at level ${maxLevel}`}</strong></div>
+      <div><span>New rolls</span><strong>{selectionWeight === "" ? "Use normal weight" : Number(selectionWeight) === 0 ? "Do not roll" : `Use weight ${selectionWeight}`}</strong></div>
+    </div>
+    <footer className="dialog-actions"><Button type="button" tone="quiet" onClick={closeDialog}>Cancel</Button><Button type="submit" tone="primary">{rule ? "Save changes" : "Add enchantment control"}</Button></footer>
+  </form>;
+}
+
+function EnchantmentGenerationCard({ rule, onEdit, onDelete }:
+  { rule: EnchantmentGenerationRule; onEdit: () => void; onDelete: () => void }) {
+  return <article className="enchantment-setting-card">
+    <div className="rule-card-icon"><Icon name="spark" size={19}/></div>
+    <div className="rule-card-main">
+      <div className="rule-card-title"><strong>{title(rule.enchantment.split(":").pop() || rule.enchantment)}</strong>
+        {rule.maxLevel !== null ? <Badge tone="gold">Maximum level {rule.maxLevel}</Badge> : null}
+        {rule.selectionWeight !== null ? <Badge tone={rule.selectionWeight === 0 ? "warning" : "neutral"}>Roll weight {rule.selectionWeight}</Badge> : null}
+      </div>
+      <code>{rule.enchantment}</code>
+      <p>{rule.maxLevel === 0 ? "Existing copies are removed. " : rule.maxLevel !== null ? `Levels above ${rule.maxLevel} are reduced. ` : ""}
+        {rule.selectionWeight === 0 ? "New table and player aware loot rolls are disabled." : rule.selectionWeight !== null ? "New rolls use the configured relative weight." : "New rolls keep their normal weight."}</p>
+    </div>
+    <div className="rule-card-actions"><Button tone="quiet" onClick={onEdit}>Edit</Button><Button tone="danger" onClick={onDelete}>Remove</Button></div>
+  </article>;
+}
+
 export function RulesPanel({ stage }: { stage: StagePackage }) {
   const { boot, mutateFile, openDialog, closeDialog, runDraftAction } = useEditor();
   const content = boot?.draft.files[stage.rulesPath] || "";
   const rules = useMemo(() => ruleModels(content), [content]);
+  const enchantmentRules = useMemo(() => enchantmentGenerationRules(content), [content]);
   const openRule = (rule?: RuleModel) => openDialog({ title: rule ? "Edit rule" : "Create a rule", description: "Build one server decision in plain language.", content: <RuleForm stage={stage} rule={rule}/>, width: "wide" });
+  const openEnchantmentRule = (rule?: EnchantmentGenerationRule) => openDialog({
+    title: rule ? "Edit enchantment generation" : "Add enchantment generation",
+    description: "Limit levels or change how often one enchantment is rolled until this stage is owned.",
+    content: <EnchantmentGenerationForm stage={stage} rule={rule} rules={enchantmentRules}/>,
+    width: "standard"
+  });
   const remove = (rule: RuleModel) => openDialog({ title: "Remove rule", description: "This change remains undoable until it is applied.", content: <div className="confirmation"><p>Remove the rule for <code>{rule.selector}</code> from this stage.</p><footer className="dialog-actions"><Button tone="quiet" onClick={closeDialog}>Keep rule</Button><Button tone="danger" onClick={async () => {
     let updated = content;
     if (rule.table === "classic") updated = removeClassicRule(content, rule);
@@ -218,12 +303,28 @@ export function RulesPanel({ stage }: { stage: StagePackage }) {
     for (const value of values) updated = appendTomlBlock(updated, value);
     await mutateFile(stage.rulesPath, updated, "Rule order saved");
   };
+  const removeEnchantmentRule = (rule: EnchantmentGenerationRule) => openDialog({
+    title: "Remove enchantment generation",
+    description: "Normal generation behavior returns after this draft is applied.",
+    content: <div className="confirmation"><p>Remove the generation settings for <code>{rule.enchantment}</code>.</p><footer className="dialog-actions"><Button tone="quiet" onClick={closeDialog}>Keep settings</Button><Button tone="danger" onClick={async () => {
+      const next = enchantmentRules.filter(entry => entry.enchantment !== rule.enchantment);
+      await mutateFile(stage.rulesPath, writeEnchantmentGenerationRules(content, next),
+        "Enchantment generation settings removed");
+      closeDialog();
+    }}>Remove settings</Button></footer></div>,
+    width: "compact"
+  });
   const simulate = () => openDialog({ title: "Simulate a candidate decision", description: "Ask the server how the current draft resolves a category and target.", content: <SimulationForm run={runDraftAction}/>, width: "standard" });
   return <div className="stage-panel-stack">
     <Section title="Rules" description={`${rules.length} active decision${rules.length === 1 ? "" : "s"}. Highest priority wins when several rules match.`} action={<div className="section-actions"><Button onClick={simulate}>Simulate</Button><Button tone="primary" icon="plus" onClick={() => openRule()}>Add rule</Button></div>}>
       <div className="rule-primer"><Icon name="spark" size={22}/><div><strong>Rules combine target, action, result, activation, and priority.</strong><p>Use an exception with a higher priority to carve content out of a broad lock. Temporary rules participate only while their condition and lifetime are active.</p></div></div>
       {rules.length ? <div className="rule-list-new">{rules.map((rule, index) => <RuleCard key={`${rule.table}:${rule.tableIndex}:${rule.selector}`} stage={stage} rule={rule} index={index} total={rules.length} onEdit={() => openRule(rule)} onDelete={() => remove(rule)} onMove={direction => void move(rule, direction)}/>)}</div>
         : <EmptyState icon="rules" title="No rules currently active" description="Add a rule, choose a category, then select content from the running server registry." action={<Button tone="primary" icon="plus" onClick={() => openRule()}>Create the first rule</Button>}/>}
+    </Section>
+    <Section title="Enchantment generation" description={`${enchantmentRules.length} enchantment control${enchantmentRules.length === 1 ? "" : "s"}. These settings apply until the stage is owned.`} action={<Button tone="primary" icon="plus" onClick={() => openEnchantmentRule()}>Add enchantment</Button>}>
+      <div className="rule-primer"><Icon name="spark" size={22}/><div><strong>Shape enchanting table and player aware loot rolls before they happen.</strong><p>Use a maximum level to cap or remove retained enchantments. Use selection weight zero when only new rolls should stop.</p></div></div>
+      {enchantmentRules.length ? <div className="rule-list-new">{enchantmentRules.map(rule => <EnchantmentGenerationCard key={rule.enchantment} rule={rule} onEdit={() => openEnchantmentRule(rule)} onDelete={() => removeEnchantmentRule(rule)}/>)}</div>
+        : <EmptyState icon="spark" title="Normal enchantment generation" description="Add an exact enchantment to limit its level, change its roll weight, or prevent new rolls." action={<Button tone="primary" icon="plus" onClick={() => openEnchantmentRule()}>Add the first enchantment</Button>}/>}
     </Section>
   </div>;
 }
