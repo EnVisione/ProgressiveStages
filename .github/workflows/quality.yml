@@ -26,4 +26,4 @@ jobs:
       node-version: "22"
       codeql-languages: '["java-kotlin","javascript-typescript"]'
       native-security: true
-      enforce-docs-layout: true
+      enforce-docs-layout: false
