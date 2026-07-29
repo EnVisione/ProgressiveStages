@@ -1,0 +1,51 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "master"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  quality:
+    permissions:
+      actions: read
+      contents: read
+    uses: EnVisione/.github/.github/workflows/quality.yml@52eb01f2a9d378693156c88e03e41dcb9f5e25bb
+    with:
+      shared-ref: "52eb01f2a9d378693156c88e03e41dcb9f5e25bb"
+      gradle-enabled: true
+      node-enabled: true
+      node-working-directory: "editor-ui"
+      native-security: true
+      enforce-docs-layout: false
+
+  codeql:
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: EnVisione/.github/.github/workflows/codeql.yml@52eb01f2a9d378693156c88e03e41dcb9f5e25bb
+    with:
+      shared-ref: "52eb01f2a9d378693156c88e03e41dcb9f5e25bb"
+      languages: '["java-kotlin","javascript-typescript"]'
+      gradle-enabled: true
+
+  dependency-submission:
+    if: >-
+      ${{
+        github.actor != 'dependabot[bot]' &&
+        (
+          github.event_name == 'workflow_dispatch' ||
+          (
+            github.event_name == 'push' &&
+            github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+          )
+        )
+      }}
+    permissions:
+      contents: write
+    uses: EnVisione/.github/.github/workflows/dependency-submission.yml@52eb01f2a9d378693156c88e03e41dcb9f5e25bb
