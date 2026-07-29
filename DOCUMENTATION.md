@@ -3039,8 +3039,10 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
 - **Open it** with the **"Open Progression Tree"** keybind (category
   *ProgressiveStages* in Controls). It is **UNBOUND by default** — players
   assign a key in Options → Controls. You can also use `/stage`, `/stages`,
-  `/pstages`, `/stage gui`, or the lock button immediately to the right of the
-  recipe-book button in the survival inventory.
+  `/pstages`, `/stage gui`, or the progression map button immediately to the
+  right of the recipe-book button in the survival inventory. The button keeps
+  the vanilla widget surface and uses hand-built pixel art of a folded map with a cyan
+  route and stage markers instead of reusing the content-lock icon.
 
   To hide, move, or resize the inventory button, open
   `config/progressivestages/progressivestages.toml` and configure:
@@ -3093,8 +3095,8 @@ nodes.
 The category picker, Owned control, home control, inspector close control, and
 purchase control use vanilla button sprites and button click sounds. A short
 navigation hint and zoom readout fade after the screen opens or the camera
-changes. The inventory button keeps its configurable dimensions and receives a
-gold pixel rounded focus outline when hovered or keyboard focused.
+changes. The inventory button keeps its configurable dimensions, vanilla hover
+state, and centered icon scaling.
 
 **Author layout (`[display]`).** Omit coordinates for automatic dependency-DAG
 layout, or specify both `x` and `y` (pixels). `frame` is `task`, `goal`, or

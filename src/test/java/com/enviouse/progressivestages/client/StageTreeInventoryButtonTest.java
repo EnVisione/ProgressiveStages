@@ -2,10 +2,14 @@ package com.enviouse.progressivestages.client;
 
 import org.junit.jupiter.api.Test;
 
+import javax.imageio.ImageIO;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StageTreeInventoryButtonTest {
@@ -32,9 +36,8 @@ class StageTreeInventoryButtonTest {
         assertTrue(button.contains("(getWidth() - renderedIconSize) / 2"));
         assertTrue(button.contains("(getHeight() - renderedIconSize) / 2"));
         assertTrue(button.contains("ClientTriggerProgress.requestFromServer()"));
-        assertTrue(button.contains("textures/gui/lock_icon.png"));
-        assertTrue(button.contains("isHoveredOrFocused()"));
-        assertTrue(button.contains("renderPixelRoundedOutline"));
+        assertTrue(button.contains("textures/gui/stage_map_icon.png"));
+        assertFalse(button.contains("textures/gui/lock_icon.png"));
         assertTrue(config.contains("define(\"client.show_inventory_button\", true)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_x\", 126, -4096, 4096)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_y\", 61, -4096, 4096)"));
@@ -42,5 +45,12 @@ class StageTreeInventoryButtonTest {
         assertTrue(config.contains("defineInRange(\"client.inventory_button_height\", 18, 8, 256)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_icon_size\", 14, 4, 256)"));
         assertTrue(config.contains("isShowInventoryButton()"));
+
+        var icon = ImageIO.read(PROJECT.resolve(
+            "src/main/resources/assets/progressivestages/textures/gui/stage_map_icon.png").toFile());
+        assertNotNull(icon);
+        assertEquals(16, icon.getWidth());
+        assertEquals(16, icon.getHeight());
+        assertEquals(0, icon.getRGB(0, 0) >>> 24);
     }
 }
