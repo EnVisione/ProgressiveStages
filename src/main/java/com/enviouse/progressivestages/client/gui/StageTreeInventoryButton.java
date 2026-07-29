@@ -13,6 +13,10 @@ import net.minecraft.resources.ResourceLocation;
 
 public final class StageTreeInventoryButton extends Button {
 
+    private static final ResourceLocation BUTTON_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+        Constants.MOD_ID, "textures/gui/stage_map_button.png");
+    private static final ResourceLocation BUTTON_HIGHLIGHTED_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+        Constants.MOD_ID, "textures/gui/stage_map_button_highlighted.png");
     private static final ResourceLocation MAP_TEXTURE = ResourceLocation.fromNamespaceAndPath(
         Constants.MOD_ID, "textures/gui/stage_map_icon.png");
 
@@ -32,7 +36,11 @@ public final class StageTreeInventoryButton extends Button {
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         updatePosition();
-        super.renderWidget(graphics, mouseX, mouseY, partialTick);
+        ResourceLocation background = isHoveredOrFocused()
+            ? BUTTON_HIGHLIGHTED_TEXTURE
+            : BUTTON_TEXTURE;
+        graphics.blit(background, getX(), getY(), getWidth(), getHeight(),
+            0.0F, 0.0F, 20, 18, 20, 18);
         int renderedIconSize = Math.min(iconSize, Math.max(1, Math.min(getWidth() - 2, getHeight() - 2)));
         int iconX = getX() + (getWidth() - renderedIconSize) / 2;
         int iconY = getY() + (getHeight() - renderedIconSize) / 2;

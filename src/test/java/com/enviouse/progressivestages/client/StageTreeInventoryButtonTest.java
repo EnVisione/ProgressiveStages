@@ -36,8 +36,12 @@ class StageTreeInventoryButtonTest {
         assertTrue(button.contains("(getWidth() - renderedIconSize) / 2"));
         assertTrue(button.contains("(getHeight() - renderedIconSize) / 2"));
         assertTrue(button.contains("ClientTriggerProgress.requestFromServer()"));
+        assertTrue(button.contains("textures/gui/stage_map_button.png"));
+        assertTrue(button.contains("textures/gui/stage_map_button_highlighted.png"));
         assertTrue(button.contains("textures/gui/stage_map_icon.png"));
         assertFalse(button.contains("textures/gui/lock_icon.png"));
+        assertFalse(button.contains("super.renderWidget"));
+        assertTrue(button.contains("isHoveredOrFocused()"));
         assertTrue(config.contains("define(\"client.show_inventory_button\", true)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_x\", 126, -4096, 4096)"));
         assertTrue(config.contains("defineInRange(\"client.inventory_button_y\", 61, -4096, 4096)"));
@@ -46,11 +50,24 @@ class StageTreeInventoryButtonTest {
         assertTrue(config.contains("defineInRange(\"client.inventory_button_icon_size\", 14, 4, 256)"));
         assertTrue(config.contains("isShowInventoryButton()"));
 
-        var icon = ImageIO.read(PROJECT.resolve(
-            "src/main/resources/assets/progressivestages/textures/gui/stage_map_icon.png").toFile());
+        Path textures = PROJECT.resolve("src/main/resources/assets/progressivestages/textures/gui");
+        var normal = ImageIO.read(textures.resolve("stage_map_button.png").toFile());
+        var highlighted = ImageIO.read(textures.resolve("stage_map_button_highlighted.png").toFile());
+        var icon = ImageIO.read(textures.resolve("stage_map_icon.png").toFile());
+        assertNotNull(normal);
+        assertNotNull(highlighted);
         assertNotNull(icon);
+        assertEquals(20, normal.getWidth());
+        assertEquals(18, normal.getHeight());
+        assertEquals(20, highlighted.getWidth());
+        assertEquals(18, highlighted.getHeight());
         assertEquals(16, icon.getWidth());
         assertEquals(16, icon.getHeight());
+        assertEquals(0, normal.getRGB(0, 0) >>> 24);
+        assertEquals(0, highlighted.getRGB(0, 0) >>> 24);
         assertEquals(0, icon.getRGB(0, 0) >>> 24);
+        assertTrue(normal.getRGB(normal.getWidth() / 2, normal.getHeight() / 2) >>> 24 > 0);
+        assertTrue(highlighted.getRGB(highlighted.getWidth() / 2,
+            highlighted.getHeight() / 2) >>> 24 > 0);
     }
 }

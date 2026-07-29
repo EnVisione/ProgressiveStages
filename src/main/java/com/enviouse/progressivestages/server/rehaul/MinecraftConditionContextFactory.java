@@ -56,7 +56,8 @@ public final class MinecraftConditionContextFactory {
         values.putAll(runtime.metricValues(player.getUUID().toString()));
         values.putAll(runtime.sessionValues(player.getUUID().toString(), System.currentTimeMillis()));
         Set<String> structures = new LinkedHashSet<>();
-        for (var session : StructureSessionManager.getInstance().activeSessions(player)) {
+        var structureSnapshot = StructureSessionManager.getInstance().conditionSnapshot(player);
+        for (var session : structureSnapshot.sessions()) {
             structures.add(session.instance().structureId().toString());
             values.put("session." + session.sessionId(), true);
             values.put("structure_session." + session.instance().structureId(), 1);
@@ -64,7 +65,7 @@ public final class MinecraftConditionContextFactory {
         values.put("structures", structures);
         for (String structure : structures) values.put("structures." + structure, structures);
         long longestStructureTime = 0L;
-        for (var entry : StructureSessionManager.getInstance().activeStructureSeconds(player).entrySet()) {
+        for (var entry : structureSnapshot.activeStructureSeconds().entrySet()) {
             values.put("structure_time." + entry.getKey(), entry.getValue());
             longestStructureTime = Math.max(longestStructureTime, entry.getValue());
         }

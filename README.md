@@ -63,6 +63,10 @@ schema 4 showcase now demonstrates the editor and class tree directly.
   `inventory_button_y`, `inventory_button_width`, `inventory_button_height`, and
   `inventory_button_icon_size` under `[client]`. Positions are relative to the inventory, and the
   centered pixel-art progression map automatically shrinks to fit.
+- **World-generation-safe mob gating.** Structure-aware entity rules read an immutable
+  server-published session snapshot when vanilla finalizes structure mobs on a chunk worker. Ocean
+  ruins and other asynchronous structure generation no longer call the server-thread-only session
+  API.
 
 ---
 
@@ -384,7 +388,7 @@ Condition types: `kill`, `mine`, `craft`, `pickup`, `use`, `drop`, `break_item`,
 
 ## Stage Tree Viewer & Per-Stage `[display]`
 
-Players can open the **vanilla style progression map** with `/stage`, `/stages`, `/pstages`, `/stage gui`, the "Open Progression Tree" keybind, or the progression map button beside the recipe book button in the survival inventory. Its hand-built pixel art uses a folded map, cyan route, and stage markers to distinguish the action while retaining the vanilla button surface and dimensions. The `[client]` config can hide the button or customize its inventory relative X position, Y position, width, height, and centered icon size. Drag from empty space or a stage node to pan. Roll the mouse wheel over the map to zoom toward the pointer, from 65 percent through 165 percent. Stage icons stay at a readable size while their positions and connector paths zoom. WASD and the arrow keys pan by the same visible distance at every zoom level. Press Space or use the header home button to center and fit the complete graph. Hover or select a node to emphasize its ancestors and descendants while unrelated branches recede. Available stages use a restrained gold corner pulse, selected stages use a pixel rounded frame, and the map controls use vanilla widget surfaces. Click without dragging to pin prerequisites, clearly grouped live trigger routes, unlock previews, and any purchase button. Search matches stage text and locked item ids. The Owned control filters completed stages.
+Players can open the **vanilla style progression map** with `/stage`, `/stages`, `/pstages`, `/stage gui`, the "Open Progression Tree" keybind, or the progression map button beside the recipe book button in the survival inventory. Its custom 20 by 18 pixel background follows the recipe-book button silhouette instead of using the generic dark widget. Separate light silver and pale blue hover sprites provide rounded corners, a dark pixel outline, and a bottom shadow. A centered gold folded map with a cyan route and three stage markers distinguishes the action. The `[client]` config can hide the button or customize its inventory relative X position, Y position, width, height, and centered icon size. Drag from empty space or a stage node to pan. Roll the mouse wheel over the map to zoom toward the pointer, from 65 percent through 165 percent. Stage icons stay at a readable size while their positions and connector paths zoom. WASD and the arrow keys pan by the same visible distance at every zoom level. Press Space or use the header home button to center and fit the complete graph. Hover or select a node to emphasize its ancestors and descendants while unrelated branches recede. Available stages use a restrained gold corner pulse, selected stages use a pixel rounded frame, and the map controls use vanilla widget surfaces. Click without dragging to pin prerequisites, clearly grouped live trigger routes, unlock previews, and any purchase button. Search matches stage text and locked item ids. The Owned control filters completed stages.
 
 Each stage can override the global tooltip/icon defaults for its own locked items with a `[display]` block — all keys optional, inheriting the global default when omitted:
 

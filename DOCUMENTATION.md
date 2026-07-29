@@ -3040,9 +3040,11 @@ dependency connectors, a tiled background, hover cards, and a pinned inspector.
   *ProgressiveStages* in Controls). It is **UNBOUND by default** — players
   assign a key in Options → Controls. You can also use `/stage`, `/stages`,
   `/pstages`, `/stage gui`, or the progression map button immediately to the
-  right of the recipe-book button in the survival inventory. The button keeps
-  the vanilla widget surface and uses hand-built pixel art of a folded map with a cyan
-  route and stage markers instead of reusing the content-lock icon.
+  right of the recipe-book button in the survival inventory. The button uses
+  custom 20 by 18 pixel normal and highlighted backgrounds with the light,
+  rounded recipe-book silhouette. Its separate centered emblem is a gold folded
+  map with a cyan route and three stage markers. It does not reuse the generic
+  dark widget or the content-lock icon.
 
   To hide, move, or resize the inventory button, open
   `config/progressivestages/progressivestages.toml` and configure:
@@ -3095,8 +3097,15 @@ nodes.
 The category picker, Owned control, home control, inspector close control, and
 purchase control use vanilla button sprites and button click sounds. A short
 navigation hint and zoom readout fade after the screen opens or the camera
-changes. The inventory button keeps its configurable dimensions, vanilla hover
-state, and centered icon scaling.
+changes. The inventory button keeps configurable dimensions and centered icon
+scaling. It switches between its light silver and pale blue rounded backgrounds
+for normal and hovered or keyboard-focused states.
+
+When entity conditions are evaluated from asynchronous structure generation,
+the condition context reads an immutable structure-session snapshot published by
+the server thread. Live session collections remain server-thread-only. This
+preserves structure conditions without allowing ocean ruins or other chunk
+features to call `activeSessions` or `activeStructureSeconds` from a worker.
 
 **Author layout (`[display]`).** Omit coordinates for automatic dependency-DAG
 layout, or specify both `x` and `y` (pixels). `frame` is `task`, `goal`, or

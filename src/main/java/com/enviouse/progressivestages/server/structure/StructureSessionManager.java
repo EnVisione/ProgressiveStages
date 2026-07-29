@@ -35,6 +35,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 
 public final class StructureSessionManager {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -47,6 +50,21 @@ public final class StructureSessionManager {
     record ParticipantLease(ResourceLocation providerId, StructureSessionId sessionId,
                             UUID participant) {}
     private record AcquireResult(boolean acquired, boolean granted, UUID owner) {}
+    public record ConditionSnapshot(
+            List<StructureSessionView> sessions,
+            Map<ResourceLocation, Long> activeStructureSeconds
+    ) {
+        private static final ConditionSnapshot EMPTY = new ConditionSnapshot(List.of(), Map.of());
+
+        public ConditionSnapshot {
+            sessions = List.copyOf(sessions);
+            activeStructureSeconds = Map.copyOf(activeStructureSeconds);
+        }
+
+        public static ConditionSnapshot empty() {
+            return EMPTY;
+        }
+    }
 
     private static final class ParticipantState {
         private final long visitSequence;
@@ -115,7 +133,8 @@ public final class StructureSessionManager {
     private final Map<UUID, Long> lastReconcile = new HashMap<>();
     private final Map<LeaseKey, LeaseBucket> leases = new LinkedHashMap<>();
     private final Set<String> validationWarnings = new LinkedHashSet<>();
-    private MinecraftServer server;
+    private final ConcurrentMap<UUID, ConditionSnapshot> conditionSnapshots = new ConcurrentHashMap<>();
+    private volatile MinecraftServer server;
 
     public static StructureSessionManager getInstance() {
         return INSTANCE;
@@ -124,6 +143,7 @@ public final class StructureSessionManager {
     private StructureSessionManager() {}
 
     public void bind(MinecraftServer server) {
+        conditionSnapshots.clear();
         this.server = server;
         StructureContextRegistry.getInstance().bind(server);
     }
@@ -135,13 +155,17 @@ public final class StructureSessionManager {
         lastReconcile.clear();
         leases.clear();
         validationWarnings.clear();
+        conditionSnapshots.clear();
         StructureContextRegistry.getInstance().shutdown(stoppingServer);
         server = null;
     }
 
     public void tick(ServerPlayer player) {
         requireThread();
-        if (!StructureContextRegistry.getInstance().hasProviders()) return;
+        if (!StructureContextRegistry.getInstance().hasProviders()) {
+            conditionSnapshots.remove(player.getUUID());
+            return;
+        }
         long now = player.level().getGameTime();
         Long previous = lastReconcile.get(player.getUUID());
         if (previous == null || now - previous >= RECONCILE_INTERVAL) {
@@ -188,6 +212,7 @@ public final class StructureSessionManager {
                 }
             }
         }
+        publishConditionSnapshot(player);
     }
 
     public List<StructureSessionView> reconcile(ServerPlayer player, boolean reconstruct) {
@@ -230,7 +255,7 @@ public final class StructureSessionManager {
         playerSessions.put(player.getUUID(), Map.copyOf(accepted));
         recoverPersistedParticipants(player);
         recoverOrphanIntroducedStages(player, accepted);
-        return viewsFor(player.getUUID());
+        return publishConditionSnapshot(player).sessions();
     }
 
     public boolean markComplete(ServerPlayer player, StructureSessionId sessionId) {
@@ -268,6 +293,7 @@ public final class StructureSessionManager {
         }
         playerSessions.remove(player.getUUID());
         lastReconcile.remove(player.getUUID());
+        conditionSnapshots.remove(player.getUUID());
     }
 
     public void closeOutsideTeleport(ServerPlayer player, BlockPos target) {
@@ -288,6 +314,34 @@ public final class StructureSessionManager {
 
     public Map<ResourceLocation, Long> activeStructureSeconds(ServerPlayer player) {
         requireThread();
+        return structureSecondsFor(player);
+    }
+
+    public ConditionSnapshot conditionSnapshot(ServerPlayer player) {
+        MinecraftServer currentServer = server;
+        if (player == null || currentServer == null) return ConditionSnapshot.empty();
+        ConditionSnapshot cached = conditionSnapshots.getOrDefault(
+            player.getUUID(), ConditionSnapshot.empty());
+        return selectConditionSnapshot(currentServer.isSameThread(),
+            () -> publishConditionSnapshot(player), cached);
+    }
+
+    static ConditionSnapshot selectConditionSnapshot(
+            boolean serverThread,
+            Supplier<ConditionSnapshot> live,
+            ConditionSnapshot cached
+    ) {
+        return serverThread ? live.get() : cached;
+    }
+
+    private ConditionSnapshot publishConditionSnapshot(ServerPlayer player) {
+        ConditionSnapshot snapshot = new ConditionSnapshot(
+            viewsFor(player.getUUID()), structureSecondsFor(player));
+        conditionSnapshots.put(player.getUUID(), snapshot);
+        return snapshot;
+    }
+
+    private Map<ResourceLocation, Long> structureSecondsFor(ServerPlayer player) {
         Map<ResourceLocation, Long> seconds = new LinkedHashMap<>();
         long gameTime = player.level().getGameTime();
         for (RuntimeSession runtime : sessions.values()) {
