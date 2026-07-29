@@ -10,34 +10,42 @@ on:
   workflow_dispatch:
 
 jobs:
-  pull-request:
-    if: ${{ github.event_name == 'pull_request' }}
+  quality:
+    permissions:
+      actions: read
+      contents: read
+    uses: EnVisione/.github/.github/workflows/quality.yml@52eb01f2a9d378693156c88e03e41dcb9f5e25bb
+    with:
+      shared-ref: "52eb01f2a9d378693156c88e03e41dcb9f5e25bb"
+      gradle-enabled: true
+      node-enabled: true
+      node-working-directory: "editor-ui"
+      native-security: true
+      enforce-docs-layout: false
+
+  codeql:
     permissions:
       actions: read
       contents: read
       security-events: write
-    uses: EnVisione/.github/.github/workflows/quality.yml@a955c949ac1e02c4311c683548f0ebd58ade9db5
+    uses: EnVisione/.github/.github/workflows/codeql.yml@52eb01f2a9d378693156c88e03e41dcb9f5e25bb
     with:
-      shared-ref: "a955c949ac1e02c4311c683548f0ebd58ade9db5"
+      shared-ref: "52eb01f2a9d378693156c88e03e41dcb9f5e25bb"
+      languages: '["java-kotlin","javascript-typescript"]'
       gradle-enabled: true
-      node-enabled: true
-      node-working-directory: "editor-ui"
-      native-security: true
-      codeql-languages: '["java-kotlin","javascript-typescript"]'
-      enforce-docs-layout: false
 
-  trusted:
-    if: ${{ github.event_name != 'pull_request' }}
+  dependency-submission:
+    if: >-
+      ${{
+        github.actor != 'dependabot[bot]' &&
+        (
+          github.event_name == 'workflow_dispatch' ||
+          (
+            github.event_name == 'push' &&
+            github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+          )
+        )
+      }}
     permissions:
-      actions: read
       contents: write
-      security-events: write
-    uses: EnVisione/.github/.github/workflows/quality.yml@a955c949ac1e02c4311c683548f0ebd58ade9db5
-    with:
-      shared-ref: "a955c949ac1e02c4311c683548f0ebd58ade9db5"
-      gradle-enabled: true
-      node-enabled: true
-      node-working-directory: "editor-ui"
-      native-security: true
-      codeql-languages: '["java-kotlin","javascript-typescript"]'
-      enforce-docs-layout: false
+    uses: EnVisione/.github/.github/workflows/dependency-submission.yml@52eb01f2a9d378693156c88e03e41dcb9f5e25bb
