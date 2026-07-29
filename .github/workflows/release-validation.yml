@@ -6,6 +6,10 @@ on:
       - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   id-token: write
@@ -13,6 +17,6 @@ permissions:
 
 jobs:
   validate:
-    uses: EnVisione/.github/.github/workflows/release-validation.yml@52eb01f2a9d378693156c88e03e41dcb9f5e25bb
+    uses: MCEnvision/.github/.github/workflows/release-validation.yml@e6c466f88edb57af854f597e1ce3788881d49b21
     with:
-      shared-ref: "52eb01f2a9d378693156c88e03e41dcb9f5e25bb"
+      shared-ref: "e6c466f88edb57af854f597e1ce3788881d49b21"
