@@ -17,9 +17,9 @@ jobs:
     permissions:
       actions: read
       contents: read
-    uses: MCEnvision/.github/.github/workflows/quality.yml@2984594f1e03ee168e28c4c80701ca1e84f8cbcd
+    uses: MCEnvision/.github/.github/workflows/quality.yml@8dad41905d6995e11688004f21c0a67462b9b5c0
     with:
-      shared-ref: "2984594f1e03ee168e28c4c80701ca1e84f8cbcd"
+      shared-ref: "8dad41905d6995e11688004f21c0a67462b9b5c0"
       gradle-enabled: true
       node-enabled: true
       node-working-directory: "editor-ui"
@@ -31,9 +31,9 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    uses: MCEnvision/.github/.github/workflows/codeql.yml@2984594f1e03ee168e28c4c80701ca1e84f8cbcd
+    uses: MCEnvision/.github/.github/workflows/codeql.yml@8dad41905d6995e11688004f21c0a67462b9b5c0
     with:
-      shared-ref: "2984594f1e03ee168e28c4c80701ca1e84f8cbcd"
+      shared-ref: "8dad41905d6995e11688004f21c0a67462b9b5c0"
       languages: '["java-kotlin","javascript-typescript"]'
       gradle-enabled: true
       neoforge-enabled: true
@@ -52,4 +52,4 @@ jobs:
       }}
     permissions:
       contents: write
-    uses: MCEnvision/.github/.github/workflows/dependency-submission.yml@2984594f1e03ee168e28c4c80701ca1e84f8cbcd
+    uses: MCEnvision/.github/.github/workflows/dependency-submission.yml@8dad41905d6995e11688004f21c0a67462b9b5c0
