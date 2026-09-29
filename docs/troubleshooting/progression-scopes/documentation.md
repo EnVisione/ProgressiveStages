@@ -67,8 +67,8 @@ helper reads and removals for undefined stages.
 Stage ownership and reward distribution are separate. A team reward may be claimable once by
 the quest team, but a personal profession goes only to its actual claimant. Use per player
 rewards if each teammate should claim their own profession. The storage hooks preserve saved
-quest settings and FTB's handling of undefined external stages. See the
-[actual provider verification](../../verification/progression-ownership.md) for tested boundaries.
+quest settings and FTB's handling of undefined external stages. For a repeatable team/server scope
+check, see the [two-player scope matrix](../../testing/3.0/documentation.md#9-two-player-scope-matrix).
 
 Existing helper grants for defined stages are imported once when both integrations are enabled
 and definitions are ready. They remain independent team records, including when current personal

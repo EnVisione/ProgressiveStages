@@ -1,0 +1,14 @@
+[stage]
+id = "example:stronghold_allow"
+display_name = "Stronghold Permit"
+description = "An explicit, stage-owned structure unlock rule."
+icon = "minecraft:iron_door"
+category = "Example"
+
+[[temporary_unlocks]]
+id = "permit_stronghold_entry"
+stage_state = "owned"
+priority = 100
+
+[temporary_unlocks.targets]
+structures = ["id:minecraft:stronghold"]

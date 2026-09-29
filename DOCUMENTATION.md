@@ -1,6 +1,6 @@
-# ProgressiveStages 3.0.5 — Complete Documentation
+# ProgressiveStages 3.1.0 — Complete Documentation
 
-> ProgressiveStages **3.0.5** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
+> ProgressiveStages **3.1.0** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -9,11 +9,9 @@
 >
 > **Project, support, and community:** [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) · [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires in the CurseForge project and GitHub issue tracker through `displayURL` and `issueTrackerURL`.
 
-> **3.0.5 development candidate:** The authenticated editor now has an Access tab for per stage
-> ownership, optional LuckPerms mappings, command gates, and direct interaction definitions. This
-> candidate uses NeoForge 21.1.248 for the build, dedicated server and client. The loader update
-> and interaction followups require renewed acceptance before integration. No CurseForge,
-> Modrinth, or GitHub release is published by this work.
+> **3.1.0 release guide:** Read the [release guide](docs/release/3.1.0/documentation.md) for the
+> player-facing “What to do next” help, editor settings and preview, structure entry and protection,
+> block overrides, safe movement defaults, and bounded support diagnostics.
 
 > **3.0.2 maintenance release:** The authenticated localhost editor now works for permission level
 > 3 operators in integrated single-player worlds as well as dedicated servers. The editor has a
@@ -56,6 +54,10 @@
 > safe five minute edit, then use its table of contents to find every lock category and feature.
 > Conditional access authors can also use the focused
 > [Temporary and Triggered Locks Guide](docs/locks/3.0/documentation.md).
+> For the player guide and editor workflow, use the
+> [3.1.0 release guide](docs/release/3.1.0/documentation.md). Structure authors can use the
+> [structure entry and protection guide](docs/structures/rules/documentation.md), and operators can
+> follow the [bounded diagnostics procedure](docs/testing/diagnostics/documentation.md).
 > The equivalent machine-tested three-file schema 4 reference is the
 > [`examples:diamond` package](examples/rehaul/diamond).
 
@@ -2045,7 +2047,7 @@ Use `enabled = false` to hide the `?` button and omit this stage from the guide 
 
 Guide text can use these fixed placeholders. `{stage_name}` is the current stage name, `{stage_requirements}` is the full visible unlock summary, `{remaining_requirements}` reports server-checked missing prerequisites, trigger steps, item or XP shortages, a full stage group, and the live purchase cooldown, and `{stage_progress}` shows current trigger progress or `Unavailable`. The unlock summary includes complete sentences for stage requirements, trigger or purchase routes, costs, cooldowns, and group slots. When a guide field uses it, it replaces the separate summary under **How to unlock**. Put it on its own line after a short introduction such as `Meet these requirements:`; do not put it after a verb such as `Complete`, because its value is not a short noun phrase. The remaining requirements value says `Unavailable` when hidden prerequisites or an unknown unlock route prevent a complete safe report; it does not claim that no requirements remain. Unknown placeholders stay visible and are reported by the editor so they can be corrected. Use doubled braces for literal braces, for example `{{stage_name}}` displays `{stage_name}`. Placeholders only insert displayed values. They cannot run commands, grant stages, or change progression.
 
-The stages menu keeps one advancement style map without an extra guide header. Select an enabled stage and use the gold `?` control beside the close button to show `How to unlock <stage name>` with the authored unlock, next step, location, and prerequisite text. A separate `Open What to do next guide` keybind starts unbound so packs can assign it without taking a common key; it selects the next visible suggestion in the same map. `general.enable_stage_guide` defaults to `true` and is server authoritative. Turning it off hides every stage's question mark and keybind behavior while preserving the ordinary stage map and authored text; each stage's own `enabled` value is retained for when the global setting is turned on again.
+The stages menu keeps one advancement style map without an extra guide header or a separate guide tab. Select an enabled stage and use the gold `?` control beside the close button to show `How to unlock <stage name>` with the authored unlock, next step, location, and prerequisite text. The `?` has no visible text; hover or keyboard-focus it to see the selected stage name. The close `X` tooltip says `Close`. Selecting another stage or changing search or category closes the guide. A separate `Open What to do next guide` keybind starts unbound so packs can assign it without taking a common key; it selects the next visible suggestion in the same map. `general.enable_stage_guide` defaults to `true` and is server authoritative. Turning it off hides every stage's question mark and keybind behavior while preserving the ordinary stage map and authored text; each stage's own `enabled` value is retained for when the global setting is turned on again.
 
 Long guide text wraps inside the selected stage panel. When it is taller than the visible area, move the pointer over the panel and use the mouse wheel to scroll; a narrow colored bar at the right edge shows the scroll position. No scrollbar appears when all guide text fits.
 
@@ -2316,6 +2318,13 @@ owning a stage.
 [abilities]
 locked = ["jump", "elytra", "sprint", "swim", "climb"]
 ```
+
+Fresh showcase files and stages created by the editor do not add movement restrictions. Add an
+explicit `[abilities].locked` list like the example only when the pack intends to restrict those
+abilities. Existing stage files are not rewritten by this default change. For an upgraded pack that
+still blocks movement, back up the files, find the explicit ability or conditional rule, and remove
+only the restriction the pack no longer wants. Validate and reload the edited configuration; do not
+delete stage files or reset player data to recover.
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -3877,6 +3886,14 @@ fails, the server keeps the previous valid stage and lock snapshot active and re
 The authoritative source is
 [`StageConfig`](src/main/java/com/enviouse/progressivestages/common/config/StageConfig.java).
 Default values are shown below.
+
+The editor's **Settings** view is generated from the complete server configuration schema and edits
+the main config in the same draft as stage files. It validates each value against the server's type
+and range before review. Accepted live settings apply with the stage transaction; world or client
+restart values are shown as pending and are not restarted automatically. A failed validation,
+write, or reload keeps the prior files and loaded snapshot active and leaves the draft available.
+See the [Easy Builder guide](docs/troubleshooting/easy-builder/documentation.md) for the browser
+workflow and recovery steps.
 
 ### 6.1 `[general]`
 

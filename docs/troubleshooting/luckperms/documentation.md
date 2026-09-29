@@ -5,9 +5,10 @@ stage's existing group or positive permission contributions back to LuckPerms. T
 optional and remains dormant when LuckPerms is absent. It uses the compile only API 5.4 surface and
 is verified with LuckPerms NeoForge 5.4.150 for authenticated player login on Minecraft 1.21.1 and
 NeoForge 21.1.248. An earlier 5.4.140 candidate failed login even with ProgressiveStages absent;
-the [historical provider evidence](../../verification/luckperms-bridge.md#neoforge-211248-dependency-only-login-failure)
-applies to that older artifact. Current verification covers specific transactions, not the complete
-provider lifecycle or multiplayer matrix. See the [editor and runtime regression guide](../../test/editor-rule-runtime.md).
+that finding applies only to the older artifact. Current verification covers specific transactions,
+not the complete provider lifecycle or multiplayer matrix. The
+[testing handbook](../../testing/3.0/documentation.md) describes the general runtime and optional
+integration evidence workflow.
 
 ## Configuration
 
@@ -148,9 +149,9 @@ and timed source episodes.
 If a stage is not granted, check the stage dependency and slot policy first. Permission
 reconciliation must not charge costs, run rewards, increment trigger counters, refresh expiry
 episodes or grant prerequisites. Current source tests cover missing prerequisites, purchase denial
-without an XP charge and unchanged repeated grants. The [episode regression](../../verification/luckperms-bridge.md#permission-episode-regression)
-adds durable revocation and expiry checks. A synchronized source is removed after an authoritative
-loss; permanent and independent sources remain subject to normal stage expiry and explicit revocation.
+without an XP charge and unchanged repeated grants. The regression checks also cover durable
+revocation and expiry. A synchronized source is removed after an authoritative loss; permanent and
+independent sources remain subject to normal stage expiry and explicit revocation.
 
 A manually revoked permission stage stays revoked while the same eligibility remains positive.
 Reloading, reconnecting, changing retention or temporarily losing the provider does not cancel that
@@ -182,9 +183,9 @@ permission checks still run, so a stage cannot elevate a player. The gate is eva
 command side effect and preserves the effective player through delegated execution.
 
 An unresolved path produces an inactive rule warning. Reload after the command provider becomes
-available. A similarly named command in another namespace is not automatically an alias. The
-[core runtime regression](../../verification/luckperms-bridge.md#command-execution-regression) covers
-vanilla redirects and custom result callbacks; the full real provider and client matrix remains open.
+available. A similarly named command in another namespace is not automatically an alias. The core
+runtime regression covers vanilla redirects and custom result callbacks; the full real provider and
+client matrix remains open.
 
 ## Recovery
 

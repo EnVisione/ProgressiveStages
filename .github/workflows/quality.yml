@@ -22,6 +22,7 @@ jobs:
       shared-ref: "d731214d860ad2422ab8956a5d337dfaec51f64a"
       gradle-enabled: true
       node-enabled: true
+      node-version: "24"
       node-working-directory: "editor-ui"
       native-security: true
       enforce-docs-layout: false

@@ -1,0 +1,17 @@
+[stage]
+id = "example:stronghold_protection"
+display_name = "Stronghold Protection"
+description = "Protects the Stronghold while this stage is not owned."
+icon = "minecraft:stone_bricks"
+category = "Example"
+
+[structures]
+locked_entry = ["id:minecraft:stronghold"]
+
+[structures.rules]
+entry_allowed = true
+priority = 50
+prevent_block_break = true
+prevent_block_place = true
+prevent_explosions = true
+disable_mob_spawning = true
