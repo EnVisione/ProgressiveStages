@@ -90,6 +90,7 @@ public class StageDefinition {
     private final boolean priorityAuthored;
     private final ConfigProvenance provenance;
     private final LuckPermsStageOptions luckPerms;
+    private final StageGuide guide;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -161,6 +162,7 @@ public class StageDefinition {
         this.priorityAuthored = builder.priorityAuthored;
         this.provenance = builder.provenance;
         this.luckPerms = builder.luckPerms != null ? builder.luckPerms : LuckPermsStageOptions.absent();
+        this.guide = builder.guide != null ? builder.guide : StageGuide.EMPTY;
     }
 
     public StageId getId() {
@@ -412,6 +414,9 @@ public class StageDefinition {
     public LuckPermsStageOptions getLuckPerms() { return luckPerms; }
     public LuckPermsStageOptions getLuckPermsOptions() { return luckPerms; }
 
+    /** Author supplied, inert player guide content. */
+    public StageGuide getGuide() { return guide; }
+
     @Override
     public String toString() {
         return "StageDefinition{" +
@@ -476,6 +481,7 @@ public class StageDefinition {
         private boolean priorityAuthored;
         private ConfigProvenance provenance;
         private LuckPermsStageOptions luckPerms = LuckPermsStageOptions.absent();
+        private StageGuide guide = StageGuide.EMPTY;
 
         private Builder(StageId id) {
             this.id = id;
@@ -646,6 +652,11 @@ public class StageDefinition {
         public Builder provenance(ConfigProvenance v) { this.provenance = v; return this; }
         public Builder luckPerms(LuckPermsStageOptions v) {
             this.luckPerms = v != null ? v : LuckPermsStageOptions.absent();
+            return this;
+        }
+
+        public Builder guide(StageGuide v) {
+            this.guide = v != null ? v : StageGuide.EMPTY;
             return this;
         }
 

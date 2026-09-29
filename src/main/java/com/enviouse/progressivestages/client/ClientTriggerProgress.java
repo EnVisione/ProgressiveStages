@@ -58,10 +58,12 @@ public final class ClientTriggerProgress {
 
     public record StageData(List<Rule> rules, List<ResourceLocation> unlockSample, int unlockTotal,
                             boolean purchasable, int costXp, String costSummary, boolean canPurchase,
+                            boolean purchaseBypassesTriggers,
+                            NetworkHandler.AcquisitionInfo acquisition, long receivedAtNanos,
                             List<Why> why, List<Challenge> challenges, List<ModifierPreview> modifiers,
                             List<History> history) {
         public static final StageData EMPTY = new StageData(List.of(), List.of(), 0, false, 0, "", false,
-            List.of(), List.of(), List.of(), List.of());
+            false, NetworkHandler.AcquisitionInfo.UNKNOWN, 0L, List.of(), List.of(), List.of(), List.of());
 
         public StageData {
             rules = List.copyOf(rules);
@@ -74,6 +76,12 @@ public final class ClientTriggerProgress {
 
         public boolean hasTriggers() { return !rules.isEmpty(); }
 
+        public long remainingCooldownMillis() {
+            if (acquisition == null) return 0L;
+            long elapsed = Math.max(0L, (System.nanoTime() - receivedAtNanos) / 1_000_000L);
+            return Math.max(0L, acquisition.cooldownRemainingMillis() - elapsed);
+        }
+
         /** Overall completion toward unlocking via triggers (best rule), or -1 if no triggers. */
         public float percent() {
             if (rules.isEmpty()) return -1f;
@@ -84,19 +92,33 @@ public final class ClientTriggerProgress {
     }
 
     private static final Map<StageId, StageData> DATA = new HashMap<>();
+    private static long acceptedDefinitionRevision = Long.MIN_VALUE;
+    private static long acceptedProgressSequence;
 
     private ClientTriggerProgress() {}
 
-    /** Store the latest snapshot and open (or refresh) the stage-tree screen. */
-    public static void acceptAndOpen(List<NetworkHandler.StageProgress> stages) {
-        accept(stages);
-        com.enviouse.progressivestages.client.gui.StageTreeScreen.open();
+    public static void onDefinitionsAccepted(long definitionRevision) {
+        if (acceptedDefinitionRevision == definitionRevision) return;
+        DATA.clear();
+        acceptedDefinitionRevision = definitionRevision;
+        acceptedProgressSequence = 0L;
     }
 
-    public static void acceptResponse(List<NetworkHandler.StageProgress> stages) {
-        accept(stages);
+    public static void acceptResponse(long definitionRevision, long sequence,
+                                      List<NetworkHandler.StageProgress> stages) {
+        if (!acceptSnapshot(definitionRevision, sequence, stages)) return;
         if (supportsExplicitOpening()) com.enviouse.progressivestages.client.gui.StageTreeScreen.refreshIfOpen();
         else com.enviouse.progressivestages.client.gui.StageTreeScreen.open();
+    }
+
+    static boolean acceptSnapshot(long definitionRevision, long sequence,
+                                  List<NetworkHandler.StageProgress> stages) {
+        if (definitionRevision != ClientStageCache.definitionSnapshotRevision()
+                || definitionRevision != acceptedDefinitionRevision
+                || sequence <= acceptedProgressSequence || stages == null) return false;
+        accept(stages);
+        acceptedProgressSequence = sequence;
+        return true;
     }
 
     private static boolean supportsExplicitOpening() {
@@ -104,9 +126,10 @@ public final class ClientTriggerProgress {
         return connection != null && connection.hasChannel(NetworkHandler.OpenStageGuiPayload.TYPE);
     }
 
-    public static void accept(List<NetworkHandler.StageProgress> stages) {
+    private static void accept(List<NetworkHandler.StageProgress> stages) {
         DATA.clear();
         if (stages == null) return;
+        long receivedAtNanos = System.nanoTime();
         for (NetworkHandler.StageProgress sp : stages) {
             StageId id = StageId.fromResourceLocation(sp.stageId());
             List<Rule> rules = new ArrayList<>();
@@ -120,6 +143,9 @@ public final class ClientTriggerProgress {
             NetworkHandler.CostInfo cost = sp.cost();
             DATA.put(id, new StageData(rules, List.copyOf(sp.unlockSample()), sp.unlockTotal(),
                 cost.purchasable(), cost.costXp(), cost.summary(), cost.canPurchase(),
+                cost.bypassesTriggers(),
+                sp.acquisition() == null ? NetworkHandler.AcquisitionInfo.UNKNOWN : sp.acquisition(),
+                receivedAtNanos,
                 sp.why().stream().map(line -> new Why(line.category(), line.action(), line.target(),
                     line.winner(), line.effect(), line.blocked(), line.explanation())).toList(),
                 sp.challenges().stream().map(line -> new Challenge(line.id(), line.status(), line.step(),
@@ -149,6 +175,8 @@ public final class ClientTriggerProgress {
 
     public static void clear() {
         DATA.clear();
+        acceptedDefinitionRevision = Long.MIN_VALUE;
+        acceptedProgressSequence = 0L;
     }
 
     public static void refreshFromServer() {

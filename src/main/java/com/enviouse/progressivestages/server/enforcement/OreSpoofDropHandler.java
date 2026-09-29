@@ -47,9 +47,6 @@ public final class OreSpoofDropHandler {
         Block spoofedDisplay = BuiltInRegistries.BLOCK.get(entry.displayAs);
         if (spoofedDisplay == null) return;
 
-        // Discard whatever drops vanilla / mods already queued for the real block.
-        event.getDrops().clear();
-
         // Build replacement drops
         java.util.List<ItemEntity> replacements;
         if (entry.dropAs != null) {
@@ -75,6 +72,9 @@ public final class OreSpoofDropHandler {
             }
             replacements = out;
         }
+
+        // Discard whatever drops vanilla or mods already queued for the real block.
+        event.getDrops().clear();
         event.getDrops().addAll(replacements);
     }
 

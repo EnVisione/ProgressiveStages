@@ -23,8 +23,8 @@ class RehaulDocumentationTest {
         for (int feature = 1; feature <= 30; feature++) {
             assertTrue(guide.contains("\n" + feature + ". "), "Missing feature " + feature);
         }
-        assertTrue(Files.readString(PROJECT.resolve("DOCUMENTATION.md")).contains("REHAUL_GUIDE.md"));
-        assertTrue(Files.readString(PROJECT.resolve("README.md")).contains("REHAUL_GUIDE.md"));
+        assertTrue(Files.readString(PROJECT.resolve("DOCUMENTATION.md")).contains("docs/rehaul/3.0.1/documentation.md"));
+        assertTrue(Files.readString(PROJECT.resolve("README.md")).contains("[Progression rehaul guide](docs/rehaul/3.0.1/documentation.md)"));
         assertTrue(DefaultStageTemplates.diamondAge().contains("REHAUL_GUIDE.md"));
     }
 }

@@ -6,32 +6,78 @@ export interface CategoryDefinition {
 }
 
 export const CATEGORIES: Record<string, CategoryDefinition> = {
-  items: { label: "Items", catalog: "items", actions: ["use", "pickup", "inventory", "hotbar", "mouse_pickup", "drop"], description: "Held items, inventory content, and item actions." },
-  blocks: { label: "Blocks", catalog: "blocks", actions: ["place", "break", "interact"], description: "Placement, breaking, and block interaction." },
-  fluids: { label: "Fluids", catalog: "fluids", actions: ["pickup", "place", "flow", "submerge"], description: "Buckets, flow, placement, and submersion." },
-  recipes: { label: "Recipes", catalog: "recipes", actions: ["craft", "automate", "display"], description: "Manual crafting, automation, and recipe viewers." },
-  crops: { label: "Crops", catalog: "blocks", actions: ["plant", "grow", "bonemeal", "harvest"], description: "Planting, growth, bonemeal, and harvest." },
-  dimensions: { label: "Dimensions", catalog: "dimensions", actions: ["enter", "portal", "teleport"], description: "Dimension travel and portal access." },
-  enchants: { label: "Enchantments", catalog: "enchantments", actions: ["table", "anvil", "trade", "hold"], description: "Enchanting, anvils, trades, and owned enchantments." },
-  entities: { label: "Mobs and entities", catalog: "entities", actions: ["presence", "attack", "interact", "mount"], description: "Per player presence, combat, interaction, and riding." },
-  interactions: { label: "Interactions", catalog: "items", actions: ["block_right_click", "item_on_block", "item_on_entity", "item_into_inventory"], description: "Detailed item and target combinations." },
-  loot: { label: "Loot", catalog: "loot_tables", actions: ["generate", "open", "drop"], description: "Chests, drops, fishing, and loot tables." },
-  mobs: { label: "Mob spawning", catalog: "entities", actions: ["spawn", "replace"], description: "Spawn cancellation and replacement." },
-  pets: { label: "Pets", catalog: "entities", actions: ["tame", "breed", "command", "ride"], description: "Taming, breeding, commands, and riding." },
-  screens: { label: "Menus and screens", catalog: "blocks", actions: ["open"], description: "Block and held item interfaces." },
-  trades: { label: "Villager trades", catalog: "items", actions: ["display", "purchase"], description: "Trade visibility and purchase access." },
-  professions: { label: "Villager professions", catalog: "professions", actions: ["trade"], description: "Trading by villager profession." },
-  advancements: { label: "Advancements", catalog: "advancements", actions: ["display", "toast"], description: "Advancement visibility and notifications." },
-  structures: { label: "Structures", catalog: "structures", actions: ["enter", "leave", "stay", "break", "place", "open_container", "item_use", "interact_block", "interact_entity"], description: "Entry and actions inside exact structure sessions." },
-  regions: { label: "Regions", catalog: "dimensions", actions: ["enter", "leave", "stay", "break", "place", "explode", "spawn"], description: "Authored areas and activity inside them." },
-  curios: { label: "Curios slots", catalog: "curios_slots", actions: ["equip", "retain"], description: "Equipping and retaining Curios items." },
-  ores: { label: "Ore visuals and drops", catalog: "blocks", actions: ["display", "drop"], description: "Ore masking and generated drops." },
-  beacon: { label: "Beacon effects", catalog: "effects", actions: ["apply"], description: "Effects selected through beacons." },
-  brewing: { label: "Brewing", catalog: "potions", actions: ["brew", "take"], description: "Potion brewing and output collection." },
-  abilities: { label: "Player abilities", catalog: "abilities", actions: ["use"], description: "Jumping, sprinting, swimming, climbing, and elytra." }
+  items: { label: "Items", catalog: "items", actions: ["use", "pickup", "inventory", "hotbar", "drop", "access"], description: "Held items, inventory content, and item actions." },
+  blocks: { label: "Blocks", catalog: "blocks", actions: ["place", "break", "interact", "access"], description: "Placement, breaking, and block interaction." },
+  fluids: { label: "Fluids", catalog: "fluids", actions: ["pickup", "place", "flow", "submerge", "access"], description: "Buckets, flow, placement, and submersion." },
+  recipes: { label: "Recipes", catalog: "recipes", actions: ["craft"], description: "Lock recipe output items or exact recipe IDs." },
+  crops: { label: "Crops", catalog: "blocks", actions: ["plant", "grow", "bonemeal", "harvest", "access"], description: "Planting, growth, bonemeal, and harvest." },
+  dimensions: { label: "Dimensions", catalog: "dimensions", actions: ["enter", "portal", "teleport", "access"], description: "Dimension travel and portal access." },
+  enchants: { label: "Enchantments", catalog: "enchantments", actions: ["table", "anvil", "trade", "hold", "access"], description: "Enchanting, anvils, trades, and owned enchantments." },
+  entities: { label: "Mobs and entities", catalog: "entities", actions: ["presence", "attack", "interact", "mount", "access"], description: "Per player presence, combat, interaction, and riding." },
+  interactions: { label: "Inventory insertion", catalog: "items", actions: ["item_into_inventory"], description: "Check an inserted item together with its destination." },
+  loot: { label: "Loot", catalog: "loot_tables", actions: ["generate"], description: "Lock loot table IDs with the static loot rules." },
+  mobs: { label: "Mob spawning", catalog: "entities", actions: ["spawn", "access"], description: "Cancel matching mob spawns." },
+  pets: { label: "Pets", catalog: "entities", actions: ["tame", "breed", "command", "access"], description: "Taming, breeding, and commands for pets." },
+  screens: { label: "Menus and screens", catalog: "menus", actions: ["open"], description: "Block and held item interfaces." },
+  trades: { label: "Villager trades", catalog: "items", actions: ["display", "purchase", "access"], description: "Trade visibility and purchase access." },
+  professions: { label: "Villager professions", catalog: "professions", actions: ["trade", "access"], description: "Trading by villager profession." },
+  advancements: { label: "Advancements", catalog: "advancements", actions: ["display", "toast", "access"], description: "Advancement visibility and notifications." },
+  structures: { label: "Structures", catalog: "structures", actions: ["enter", "break", "place", "open_container", "item_use", "interact_block", "interact_entity", "access"], description: "Entry and player actions inside exact structure sessions." },
+  regions: { label: "Regions", catalog: "dimensions", actions: [], description: "Use a region entry with a dimension, two XYZ corners, and prevention flags." },
+  curios: { label: "Curios slots", catalog: "curios_slots", actions: ["equip"], description: "Lock exact Curios equipment slots." },
+  ores: { label: "Ore overrides", catalog: "blocks", actions: [], description: "Use Block overrides to choose target blocks, shown blocks, and drops." },
+  beacon: { label: "Beacon effects", catalog: "effects", actions: ["apply", "access"], description: "Effects selected through beacons." },
+  brewing: { label: "Brewing", catalog: "potions", actions: ["brew", "take", "access"], description: "Potion brewing and output collection." },
+  abilities: { label: "Player abilities", catalog: "abilities", actions: ["use", "access"], description: "Jumping, sprinting, swimming, climbing, and elytra." }
+};
+
+/** Categories that need dedicated fields and cannot be represented by a generic rule. */
+export const SPECIALIZED_RULE_GUIDANCE: Record<string, { title: string; detail: string }> = {
+  ores: {
+    title: "Use Block overrides",
+    detail: "Ore display and drop changes need target blocks, a shown block, and a dropped item. Add them in Block overrides above."
+  },
+  regions: {
+    title: "Use a region entry in Source",
+    detail: "A region needs a dimension, two XYZ corners, and prevention flags. Add a [[regions]] table in the stage Source file; a generic rule cannot describe an area."
+  }
+};
+
+/** Core rule targets whose runtime checks accept only exact resource selectors. */
+export const EXACT_SELECTOR_CATEGORIES = new Set(["dimensions", "structures", "abilities"]);
+
+export interface LegacyRuleBinding {
+  actions: string[];
+  locked: string | Record<string, string>;
+  alwaysUnlocked?: string;
+  selector: "resource" | "exact" | "ability" | "slot";
+}
+
+/** Fields and actions actually read by the legacy stage compiler. */
+export const LEGACY_RULE_BINDINGS: Record<string, LegacyRuleBinding> = {
+  items: { actions: ["use"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  blocks: { actions: ["interact"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  fluids: { actions: ["interact"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  entities: { actions: ["presence"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  enchants: { actions: ["apply"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  crops: { actions: ["grow"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  screens: { actions: ["open"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  loot: { actions: ["generate"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  trades: { actions: ["trade"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  professions: { actions: ["trade"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  advancements: { actions: ["display"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  beacon: { actions: ["apply"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  brewing: { actions: ["take"], locked: "locked", alwaysUnlocked: "always_unlocked", selector: "resource" },
+  dimensions: { actions: ["enter"], locked: "locked", selector: "exact" },
+  mobs: { actions: ["spawn"], locked: "locked_spawns", selector: "resource" },
+  pets: { actions: ["tame", "breed", "command"], locked: { tame: "locked_taming", breed: "locked_breeding", command: "locked_commanding" }, selector: "resource" },
+  curios: { actions: ["equip"], locked: "locked_slots", selector: "slot" },
+  abilities: { actions: ["use"], locked: "locked", selector: "ability" },
+  recipes: { actions: ["craft"], locked: "locked", selector: "resource" }
 };
 
 export const ACTION_LABELS: Record<string, string> = {
+  access: "Any action in this category",
   use: "Use the target", pickup: "Pick up the target", inventory: "Keep in inventory",
   hotbar: "Keep in hotbar", mouse_pickup: "Move with the cursor", drop: "Drop the target",
   place: "Place the target", break: "Break the target", interact: "Interact with the target",
@@ -125,9 +171,7 @@ export function ruleEffects(category: string, action: string) {
   }
   if (category === "recipes" && action === "craft") return EFFECTS.filter(effect => effect.value === "lock");
   return EFFECTS
-    .filter(effect => effect.value !== "exclude")
-    .filter(effect => effect.value !== "replace" || ["mobs", "ores"].includes(category))
-    .filter(effect => effect.value !== "present" || ["recipes", "advancements", "ores"].includes(category));
+    .filter(effect => !["exclude", "replace", "present"].includes(effect.value));
 }
 
 export const NAVIGATION = [

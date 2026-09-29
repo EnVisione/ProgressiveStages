@@ -39,7 +39,7 @@ class StageGuiModifierPreviewTest {
         String source = Files.readString(PROJECT.resolve(
             "src/main/java/com/enviouse/progressivestages/common/network/NetworkHandler.java"));
 
-        assertEquals(1, occurrences(source, "event.registrar(\"2\")"));
+        assertEquals(1, occurrences(source, "event.registrar(\"3\")"));
     }
 
     private static int occurrences(String value, String target) {

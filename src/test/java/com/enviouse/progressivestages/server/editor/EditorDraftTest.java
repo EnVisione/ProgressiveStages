@@ -1,11 +1,18 @@
 package com.enviouse.progressivestages.server.editor;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +31,94 @@ class EditorDraftTest {
         assertEquals("invalid_type", json.getAsJsonArray("diagnostics").get(0).getAsJsonObject().get("code").getAsString());
         assertEquals(identity, files.get("stages/chef/stage.toml"));
         assertTrue(!json.toString().contains("progressivestages-editor-validation-"));
+    }
+
+    @Test
+    void invalidBlockOverrideDraftsCannotChangeAcceptedFilesOrRevision(@TempDir Path temporary) throws IOException {
+        String stagePath = "stages/block_override_validation/stage.toml";
+        String rulesPath = "stages/block_override_validation/rules.toml";
+        String identity = "[schema]\nversion = 4\n[stage]\nid = \"test:block_override_validation\"\n";
+        String acceptedRules = """
+            [[blocks.overrides]]
+            target = "id:minecraft:diamond_ore"
+            display_as = "minecraft:stone"
+            drop_as = "minecraft:cobblestone"
+            """;
+        Map<String, String> acceptedFiles = new LinkedHashMap<>();
+        acceptedFiles.put(stagePath, identity);
+        acceptedFiles.put(rulesPath, acceptedRules);
+
+        Path configRoot = temporary.resolve("config");
+        for (var file : acceptedFiles.entrySet()) {
+            Path target = configRoot.resolve(file.getKey());
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, file.getValue());
+        }
+
+        UUID owner = UUID.randomUUID();
+        long acceptedRevision = 41;
+        EditorDraft draft = new EditorDraft(UUID.randomUUID(), owner, acceptedRevision, 0, acceptedFiles);
+        EditorApplyService applyService = new EditorApplyService(configRoot);
+        var runtime = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get();
+        long mappingRevision = runtime.snapshot().revision();
+        List<String> invalidRules = List.of(
+            acceptedRules.replace("target = \"id:minecraft:diamond_ore\"", "target = 42"),
+            "[[blocks.overrides]]\ntargets = []\ndisplay_as = \"minecraft:stone\"\ndrop_as = \"minecraft:cobblestone\"\n",
+            acceptedRules.replace("target = \"id:minecraft:diamond_ore\"", "target = \"id:minecraft:diamond_ore\"\ntargets = [\"id:minecraft:iron_ore\"]"),
+            acceptedRules.replace("minecraft:stone", "missing:block"),
+            acceptedRules.replace("minecraft:cobblestone", "missing:item"),
+            acceptedRules.replace("drop_as = \"minecraft:cobblestone\"", "drop_as = \"minecraft:cobblestone\"\npriority = 2147483648"),
+            acceptedRules.replace("id:minecraft:diamond_ore", "wildcard:minecraft:*"),
+            "[ores]\nlocked = [\"id:minecraft:diamond_ore\"]\n",
+            """
+                [[rules]]
+                effect = "lock"
+                action = "display"
+                targets.ores = ["id:minecraft:diamond_ore"]
+                """,
+            """
+                [[rules]]
+                effect = "lock"
+                action = "break"
+                targets.regions = ["id:minecraft:overworld"]
+                """,
+            """
+                [[rules]]
+                effect = "lock"
+                targets.blocks = ["id:minecraft:diamond_block"]
+                [[rules.exceptions]]
+                effect = "exclude"
+                targets.ore = ["id:minecraft:diamond_ore"]
+                """
+        );
+
+        for (String invalid : invalidRules) {
+            long draftRevision = draft.revision();
+            draft.mutate(owner, draftRevision, rulesPath, invalid);
+            long rejectedRevision = draft.revision();
+            EditorApplyResult result = applyService.apply(null, owner, draft, acceptedRevision, true);
+
+            assertFalse(result.success(), result.explanation());
+            assertEquals("validation_failed", result.code());
+            assertFalse(result.validation().valid());
+            assertEquals(acceptedRevision, result.configurationRevision());
+            assertEquals(rejectedRevision, result.validation().validatedRevision());
+            assertEquals(acceptedFiles, draft.baseFiles());
+            assertEquals(invalid, draft.files().get(rulesPath));
+            assertEquals(identity, Files.readString(configRoot.resolve(stagePath)));
+            assertEquals(acceptedRules, Files.readString(configRoot.resolve(rulesPath)));
+            assertFalse(Files.exists(configRoot.resolve(".editor-backups")));
+            assertEquals(mappingRevision, runtime.snapshot().revision());
+        }
+
+        long draftRevision = draft.revision();
+        draft.mutate(owner, draftRevision, rulesPath, acceptedRules);
+        EditorApplyResult recovered = applyService.apply(null, owner, draft, acceptedRevision, true);
+        assertTrue(recovered.success(), recovered.explanation());
+        assertEquals("no_changes", recovered.code());
+        assertEquals(acceptedRevision, recovered.configurationRevision());
+        assertEquals(acceptedFiles, draft.files());
+        assertEquals(mappingRevision, runtime.snapshot().revision());
     }
 
     @Test

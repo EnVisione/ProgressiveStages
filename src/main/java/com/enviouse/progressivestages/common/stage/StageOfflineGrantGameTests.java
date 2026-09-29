@@ -73,7 +73,6 @@ public final class StageOfflineGrantGameTests {
         helper.assertTrue(!players.containsKey(actor) && !players.containsKey(other), "Fixture actors must be unused.");
         var cookie = net.minecraft.server.network.CommonListenerCookie.createInitial(new GameProfile(actor, "offline_earner"), false);
         var first = new ServerPlayer(server, helper.getLevel(), cookie.gameProfile(), cookie.clientInformation());
-        net.luckperms.api.LuckPermsProvider.get().getUserManager().loadUser(actor, "offline_earner").join();
         var connection = new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND);
         first.connection = new net.minecraft.server.network.ServerGamePacketListenerImpl(server,
             connection, first, cookie);
@@ -188,8 +187,6 @@ public final class StageOfflineGrantGameTests {
         } finally {
             players.remove(actor, first);
             onlinePlayers.remove(first);
-            var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(actor);
-            if (user != null) net.luckperms.api.LuckPermsProvider.get().getUserManager().cleanupUser(user);
             players.remove(other, second);
             first.discard();
             second.discard();

@@ -1,5 +1,0 @@
-[stage]
-id = "purchase_fixture_access"
-display_name = "Arena Access"
-team_stage = false
-hidden = true

@@ -2,9 +2,12 @@ package com.enviouse.progressivestages.common.network;
 
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.config.StageGuide;
+import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
 import com.enviouse.progressivestages.common.stage.StageOrder;
+import com.enviouse.progressivestages.common.stage.StageSlotResolver;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.enviouse.progressivestages.client.ClientStageCache;
 import com.enviouse.progressivestages.client.ClientLockCache;
@@ -25,6 +28,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Handles network packet registration and sending
@@ -33,9 +38,40 @@ import java.util.*;
 @EventBusSubscriber(modid = Constants.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
 public class NetworkHandler {
 
+    // Minecraft 1.21.1's ClientboundCustomPayloadPacket allows 1 MiB. Keep headroom for the
+    // payload header; the 24 KiB player-snapshot chunk size is not the custom-payload limit.
+    static final int MAX_CUSTOM_PAYLOAD_BYTES = 1024 * 1024;
+    static final int STAGE_DEFINITION_CHUNK_BYTES = MAX_CUSTOM_PAYLOAD_BYTES - 1024;
+    static final int MAX_STAGE_DEFINITION_ENTRIES_PER_CHUNK = 4096;
+    static final int MAX_STAGE_DEFINITION_SNAPSHOT_BYTES =
+        com.enviouse.progressivestages.common.rehaul.client.ClientSnapshotCodec.MAX_SNAPSHOT_BYTES;
+    private static final StreamCodec<FriendlyByteBuf, List<StageDefinitionEntry>> STAGE_DEFINITION_LIST_CODEC =
+        StageDefinitionEntry.STREAM_CODEC.apply(ByteBufCodecs.list(MAX_STAGE_DEFINITION_ENTRIES_PER_CHUNK));
+    private static final long DEFINITION_ASSEMBLY_EXPIRY_TICKS = 200L;
+    private static final Map<Long, DefinitionAssembly> CLIENT_DEFINITION_ASSEMBLIES = new ConcurrentHashMap<>();
+    private static volatile long latestClientDefinitionRevision = Long.MIN_VALUE;
+    private static volatile long clientDefinitionTick;
+    private static final Map<UUID, Long> serverGuiDefinitionRevisions = new ConcurrentHashMap<>();
+    private static final Map<UUID, Long> serverGuiProgressSequences = new ConcurrentHashMap<>();
+    private static final AtomicLong NEXT_STAGE_DEFINITION_REVISION = new AtomicLong();
+
+    private static final class DefinitionAssembly {
+        private final int total;
+        private final boolean guideEnabled;
+        private final Map<Integer, List<StageDefinitionEntry>> chunks = new HashMap<>();
+        private long lastSeenTick;
+        private int encodedBytes;
+
+        private DefinitionAssembly(int total, boolean guideEnabled) {
+            this.total = total;
+            this.guideEnabled = guideEnabled;
+            this.lastSeenTick = clientDefinitionTick;
+        }
+    }
+
     @SubscribeEvent
     public static void registerPayloads(final RegisterPayloadHandlersEvent event) {
-        final PayloadRegistrar registrar = event.registrar("2");
+        final PayloadRegistrar registrar = event.registrar("3");
 
         // Stage sync packet (full snapshot)
         registrar.playToClient(
@@ -312,12 +348,19 @@ public class NetworkHandler {
                 unlockSample.getOrDefault(stageId, List.of()),
                 unlockTotal.getOrDefault(stageId, 0),
                 computeCostInfo(player, stageId),
+                computeGuideAcquisition(player, stageId, ruleLines),
                 whyLines(stageId),
                 challengeLines(player, stageId),
                 modifierLines(player, stageId),
                 historyLines(player, stageId)));
         }
-        PacketDistributor.sendToPlayer(player, new StageGuiDataPayload(out));
+        Long definitionRevision = serverGuiDefinitionRevisions.get(player.getUUID());
+        if (definitionRevision == null) {
+            sendStageDefinitionsSync(player);
+            definitionRevision = serverGuiDefinitionRevisions.get(player.getUUID());
+        }
+        long sequence = serverGuiProgressSequences.merge(player.getUUID(), 1L, Long::sum);
+        PacketDistributor.sendToPlayer(player, new StageGuiDataPayload(definitionRevision, sequence, out));
     }
 
     // ============ v2.4 skill-tree purchase ============
@@ -335,7 +378,118 @@ public class NetworkHandler {
         }
         if (sb.length() == 0) sb.append("free");
         if (cost.cooldownSeconds() > 0) sb.append(", ").append(cost.cooldownSeconds()).append("s cooldown");
-        return new CostInfo(true, cost.xpLevels(), sb.toString(), canPurchase(player, defOpt.get()));
+        return new CostInfo(true, cost.xpLevels(), sb.toString(), canPurchase(player, defOpt.get()),
+            cost.bypassRequirements());
+    }
+
+    private static AcquisitionInfo computeGuideAcquisition(ServerPlayer player, StageId stageId,
+                                                            List<RuleLine> progress) {
+        StageDefinition definition = StageOrder.getInstance().getStageDefinition(stageId).orElse(null);
+        if (definition == null || definition.isHidden()
+                || (!definition.hasTriggers() && !definition.isPurchasable())) {
+            return AcquisitionInfo.UNKNOWN;
+        }
+
+        StageManager stages = StageManager.getInstance();
+        Set<StageId> owned = stages.getStages(player);
+        List<String> sharedBlockers = new ArrayList<>();
+        boolean dependencyGateApplies = definition.isPurchasable() || definition.hasTriggers();
+        if (dependencyGateApplies && !definition.dependenciesSatisfied(owned)) {
+            List<StageId> missing = definition.getDependencies().stream()
+                .filter(dependency -> !owned.contains(dependency)).toList();
+            for (StageId dependency : missing) {
+                StageDefinition dependencyDefinition = StageOrder.getInstance()
+                    .getStageDefinition(dependency).orElse(null);
+                if (dependencyDefinition == null || dependencyDefinition.isHidden()) {
+                    // Do not disclose hidden prerequisite names or counts through the guide aggregate.
+                    return AcquisitionInfo.UNKNOWN;
+                }
+            }
+            if (missing.isEmpty()) return AcquisitionInfo.UNKNOWN;
+            sharedBlockers.add("Meet this stage's required-stage rule");
+        }
+
+        StageSlotResolver.Decision slot = stages.getSlotDecision(player, definition);
+        if (!slot.allowed()) {
+            if (slot.explanation().isBlank()) return AcquisitionInfo.UNKNOWN;
+            sharedBlockers.add(slot.explanation());
+        }
+
+        com.enviouse.progressivestages.common.config.StageCost cost = definition.getCost();
+        boolean triggersGatePurchase = definition.isPurchasable() && !cost.bypassRequirements();
+        String triggerBlocker = null;
+        if (definition.hasTriggers()
+                && !com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator
+                    .triggersSatisfied(player, stageId)) {
+            if (progress.size() != definition.getTriggers().size()) return AcquisitionInfo.UNKNOWN;
+            triggerBlocker = triggerBlocker(progress);
+            if (triggerBlocker == null) return AcquisitionInfo.UNKNOWN;
+        }
+
+        long cooldownRemaining = 0L;
+        List<String> purchaseBlockers = new ArrayList<>();
+        if (definition.isPurchasable()) {
+            if (player.experienceLevel < cost.xpLevels()) {
+                purchaseBlockers.add("Need " + (cost.xpLevels() - player.experienceLevel) + " more XP levels");
+            }
+            Map<ResourceLocation, Integer> remainingItems = new HashMap<>();
+            for (var itemCost : cost.items()) {
+                int available = remainingItems.computeIfAbsent(itemCost.item(), item -> countItem(player, item));
+                int shortage = itemCost.count() - available;
+                if (shortage > 0) purchaseBlockers.add("Need " + formatItemCost(itemCost.item(), shortage));
+                remainingItems.put(itemCost.item(), Math.max(0, available - itemCost.count()));
+            }
+            cooldownRemaining = purchaseCooldownRemainingMillis(player, cost);
+            List<String> purchaseChecks = new ArrayList<>(sharedBlockers);
+            if (triggersGatePurchase && triggerBlocker != null) purchaseChecks.add(triggerBlocker);
+            purchaseChecks.addAll(purchaseBlockers);
+            boolean summarySaysReady = purchaseChecks.isEmpty() && cooldownRemaining <= 0L;
+            if (canPurchase(player, definition) != summarySaysReady) {
+                return new AcquisitionInfo(false, "", cooldownRemaining);
+            }
+        }
+
+        List<String> routes = new ArrayList<>();
+        if (definition.hasTriggers()) {
+            List<String> triggerChecks = new ArrayList<>(sharedBlockers);
+            if (triggerBlocker != null) triggerChecks.add(triggerBlocker);
+            routes.add(formatAcquisitionRoute("Trigger route", triggerChecks));
+        }
+        if (definition.isPurchasable()) {
+            List<String> purchaseChecks = new ArrayList<>(sharedBlockers);
+            if (triggersGatePurchase && triggerBlocker != null) purchaseChecks.add(triggerBlocker);
+            purchaseChecks.addAll(purchaseBlockers);
+            routes.add(formatAcquisitionRoute("Purchase route", purchaseChecks.isEmpty()
+                && cooldownRemaining <= 0L ? List.of("Ready to buy") : purchaseChecks));
+        }
+        return AcquisitionInfo.of(routes, cooldownRemaining);
+    }
+
+    private static String formatAcquisitionRoute(String name, List<String> checks) {
+        return name + ": " + (checks.isEmpty() ? "No unmet requirements were detected" : String.join("; ", checks));
+    }
+
+    static String triggerBlocker(List<RuleLine> rules) {
+        List<String> routes = new ArrayList<>();
+        for (RuleLine rule : rules) {
+            if (rule.satisfied()) continue;
+            if (rule.conditions().isEmpty()) {
+                if (rule.description().isBlank()) return null;
+                routes.add(rule.description());
+                continue;
+            }
+            String mode = rule.mode().toLowerCase(java.util.Locale.ROOT);
+            if (!mode.equals("all_of") && !mode.equals("any_of")) return null;
+            List<String> conditions = rule.conditions().stream().filter(condition -> !condition.satisfied())
+                .map(condition -> condition.threshold() > 0
+                    ? condition.label() + " (" + condition.current() + "/" + condition.threshold() + ")"
+                    : condition.label())
+                .filter(label -> !label.isBlank()).toList();
+            if (conditions.isEmpty()) return null;
+            routes.add(String.join(mode.equals("any_of") ? " or " : " and ", conditions));
+        }
+        if (routes.isEmpty()) return null;
+        return "Complete one of these trigger routes: " + String.join("; or ", routes);
     }
 
     static String formatItemCost(ResourceLocation itemId, int count) {
@@ -591,6 +745,8 @@ public class NetworkHandler {
         guiResponses.clear();
         challengeHudFingerprints.clear();
         clientSnapshotHistory.clear();
+        serverGuiDefinitionRevisions.clear();
+        serverGuiProgressSequences.clear();
     }
 
     public static void clearPlayerRuntimeState(java.util.UUID player) {
@@ -599,6 +755,8 @@ public class NetworkHandler {
         snapshotRequests.clear(player);
         guiResponses.clear(player);
         challengeHudFingerprints.remove(player);
+        serverGuiDefinitionRevisions.remove(player);
+        serverGuiProgressSequences.remove(player);
     }
 
     public static void sendCompiledSnapshot(ServerPlayer player) {
@@ -805,7 +963,8 @@ public class NetworkHandler {
 
     private static void handleStageGuiDataClient(StageGuiDataPayload payload, IPayloadContext context) {
         context.enqueueWork(() ->
-            com.enviouse.progressivestages.client.ClientTriggerProgress.acceptResponse(payload.stages()));
+            com.enviouse.progressivestages.client.ClientTriggerProgress.acceptResponse(
+                payload.definitionRevision(), payload.sequence(), payload.stages()));
     }
 
     private static void handleOpenStageGuiClient(OpenStageGuiPayload payload, IPayloadContext context) {
@@ -999,12 +1158,107 @@ public class NetworkHandler {
                     def.getUiFrame(),
                     def.getUiBackground(),
                     def.getUiReveal(),
-                    def.getUiSortOrder()
+                    def.getUiSortOrder(),
+                    def.getGuide().howToUnlock(),
+                    def.getGuide().nextSteps(),
+                    def.getGuide().whereToFind(),
+                    def.getGuide().recommendation().configName(),
+                    def.getGuide().enabled()
                 ));
             });
         }
 
-        PacketDistributor.sendToPlayer(player, new StageDefinitionsSyncPayload(definitions));
+        boolean guideEnabled = com.enviouse.progressivestages.common.config.StageConfig.isEnableStageGuide();
+        List<List<StageDefinitionEntry>> chunks = splitDefinitionEntries(definitions);
+        long revision = nextDefinitionRevision(NEXT_STAGE_DEFINITION_REVISION);
+        serverGuiDefinitionRevisions.put(player.getUUID(), revision);
+        serverGuiProgressSequences.put(player.getUUID(), 0L);
+        for (int sequence = 0; sequence < chunks.size(); sequence++) {
+            PacketDistributor.sendToPlayer(player, new StageDefinitionsSyncPayload(revision, sequence,
+                chunks.size(), guideEnabled, chunks.get(sequence)));
+        }
+    }
+
+    static long nextDefinitionRevision(AtomicLong revisions) {
+        return revisions.updateAndGet(current -> {
+            if (current < 0 || current == Long.MAX_VALUE) {
+                throw new IllegalStateException("Stage definition revision sequence is exhausted or invalid");
+            }
+            return current + 1;
+        });
+    }
+
+    static List<List<StageDefinitionEntry>> splitDefinitionEntries(List<StageDefinitionEntry> definitions) {
+        List<List<StageDefinitionEntry>> chunks = new ArrayList<>();
+        List<StageDefinitionEntry> current = new ArrayList<>();
+        int currentBytes = varIntSize(0);
+        int totalBytes = 0;
+        for (StageDefinitionEntry entry : definitions) {
+            int entryBytes = encodedDefinitionEntryBytes(entry);
+            int candidateCount = current.size() + 1;
+            int candidateBytes = currentBytes + entryBytes
+                + varIntSize(candidateCount) - varIntSize(current.size());
+            if (!current.isEmpty() && (candidateCount > MAX_STAGE_DEFINITION_ENTRIES_PER_CHUNK
+                    || candidateBytes > STAGE_DEFINITION_CHUNK_BYTES)) {
+                totalBytes += currentBytes;
+                if (totalBytes > MAX_STAGE_DEFINITION_SNAPSHOT_BYTES) {
+                    throw new IllegalArgumentException("Stage definition snapshot exceeds the configured size limit");
+                }
+                chunks.add(List.copyOf(current));
+                current.clear();
+                candidateCount = 1;
+                candidateBytes = varIntSize(candidateCount) + entryBytes;
+            }
+            if (candidateCount > MAX_STAGE_DEFINITION_ENTRIES_PER_CHUNK) {
+                throw new IllegalArgumentException("A stage definition list exceeds the configured entry limit");
+            }
+            if (candidateBytes > STAGE_DEFINITION_CHUNK_BYTES) {
+                throw new IllegalArgumentException("A stage definition exceeds the configured transport chunk limit");
+            }
+            if ((long) totalBytes + candidateBytes > MAX_STAGE_DEFINITION_SNAPSHOT_BYTES) {
+                throw new IllegalArgumentException("Stage definition snapshot exceeds the configured size limit");
+            }
+            current.add(entry);
+            currentBytes = candidateBytes;
+        }
+        if (!current.isEmpty() || chunks.isEmpty()) {
+            if ((long) totalBytes + currentBytes > MAX_STAGE_DEFINITION_SNAPSHOT_BYTES) {
+                throw new IllegalArgumentException("Stage definition snapshot exceeds the configured size limit");
+            }
+            chunks.add(List.copyOf(current));
+        }
+        if (chunks.size() > 4096) {
+            throw new IllegalArgumentException("Stage definition snapshot has too many chunks");
+        }
+        return chunks;
+    }
+
+    private static int encodedDefinitionBytes(List<StageDefinitionEntry> definitions) {
+        if (definitions.size() > MAX_STAGE_DEFINITION_ENTRIES_PER_CHUNK) {
+            throw new IllegalArgumentException("Stage definition list exceeds the configured entry limit");
+        }
+        int bytes = varIntSize(definitions.size());
+        for (StageDefinitionEntry entry : definitions) bytes += encodedDefinitionEntryBytes(entry);
+        return bytes;
+    }
+
+    private static int encodedDefinitionEntryBytes(StageDefinitionEntry definition) {
+        io.netty.buffer.ByteBuf raw = io.netty.buffer.Unpooled.buffer();
+        try {
+            StageDefinitionEntry.STREAM_CODEC.encode(new FriendlyByteBuf(raw), definition);
+            return raw.readableBytes();
+        } finally {
+            raw.release();
+        }
+    }
+
+    private static int varIntSize(int value) {
+        int bytes = 1;
+        while ((value & ~0x7F) != 0) {
+            value >>>= 7;
+            bytes++;
+        }
+        return bytes;
     }
 
     /** v2.3: a per-stage [display] override (nullable) falls back to the global default. */
@@ -1145,9 +1399,61 @@ public class NetworkHandler {
     }
 
     private static void handleStageDefinitionsSyncClient(StageDefinitionsSyncPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
+        context.enqueueWork(() -> acceptStageDefinitionsClient(payload));
+    }
+
+    static void acceptStageDefinitionsClient(StageDefinitionsSyncPayload payload) {
+            if (payload.totalChunks() < 1 || payload.sequence() < 0 || payload.sequence() >= payload.totalChunks()) return;
+            if (payload.revision() < latestClientDefinitionRevision) return;
+            if (payload.revision() > latestClientDefinitionRevision) {
+                latestClientDefinitionRevision = payload.revision();
+                CLIENT_DEFINITION_ASSEMBLIES.keySet().removeIf(revision -> revision < payload.revision());
+            }
+            if (payload.totalChunks() == 1) {
+                CLIENT_DEFINITION_ASSEMBLIES.remove(payload.revision());
+                applyStageDefinitionSnapshot(payload.definitions(), payload.guideEnabled(), payload.revision());
+                return;
+            }
+            DefinitionAssembly assembly = CLIENT_DEFINITION_ASSEMBLIES.compute(payload.revision(), (key, current) -> {
+                if (current == null || current.total != payload.totalChunks() || current.guideEnabled != payload.guideEnabled()) {
+                    return new DefinitionAssembly(payload.totalChunks(), payload.guideEnabled());
+                }
+                return current;
+            });
+            synchronized (assembly) {
+                assembly.lastSeenTick = clientDefinitionTick;
+                if (!assembly.chunks.containsKey(payload.sequence())) {
+                    int chunkBytes = encodedDefinitionBytes(payload.definitions());
+                    if ((long) assembly.encodedBytes + chunkBytes > MAX_STAGE_DEFINITION_SNAPSHOT_BYTES) {
+                        CLIENT_DEFINITION_ASSEMBLIES.remove(payload.revision(), assembly);
+                        return;
+                    }
+                    assembly.encodedBytes += chunkBytes;
+                    assembly.chunks.put(payload.sequence(), payload.definitions());
+                }
+                if (assembly.chunks.size() != assembly.total) return;
+                List<StageDefinitionEntry> entries = new ArrayList<>();
+                for (int sequence = 0; sequence < assembly.total; sequence++) {
+                    List<StageDefinitionEntry> chunk = assembly.chunks.get(sequence);
+                    if (chunk == null) return;
+                    entries.addAll(chunk);
+                }
+                CLIENT_DEFINITION_ASSEMBLIES.remove(payload.revision(), assembly);
+                applyStageDefinitionSnapshot(entries, assembly.guideEnabled, payload.revision());
+            }
+    }
+
+    /** Remove incomplete definition snapshots that were abandoned by a stalled connection. */
+    public static void tickClientDefinitionAssemblies() {
+        long tick = ++clientDefinitionTick;
+        CLIENT_DEFINITION_ASSEMBLIES.entrySet().removeIf(entry ->
+            tick - entry.getValue().lastSeenTick > DEFINITION_ASSEMBLY_EXPIRY_TICKS);
+    }
+
+    private static void applyStageDefinitionSnapshot(List<StageDefinitionEntry> entries, boolean guideEnabled,
+                                                     long definitionRevision) {
             Map<StageId, ClientStageCache.StageDefinitionData> definitions = new HashMap<>();
-            for (StageDefinitionEntry entry : payload.definitions()) {
+            for (StageDefinitionEntry entry : entries) {
                 StageId stageId = StageId.fromResourceLocation(entry.stageId());
                 List<StageId> deps = entry.dependencies().stream()
                     .map(StageId::fromResourceLocation)
@@ -1179,11 +1485,24 @@ public class NetworkHandler {
                     entry.uiFrame(),
                     entry.uiBackground(),
                     entry.uiReveal(),
-                    entry.uiSortOrder()
+                    entry.uiSortOrder(),
+                    entry.howToUnlock(),
+                    entry.nextSteps(),
+                    entry.whereToFind(),
+                    entry.recommendation(),
+                    entry.showGuide()
                 ));
             }
             ClientStageCache.setStageDefinitions(definitions);
-        });
+            ClientStageCache.setStageGuideEnabled(guideEnabled);
+            ClientStageCache.setDefinitionSnapshotRevision(definitionRevision);
+            com.enviouse.progressivestages.client.ClientTriggerProgress.onDefinitionsAccepted(definitionRevision);
+    }
+
+    public static void clearClientDefinitionAssembly() {
+        CLIENT_DEFINITION_ASSEMBLIES.clear();
+        latestClientDefinitionRevision = Long.MIN_VALUE;
+        clientDefinitionTick = 0L;
     }
 
     private static void handleCreativeBypassClient(CreativeBypassPayload payload, IPayloadContext context) {
@@ -1344,10 +1663,29 @@ public class NetworkHandler {
                                        boolean hidden, String color, String category,
                                        String slotGroup, int slotLimit, String slotPolicy,
                                        boolean hasUiPosition, int uiX, int uiY, String uiFrame,
-                                       String uiBackground, String uiReveal, int uiSortOrder) {
+                                       String uiBackground, String uiReveal, int uiSortOrder,
+                                       String howToUnlock, String nextSteps, String whereToFind,
+                                       String recommendation, boolean showGuide) {
 
         private static final StreamCodec<io.netty.buffer.ByteBuf, List<ResourceLocation>> DEPS_CODEC =
             ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list());
+        private static final StreamCodec<FriendlyByteBuf, String> GUIDE_TEXT_CODEC = StreamCodec.of(
+            (buf, value) -> {
+                validateGuideText(value);
+                ByteBufCodecs.stringUtf8(StageGuide.MAX_TEXT_BYTES).encode(buf, value);
+            },
+            buf -> {
+                String value = ByteBufCodecs.stringUtf8(StageGuide.MAX_TEXT_BYTES).decode(buf);
+                validateGuideText(value);
+                return value;
+            });
+
+        private static void validateGuideText(String value) {
+            if (value == null || value.codePoints().count() > StageGuide.MAX_TEXT_CODE_POINTS
+                    || value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > StageGuide.MAX_TEXT_BYTES) {
+                throw new IllegalArgumentException("Guide text exceeds the configured transport limit");
+            }
+        }
 
         public static final StreamCodec<FriendlyByteBuf, StageDefinitionEntry> STREAM_CODEC = StreamCodec.of(
             (buf, e) -> {
@@ -1379,6 +1717,11 @@ public class NetworkHandler {
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.uiBackground());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.uiReveal());
                 buf.writeVarInt(e.uiSortOrder());
+                GUIDE_TEXT_CODEC.encode(buf, e.howToUnlock());
+                GUIDE_TEXT_CODEC.encode(buf, e.nextSteps());
+                GUIDE_TEXT_CODEC.encode(buf, e.whereToFind());
+                ByteBufCodecs.STRING_UTF8.encode(buf, e.recommendation());
+                buf.writeBoolean(e.showGuide());
             },
             buf -> {
                 ResourceLocation stageId = ResourceLocation.STREAM_CODEC.decode(buf);
@@ -1406,12 +1749,18 @@ public class NetworkHandler {
                 String uiBackground = ByteBufCodecs.STRING_UTF8.decode(buf);
                 String uiReveal = ByteBufCodecs.STRING_UTF8.decode(buf);
                 int uiSortOrder = buf.readVarInt();
+                String howToUnlock = GUIDE_TEXT_CODEC.decode(buf);
+                String nextSteps = GUIDE_TEXT_CODEC.decode(buf);
+                String whereToFind = GUIDE_TEXT_CODEC.decode(buf);
+                String recommendation = ByteBufCodecs.STRING_UTF8.decode(buf);
+                boolean showGuide = buf.readBoolean();
                 return new StageDefinitionEntry(stageId, displayName, dependencies, dependencyMode,
                     dependencyCount, description,
                     icon, displayAsUnknownItem, obscureIcon, showTooltip, showDescriptionOnTooltip,
                     hasTriggers, hidden, color, category, slotGroup, slotLimit, slotPolicy,
                     hasUiPosition, uiX, uiY, uiFrame,
-                    uiBackground, uiReveal, uiSortOrder);
+                    uiBackground, uiReveal, uiSortOrder,
+                    howToUnlock, nextSteps, whereToFind, recommendation, showGuide);
             }
         );
     }
@@ -1420,14 +1769,46 @@ public class NetworkHandler {
      * Stage definitions sync payload (v1.3)
      * Sends all stage definitions with dependencies to client.
      */
-    public record StageDefinitionsSyncPayload(List<StageDefinitionEntry> definitions) implements CustomPacketPayload {
+    public record StageDefinitionsSyncPayload(long revision, int sequence, int totalChunks,
+                                              boolean guideEnabled, List<StageDefinitionEntry> definitions) implements CustomPacketPayload {
         public static final Type<StageDefinitionsSyncPayload> TYPE = new Type<>(Constants.STAGE_DEFINITIONS_SYNC_PACKET);
 
-        public static final StreamCodec<FriendlyByteBuf, StageDefinitionsSyncPayload> STREAM_CODEC = StreamCodec.composite(
-            StageDefinitionEntry.STREAM_CODEC.apply(ByteBufCodecs.list()),
-            StageDefinitionsSyncPayload::definitions,
-            StageDefinitionsSyncPayload::new
-        );
+        public static final StreamCodec<FriendlyByteBuf, StageDefinitionsSyncPayload> STREAM_CODEC = new StreamCodec<>() {
+            @Override public StageDefinitionsSyncPayload decode(FriendlyByteBuf buffer) {
+                long revision = buffer.readVarLong();
+                int sequence = buffer.readVarInt();
+                int total = buffer.readVarInt();
+                boolean enabled = buffer.readBoolean();
+                if (total < 1 || total > 4096 || sequence < 0 || sequence >= total) {
+                    throw new IllegalArgumentException("Stage definition snapshot chunk bounds are invalid");
+                }
+                int definitionsStart = buffer.readerIndex();
+                List<StageDefinitionEntry> definitions = STAGE_DEFINITION_LIST_CODEC.decode(buffer);
+                if (buffer.readerIndex() - definitionsStart > STAGE_DEFINITION_CHUNK_BYTES) {
+                    throw new IllegalArgumentException("Stage definition payload exceeds the configured chunk limit");
+                }
+                return new StageDefinitionsSyncPayload(revision, sequence, total, enabled, definitions);
+            }
+            @Override public void encode(FriendlyByteBuf buffer, StageDefinitionsSyncPayload payload) {
+                if (payload.totalChunks() < 1 || payload.totalChunks() > 4096
+                        || payload.sequence() < 0 || payload.sequence() >= payload.totalChunks()) {
+                    throw new IllegalArgumentException("Stage definition snapshot chunk bounds are invalid");
+                }
+                if (encodedDefinitionBytes(payload.definitions()) > STAGE_DEFINITION_CHUNK_BYTES) {
+                    throw new IllegalArgumentException("Stage definition payload exceeds the configured chunk limit");
+                }
+                int payloadStart = buffer.writerIndex();
+                buffer.writeVarLong(payload.revision());
+                buffer.writeVarInt(payload.sequence());
+                buffer.writeVarInt(payload.totalChunks());
+                buffer.writeBoolean(payload.guideEnabled());
+                STAGE_DEFINITION_LIST_CODEC.encode(buffer, payload.definitions());
+                if (buffer.writerIndex() - payloadStart > MAX_CUSTOM_PAYLOAD_BYTES) {
+                    buffer.writerIndex(payloadStart);
+                    throw new IllegalArgumentException("Stage definition payload exceeds the Minecraft packet limit");
+                }
+            }
+        };
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -1537,15 +1918,54 @@ public class NetworkHandler {
     }
 
     /** A purchase offer for the recipient and whether its requirements are met. */
-    public record CostInfo(boolean purchasable, int costXp, String summary, boolean canPurchase) {
-        public static final CostInfo NONE = new CostInfo(false, 0, "", false);
+    public record CostInfo(boolean purchasable, int costXp, String summary, boolean canPurchase,
+                           boolean bypassesTriggers) {
+        public static final CostInfo NONE = new CostInfo(false, 0, "", false, false);
+
+        public CostInfo(boolean purchasable, int costXp, String summary, boolean canPurchase) {
+            this(purchasable, costXp, summary, canPurchase, false);
+        }
+
         public static final StreamCodec<FriendlyByteBuf, CostInfo> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.BOOL, CostInfo::purchasable,
             ByteBufCodecs.VAR_INT, CostInfo::costXp,
             ByteBufCodecs.STRING_UTF8, CostInfo::summary,
             ByteBufCodecs.BOOL, CostInfo::canPurchase,
+            ByteBufCodecs.BOOL, CostInfo::bypassesTriggers,
             CostInfo::new
         );
+    }
+
+    /** Server-evaluated requirements used only by the optional player guide. */
+    public record AcquisitionInfo(boolean available, String remaining, long cooldownRemainingMillis) {
+        public static final AcquisitionInfo UNKNOWN = new AcquisitionInfo(false, "", 0L);
+        public static final StreamCodec<FriendlyByteBuf, AcquisitionInfo> STREAM_CODEC = new StreamCodec<>() {
+            @Override public AcquisitionInfo decode(FriendlyByteBuf buffer) {
+                return new AcquisitionInfo(buffer.readBoolean(), buffer.readUtf(), buffer.readLong());
+            }
+            @Override public void encode(FriendlyByteBuf buffer, AcquisitionInfo value) {
+                buffer.writeBoolean(value.available());
+                buffer.writeUtf(value.remaining());
+                buffer.writeLong(value.cooldownRemainingMillis());
+            }
+        };
+
+        public AcquisitionInfo {
+            remaining = remaining == null ? "" : remaining;
+            cooldownRemainingMillis = Math.max(0L, cooldownRemainingMillis);
+            if (remaining.codePointCount(0, remaining.length())
+                    > com.enviouse.progressivestages.common.config.StageGuide.MAX_TEXT_CODE_POINTS
+                    || remaining.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+                    > com.enviouse.progressivestages.common.config.StageGuide.MAX_TEXT_BYTES) {
+                available = false;
+                remaining = "";
+            }
+            if (!available) remaining = "";
+        }
+
+        static AcquisitionInfo of(List<String> blockers, long cooldownRemainingMillis) {
+            return new AcquisitionInfo(true, String.join("; ", blockers), cooldownRemainingMillis);
+        }
     }
 
     public record WhyLine(String category, String action, ResourceLocation target, String winner,
@@ -1615,6 +2035,7 @@ public class NetworkHandler {
      */
     public record StageProgress(ResourceLocation stageId, List<RuleLine> rules,
                                 List<ResourceLocation> unlockSample, int unlockTotal, CostInfo cost,
+                                AcquisitionInfo acquisition,
                                 List<WhyLine> why, List<ChallengeLine> challenges,
                                 List<ModifierPreviewLine> modifiers, List<HistoryLine> history) {
         public static final StreamCodec<FriendlyByteBuf, StageProgress> STREAM_CODEC = new StreamCodec<>() {
@@ -1623,6 +2044,7 @@ public class NetworkHandler {
                     RuleLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
                     ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
                     buffer.readVarInt(), CostInfo.STREAM_CODEC.decode(buffer),
+                    AcquisitionInfo.STREAM_CODEC.decode(buffer),
                     WhyLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
                     ChallengeLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
                     ModifierPreviewLine.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buffer),
@@ -1633,6 +2055,7 @@ public class NetworkHandler {
                 RuleLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.rules());
                 ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.unlockSample());
                 buffer.writeVarInt(value.unlockTotal()); CostInfo.STREAM_CODEC.encode(buffer, value.cost());
+                AcquisitionInfo.STREAM_CODEC.encode(buffer, value.acquisition());
                 WhyLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.why());
                 ChallengeLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.challenges());
                 ModifierPreviewLine.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buffer, value.modifiers());
@@ -1649,11 +2072,16 @@ public class NetworkHandler {
         @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
     }
 
-    /** server gui data retains its legacy wire format. */
-    public record StageGuiDataPayload(List<StageProgress> stages) implements CustomPacketPayload {
+    /** Player progress and acquisition snapshot, paired with the current registered protocol. */
+    public record StageGuiDataPayload(long definitionRevision, long sequence,
+                                      List<StageProgress> stages) implements CustomPacketPayload {
         public static final Type<StageGuiDataPayload> TYPE = new Type<>(Constants.STAGE_GUI_DATA_PACKET);
 
         public static final StreamCodec<FriendlyByteBuf, StageGuiDataPayload> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_LONG,
+            StageGuiDataPayload::definitionRevision,
+            ByteBufCodecs.VAR_LONG,
+            StageGuiDataPayload::sequence,
             StageProgress.STREAM_CODEC.apply(ByteBufCodecs.list()),
             StageGuiDataPayload::stages,
             StageGuiDataPayload::new

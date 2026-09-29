@@ -40,7 +40,7 @@ function SettingControl({ schema }: { schema: FieldSchema }) {
     else if (schema.type === "INTEGER") typed = Number(next);
     else if (schema.type === "DECIMAL") typed = Number(next);
     else if (schema.type === "LIST") typed = lineValues(next);
-    await mutateFile("progressivestages.toml", upsertToml(content, schema.path, typed), `${schema.label} saved`);
+    await mutateFile("progressivestages.toml", current => upsertToml(current, schema.path, typed), `${schema.label} saved`);
   };
   if (schema.type === "BOOLEAN") return <Toggle label={schema.label} help={schema.help} checked={booleanValue(raw || String(schema.defaultValue))} onChange={checked => void save(String(checked))}/>;
   return <Field label={schema.label} help={`${schema.help}${schema.restartRequirement && schema.restartRequirement !== "NONE" ? ` Restart requirement. ${schema.restartRequirement}.` : ""}`} wide={schema.type === "LIST"}>

@@ -1,5 +1,0 @@
-{
-	version: 13
-	default_reward_team: false
-	default_autoclaim_rewards: "disabled"
-}

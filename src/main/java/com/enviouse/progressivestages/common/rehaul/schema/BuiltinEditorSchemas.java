@@ -15,6 +15,7 @@ import java.util.function.BiConsumer;
 final class BuiltinEditorSchemas {
 
     private static final Set<String> PREFIXES = Set.of("all", "id", "mod", "tag", "name");
+    private static final Set<String> EXACT_ID = Set.of("id");
 
     private BuiltinEditorSchemas() {}
 
@@ -99,13 +100,14 @@ final class BuiltinEditorSchemas {
         add(sink, "display.encrypt_as", "stage.toml", "display.encrypt_as", "Encrypted block substitute", "The block shown while encryption is active.",
             SchemaValueType.RESOURCE_ID, "minecraft:stone", false, catalog("blocks"), Set.of(), List.of());
 
-        category(sink, "items", "items", List.of("use", "pickup", "inventory", "hotbar", "mouse_pickup", "drop"));
-        category(sink, "blocks", "blocks", List.of("place", "break", "interact"));
-        category(sink, "fluids", "fluids", List.of("pickup", "place", "flow", "submerge"));
-        category(sink, "recipes", "recipes", List.of("craft", "automate", "display"));
-        category(sink, "crops", "blocks", List.of("plant", "grow", "bonemeal", "harvest"));
-        category(sink, "dimensions", "dimensions", List.of("enter", "portal", "teleport"));
-        category(sink, "enchants", "enchantments", List.of("table", "anvil", "trade", "hold"));
+        category(sink, "items", "items", "use");
+        category(sink, "blocks", "blocks", "interact");
+        add(sink, "rules.blocks.overrides", "rules.toml", "blocks.overrides", "Block overrides",
+            "Replace selected blocks and their drops until the stage is owned. Use block IDs, tags, or a mod namespace.",
+            SchemaValueType.OBJECT, List.of(), false, null, Set.of(), List.of());
+        category(sink, "fluids", "fluids", "interact");
+        category(sink, "crops", "blocks", "grow");
+        category(sink, "enchants", "enchantments", "apply");
         add(sink, "rules.enchants.max_levels", "rules.toml", "enchants.max_levels",
             "Enchantment level limits",
             "Exact enchantment IDs and maximum levels used until this stage is owned.",
@@ -114,22 +116,39 @@ final class BuiltinEditorSchemas {
             "Enchantment selection weights",
             "Exact enchantment IDs and roll weights used until this stage is owned. Zero prevents generation.",
             SchemaValueType.LIST, List.of(), false, catalog("enchantments"), Set.of(), List.of());
-        category(sink, "entities", "entities", List.of("presence", "attack", "interact", "mount"));
-        category(sink, "interactions", "items", List.of("block_right_click", "item_on_block", "item_on_entity", "item_into_inventory"));
-        category(sink, "loot", "loot_tables", List.of("generate", "open", "drop"));
-        category(sink, "mobs", "entities", List.of("spawn", "replace"));
-        category(sink, "pets", "entities", List.of("tame", "breed", "command", "ride"));
-        category(sink, "screens", "menus", List.of("open"));
-        category(sink, "trades", "items", List.of("display", "purchase"));
-        category(sink, "professions", "professions", List.of("trade"));
-        category(sink, "advancements", "advancements", List.of("display", "toast"));
-        category(sink, "structures", "structures", List.of("enter", "break", "place", "explode", "spawn"));
-        category(sink, "regions", "dimensions", List.of("enter", "break", "place", "explode", "spawn"));
-        category(sink, "curios", "curios_slots", List.of("equip", "retain"));
-        category(sink, "ores", "blocks", List.of("display", "drop"));
-        category(sink, "beacon", "effects", List.of("apply"));
-        category(sink, "brewing", "potions", List.of("brew", "take"));
-        category(sink, "abilities", "abilities", List.of("use"));
+        category(sink, "entities", "entities", "presence");
+        category(sink, "loot", "loot_tables", "generate");
+        category(sink, "screens", "menus", "open");
+        category(sink, "trades", "items", "trade");
+        category(sink, "professions", "professions", "trade");
+        category(sink, "advancements", "advancements", "display");
+        category(sink, "beacon", "effects", "apply");
+        category(sink, "brewing", "potions", "take");
+
+        add(sink, "dimensions.locked", "rules.toml", "dimensions.locked", "Dimensions locked",
+            "Exact dimension IDs. Mod, tag, name and wildcard selectors are not supported here.",
+            SchemaValueType.PREFIX, List.of(), false, catalog("dimensions"), EXACT_ID, List.of("enter"));
+        add(sink, "mobs.locked_spawns", "rules.toml", "mobs.locked_spawns", "Mob spawns locked",
+            "Entity selectors whose spawning is stopped until this stage is owned.",
+            SchemaValueType.PREFIX, List.of(), false, catalog("entities"), PREFIXES, List.of("spawn"));
+        for (String action : List.of("taming", "breeding", "commanding")) {
+            add(sink, "pets.locked_" + action, "rules.toml", "pets.locked_" + action,
+                "Pet " + action + " locked", "Entity selectors for this pet action.",
+                SchemaValueType.PREFIX, List.of(), false, catalog("entities"), PREFIXES,
+                List.of(switch (action) { case "taming" -> "tame"; case "breeding" -> "breed"; default -> "command"; }));
+        }
+        add(sink, "curios.locked_slots", "rules.toml", "curios.locked_slots", "Curios slots locked",
+            "Exact Curios slot names. This does not use item or block selectors.",
+            SchemaValueType.LIST, List.of(), false, catalog("curios_slots"), Set.of(), List.of("equip"));
+        add(sink, "abilities.locked", "rules.toml", "abilities.locked", "Abilities locked",
+            "Exact ability names such as jump, sprint, swim, climb, or elytra.",
+            SchemaValueType.LIST, List.of(), false, catalog("abilities"), Set.of(), List.of("use"));
+        add(sink, "recipes.locked_items", "rules.toml", "recipes.locked_items", "Recipe outputs locked",
+            "Exact output item IDs. Use locked_ids for recipe identifiers.",
+            SchemaValueType.PREFIX, List.of(), false, catalog("items"), EXACT_ID, List.of("craft"));
+        add(sink, "recipes.locked_ids", "rules.toml", "recipes.locked_ids", "Recipe IDs locked",
+            "Exact recipe IDs. Use locked_items to lock every recipe with a selected output.",
+            SchemaValueType.PREFIX, List.of(), false, catalog("recipes"), EXACT_ID, List.of("craft"));
 
         add(sink, "rules.temporary", "rules.toml", "temporary_rules", "Temporary rules",
             "Rules activated by any condition and lifetime.", SchemaValueType.OBJECT, List.of(), false,
@@ -180,22 +199,13 @@ final class BuiltinEditorSchemas {
     }
 
     private static void category(BiConsumer<ResourceLocation, EditorFieldSchema> sink, String category,
-                                 String catalog, List<String> actions) {
+                                 String catalog, String action) {
         add(sink, "rules." + category + ".locked", "rules.toml", category + ".locked", title(category) + " locked",
             "One selector per line. These entries are denied until the stage is owned.",
-            SchemaValueType.PREFIX, List.of(), false, catalog(catalog), PREFIXES, actions);
-        add(sink, "rules." + category + ".allowed", "rules.toml", category + ".allowed", title(category) + " allowed",
-            "One selector per line. These are explicit allows resolved by priority.",
-            SchemaValueType.PREFIX, List.of(), false, catalog(catalog), PREFIXES, actions);
-        add(sink, "rules." + category + ".priority", "rules.toml", category + ".priority", title(category) + " priority",
-            "The category priority used when an entry has no explicit priority.",
-            SchemaValueType.INTEGER, 0, false, null, Set.of(), List.of());
-        add(sink, "rules." + category + ".priorities", "rules.toml", category + ".priorities", title(category) + " entry priorities",
-            "An inline object that maps exact selector text to priority.",
-            SchemaValueType.OBJECT, Map.of(), false, null, Set.of(), List.of());
-        add(sink, "rules." + category + ".presentation", "rules.toml", category + ".presentation", title(category) + " viewer policy",
-            "Per selector EMI and JEI show hide overlay and priority settings.",
-            SchemaValueType.OBJECT, Map.of(), false, catalog(catalog), PREFIXES, List.of());
+            SchemaValueType.PREFIX, List.of(), false, catalog(catalog), PREFIXES, List.of(action));
+        add(sink, "rules." + category + ".always_unlocked", "rules.toml", category + ".always_unlocked",
+            title(category) + " always unlocked", "Exact IDs excluded from this stage lock. Other selector types are not allowed.",
+            SchemaValueType.PREFIX, List.of(), false, catalog(catalog), EXACT_ID, List.of(action));
     }
 
     private static void add(BiConsumer<ResourceLocation, EditorFieldSchema> sink, String idPath,

@@ -30,7 +30,6 @@ public final class CommandPermissionGameTests {
         var server = helper.getLevel().getServer();
         var cookie = CommonListenerCookie.createInitial(new GameProfile(UUID.randomUUID(), "command_test"), false);
         var player = new ServerPlayer(server, helper.getLevel(), cookie.gameProfile(), cookie.clientInformation());
-        net.luckperms.api.LuckPermsProvider.get().getUserManager().loadUser(player.getUUID(), "command_test").join();
         var source = player.createCommandSourceStack().withPermission(4).withSuppressedOutput();
         var order = StageOrder.getInstance();
         var previous = order.getOrderedStages().stream()
@@ -83,8 +82,6 @@ public final class CommandPermissionGameTests {
             stages.revokeStage(owner, stage);
             order.clear();
             previous.forEach(order::registerStage);
-            var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(player.getUUID());
-            if (user != null) net.luckperms.api.LuckPermsProvider.get().getUserManager().cleanupUser(user);
             player.discard();
         }
     }
@@ -94,7 +91,6 @@ public final class CommandPermissionGameTests {
         var server = helper.getLevel().getServer();
         var cookie = CommonListenerCookie.createInitial(new GameProfile(UUID.randomUUID(), "command_default"), false);
         var player = new ServerPlayer(server, helper.getLevel(), cookie.gameProfile(), cookie.clientInformation());
-        net.luckperms.api.LuckPermsProvider.get().getUserManager().loadUser(player.getUUID(), "command_default").join();
         var source = player.createCommandSourceStack().withPermission(4).withSuppressedOutput();
         var order = StageOrder.getInstance();
         var previous = order.getOrderedStages().stream().map(id -> order.getStageDefinition(id).orElseThrow()).toList();
@@ -137,8 +133,6 @@ public final class CommandPermissionGameTests {
             stages.revokeStage(owner, stage);
             order.clear();
             previous.forEach(order::registerStage);
-            var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(player.getUUID());
-            if (user != null) net.luckperms.api.LuckPermsProvider.get().getUserManager().cleanupUser(user);
             player.discard();
         }
         helper.succeed();

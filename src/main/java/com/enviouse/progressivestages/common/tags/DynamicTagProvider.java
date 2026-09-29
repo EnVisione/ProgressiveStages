@@ -1,5 +1,6 @@
 package com.enviouse.progressivestages.common.tags;
 
+import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.util.Constants;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.registries.Registries;
@@ -76,6 +77,7 @@ public final class DynamicTagProvider {
      */
     @SubscribeEvent
     public static void onTagsUpdated(TagsUpdatedEvent event) {
-        LOGGER.debug("[ProgressiveStages] Tags updated event - dynamic stage tags are built from TOML files");
+        LockRegistry.getInstance().rebuildBlockOverrideIndex();
+        LOGGER.debug("[ProgressiveStages] Tags updated event - stage tags are built from TOML files and block overrides were reindexed");
     }
 }

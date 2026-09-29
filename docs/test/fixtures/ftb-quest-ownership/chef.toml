@@ -1,9 +1,0 @@
-[stage]
-id = "quest_chef"
-name = "Quest Chef"
-description = "A personal profession earned through a quest reward."
-team_stage = false
-
-[rewards]
-xp_levels = 3
-items = ["minecraft:bread:2"]

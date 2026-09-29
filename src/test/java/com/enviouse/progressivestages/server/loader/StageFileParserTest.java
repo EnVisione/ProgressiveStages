@@ -2,6 +2,7 @@ package com.enviouse.progressivestages.server.loader;
 
 import com.enviouse.progressivestages.common.lock.ConditionalRule;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
+import com.enviouse.progressivestages.common.config.StageGuide;
 import com.enviouse.progressivestages.common.rehaul.ConditionNode;
 import com.enviouse.progressivestages.common.rehaul.RuleLifetime;
 import com.enviouse.progressivestages.common.api.structure.StructureLeaveOutcome;
@@ -19,6 +20,52 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StageFileParserTest {
+
+    @Test
+    void parsesBoundedGuideMetadataForLegacyStages() {
+        var result = StageFileParser.parseText("""
+            [stage]
+            id = "guide_test"
+            [guide]
+            how_to_unlock = "Complete the first quest."
+            next_steps = "Visit the village."
+            where_to_find = "Look beside the river."
+            recommendation = "include"
+            enabled = false
+            """, "guide.toml", "test", false);
+
+        assertTrue(result.isSuccess());
+        assertEquals("Complete the first quest.", result.getStageDefinition().getGuide().howToUnlock());
+        assertEquals(StageGuide.Recommendation.INCLUDE, result.getStageDefinition().getGuide().recommendation());
+        assertFalse(result.getStageDefinition().getGuide().enabled());
+    }
+
+    @Test
+    void stageGuideDefaultsToEnabledForExistingFilesAndRejectsWrongTypes() {
+        var legacy = StageFileParser.parseText("[stage]\nid = \"legacy_guide\"\n[guide]\nhow_to_unlock = \"Find the key.\"\n",
+            "guide.toml", "test", false);
+        var wrongType = StageFileParser.parseText("[stage]\nid = \"bad_guide\"\n[guide]\nenabled = \"false\"\n",
+            "guide.toml", "test", false);
+
+        assertTrue(legacy.isSuccess());
+        assertTrue(legacy.getStageDefinition().getGuide().enabled());
+        assertFalse(wrongType.isSuccess());
+    }
+
+    @Test
+    void rejectsInvalidGuideTextAndRecommendation() {
+        var control = StageFileParser.parseText("[stage]\nid = \"guide_test\"\n[guide]\nhow_to_unlock = \"bad"
+            + Character.toString((char) 1) + "text\"\n", "guide.toml", "test", false);
+        var recommendation = StageFileParser.parseText("""
+            [stage]
+            id = "guide_test"
+            [guide]
+            recommendation = "sometimes"
+            """, "guide.toml", "test", false);
+
+        assertFalse(control.isSuccess());
+        assertFalse(recommendation.isSuccess());
+    }
 
     @TempDir
     Path temporaryDirectory;

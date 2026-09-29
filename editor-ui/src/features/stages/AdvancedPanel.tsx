@@ -185,7 +185,7 @@ function ConfiguredAdvanced({ stage, table }: { stage: StagePackage; table: stri
   const content = boot?.draft.files[stage.progressionPath] || "";
   const groups = useMemo(() => extractArrayGroups(content, table), [content, table]);
   if (!groups.length) return null;
-  return <div className="configured-list">{groups.map((group, index) => <article key={`${table}:${index}`}><div><Badge tone="gold">{title(table.replace(/s$/, ""))}</Badge><strong>{stringValue(readBlockValue(group.text, "title")) || stringValue(readBlockValue(group.text, "id")) || `${title(table)} ${index + 1}`}</strong></div><Button tone="danger" onClick={() => { const next = groups.map(value => value.text); next.splice(index, 1); void mutateFile(stage.progressionPath, replaceArrayGroups(content, table, next), `${title(table)} entry removed`); }}>Remove</Button></article>)}</div>;
+  return <div className="configured-list">{groups.map((group, index) => <article key={`${table}:${index}`}><div><Badge tone="gold" help={`Configured ${title(table.replace(/s$/, "")).toLowerCase()} entry for this stage. Edit its settings in the stage progression source.`}>{title(table.replace(/s$/, ""))}</Badge><strong>{stringValue(readBlockValue(group.text, "title")) || stringValue(readBlockValue(group.text, "id")) || `${title(table)} ${index + 1}`}</strong></div><Button tone="danger" onClick={() => { const next = groups.map(value => value.text); next.splice(index, 1); void mutateFile(stage.progressionPath, replaceArrayGroups(content, table, next), `${title(table)} entry removed`); }}>Remove</Button></article>)}</div>;
 }
 
 export function AdvancedPanel({ stage }: { stage: StagePackage }) {
@@ -202,7 +202,7 @@ export function AdvancedPanel({ stage }: { stage: StagePackage }) {
   ] as const;
   return <div className="stage-panel-stack">
     <Section title="Advanced systems" description="Guided builders for the deeper stage engine. Source editing remains available for exact control.">
-      <div className="advanced-grid">{builders.map(([label, description, countKey, form]) => <button key={label} onClick={() => open(`Add ${label.toLowerCase()}`, description, form)}><span>✦</span><div><strong>{label}</strong><p>{description}</p></div><Badge tone={(counts[countKey] || 0) > 0 ? "success" : "neutral"}>{counts[countKey] || 0}</Badge></button>)}</div>
+      <div className="advanced-grid">{builders.map(([label, description, countKey, form]) => <button key={label} onClick={() => open(`Add ${label.toLowerCase()}`, description, form)}><span>✦</span><div><strong>{label}</strong><p>{description}</p></div><Badge tone={(counts[countKey] || 0) > 0 ? "success" : "neutral"} focusable={false} help={`Currently configured ${label.toLowerCase()} entries.`}>{counts[countKey] || 0}</Badge></button>)}</div>
     </Section>
     <Section title="Configured challenges" description="Challenge sessions keep their progress, limits, success rules, and HUD configuration together.">
       {counts.challenges ? <ConfiguredAdvanced stage={stage} table="challenges"/> : <EmptyState icon="progression" title="No challenge sessions" description="Create a boss, survival, exploration, or KubeJS driven challenge."/>}

@@ -15,9 +15,9 @@ export function ContextEditor({ rows, onChange, sourceError }: {
     {sourceError ? <p role="alert">Existing context source. {sourceError} The source is preserved. Correct it in Source before changing these contexts.</p> : null}
     {rows.map((row, index) => <fieldset key={index} className="context-entry">
       <legend>Context {index + 1}</legend>
-      <Field label={`Context ${index + 1} key`}><input value={row.key} onChange={event => update(index, { ...row, key: event.target.value })}/></Field>
+      <Field label={`Context ${index + 1} key`} help="Name the context value another rule will read. Keep this key stable when rules already use it."><input value={row.key} onChange={event => update(index, { ...row, key: event.target.value })}/></Field>
       {row.values.map((value, valueIndex) => <div key={valueIndex} className="context-value">
-        <Field label={`Context ${index + 1} value ${valueIndex + 1}`}><textarea rows={1} value={value} onChange={event => update(index, { ...row, values: row.values.map((current, position) => position === valueIndex ? event.target.value : current) })}/></Field>
+        <Field label={`Context ${index + 1} value ${valueIndex + 1}`} help="Add one value this context key may match. Use another row for another value."><textarea rows={1} value={value} onChange={event => update(index, { ...row, values: row.values.map((current, position) => position === valueIndex ? event.target.value : current) })}/></Field>
         <Button type="button" tone="quiet" aria-label={`Remove context ${index + 1} value ${valueIndex + 1}`} onClick={() => update(index, { ...row, values: row.values.filter((_, position) => position !== valueIndex) })}>Remove value</Button>
       </div>)}
       <div className="rule-card-actions"><Button type="button" onClick={() => update(index, { ...row, values: [...row.values, ""] })}>Add value to context {index + 1}</Button><Button type="button" tone="danger" onClick={() => onChange(rows.filter((_, position) => position !== index))}>Remove context {index + 1}</Button></div>

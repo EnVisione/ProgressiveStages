@@ -84,8 +84,8 @@ public final class LockDefinition {
     private final List<MobReplacement> mobReplacements;
     private final List<RegionLock> regions;
     private final StructureRules structures;
-    /** Ore masquerade rules enforced by the chunk rewrite, harvest, and drop pipelines. */
-    private final List<OreOverride> oreOverrides;
+    /** Block display and drop overrides expanded against one accepted block registry snapshot. */
+    private final List<BlockOverride> blockOverrides;
 
     // ---- Enforcement exceptions ----
     private final List<String> allowedUse;
@@ -152,7 +152,7 @@ public final class LockDefinition {
         this.mobReplacements  = List.copyOf(b.mobReplacements);
         this.regions          = List.copyOf(b.regions);
         this.structures       = b.structures;
-        this.oreOverrides     = List.copyOf(b.oreOverrides);
+        this.blockOverrides   = List.copyOf(b.blockOverrides);
         this.allowedUse          = List.copyOf(b.allowedUse);
         this.allowedPickup       = List.copyOf(b.allowedPickup);
         this.allowedHotbar       = List.copyOf(b.allowedHotbar);
@@ -214,7 +214,16 @@ public final class LockDefinition {
     public List<MobReplacement> mobReplacements()    { return mobReplacements; }
     public List<RegionLock> regions()                { return regions; }
     public StructureRules structures()               { return structures; }
-    public List<OreOverride> oreOverrides()          { return oreOverrides; }
+    public List<BlockOverride> blockOverrides()      { return blockOverrides; }
+    /** Kept for source compatibility with the former exact ore override API. */
+    public List<OreOverride> oreOverrides() {
+        List<OreOverride> legacy = new ArrayList<>();
+        for (BlockOverride override : blockOverrides) {
+            if (override.targets().size() != 1 || override.targets().get(0).kind() != PrefixEntry.Kind.ID) continue;
+            legacy.add(new OreOverride(override.targets().get(0).id(), override.displayAs(), override.dropAs()));
+        }
+        return List.copyOf(legacy);
+    }
 
     public List<String> allowedUse()         { return allowedUse; }
     public List<String> allowedPickup()      { return allowedPickup; }
@@ -253,7 +262,7 @@ public final class LockDefinition {
             && petsTaming.isEmpty() && petsBreeding.isEmpty() && petsCommanding.isEmpty() && mobSpawns.isEmpty()
             && recipeIds.isEmpty() && recipeOutputs.isEmpty()
             && lockedDimensions.isEmpty() && interactions.isEmpty()
-            && mobReplacements.isEmpty() && regions.isEmpty() && oreOverrides.isEmpty()
+            && mobReplacements.isEmpty() && regions.isEmpty() && blockOverrides.isEmpty()
             && structures.isEmpty();
     }
 
@@ -494,24 +503,49 @@ public final class LockDefinition {
         }
     }
 
-    /**
-     * A {@code [[ores.overrides]]} entry: the locked target is shown and dropped as its
-     * configured substitutes until the owning stage is acquired.
-     */
-    public static final class OreOverride {
-        private final ResourceLocation target;
+    /** A source attributed block display and drop override. */
+    public static class BlockOverride {
+        private final List<PrefixEntry> targets;
         private final ResourceLocation displayAs;
         private final ResourceLocation dropAs;
+        private final Integer priority;
+        private final String sourceTable;
+        private final String sourceField;
 
-        public OreOverride(ResourceLocation target, ResourceLocation displayAs, ResourceLocation dropAs) {
-            this.target = target;
-            this.displayAs = displayAs;
-            this.dropAs = dropAs;
+        public BlockOverride(List<PrefixEntry> targets, ResourceLocation displayAs,
+                             ResourceLocation dropAs, Integer priority, String sourceTable) {
+            this(targets, displayAs, dropAs, priority, sourceTable,
+                (sourceTable == null ? "blocks.overrides" : sourceTable) + ".targets");
         }
 
-        public ResourceLocation target()    { return target; }
+        public BlockOverride(List<PrefixEntry> targets, ResourceLocation displayAs,
+                             ResourceLocation dropAs, Integer priority, String sourceTable, String sourceField) {
+            this.targets = targets == null ? List.of() : List.copyOf(targets);
+            this.displayAs = displayAs;
+            this.dropAs = dropAs;
+            this.priority = priority;
+            this.sourceTable = sourceTable == null ? "blocks.overrides" : sourceTable;
+            this.sourceField = sourceField == null ? this.sourceTable + ".targets" : sourceField;
+        }
+
+        public List<PrefixEntry> targets()  { return targets; }
         public ResourceLocation displayAs() { return displayAs; }
         public ResourceLocation dropAs()    { return dropAs; }
+        public Integer priority()           { return priority; }
+        public String sourceTable()         { return sourceTable; }
+        public String sourceField()         { return sourceField; }
+    }
+
+    /** Compatibility view and constructor for the original scalar ore override API. */
+    public static final class OreOverride extends BlockOverride {
+        public OreOverride(ResourceLocation target, ResourceLocation displayAs, ResourceLocation dropAs) {
+            super(target == null ? List.of() : List.of(PrefixEntry.parse(target.toString())),
+                displayAs, dropAs, null, "ores.overrides");
+        }
+
+        public ResourceLocation target() {
+            return targets().isEmpty() ? null : targets().get(0).id();
+        }
     }
 
     // ---------------------------------------------------------------
@@ -547,7 +581,7 @@ public final class LockDefinition {
         private List<MobReplacement> mobReplacements = new ArrayList<>();
         private List<RegionLock> regions = new ArrayList<>();
         private StructureRules structures = StructureRules.EMPTY;
-        private List<OreOverride> oreOverrides = new ArrayList<>();
+        private List<BlockOverride> blockOverrides = new ArrayList<>();
 
         private List<String> allowedUse = new ArrayList<>();
         private List<String> allowedPickup = new ArrayList<>();
@@ -607,8 +641,11 @@ public final class LockDefinition {
         public Builder structures(StructureRules v) {
             this.structures = v != null ? v : StructureRules.EMPTY; return this;
         }
+        public Builder blockOverrides(List<BlockOverride> v) {
+            this.blockOverrides = v != null ? v : new ArrayList<>(); return this;
+        }
         public Builder oreOverrides(List<OreOverride> v) {
-            this.oreOverrides = v != null ? v : new ArrayList<>(); return this;
+            this.blockOverrides = v == null ? new ArrayList<>() : new ArrayList<>(v); return this;
         }
 
         public Builder allowedUse(List<String> v)         { this.allowedUse         = v != null ? v : new ArrayList<>(); return this; }

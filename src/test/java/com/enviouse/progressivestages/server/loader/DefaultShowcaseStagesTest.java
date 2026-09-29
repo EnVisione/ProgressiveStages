@@ -35,6 +35,9 @@ class DefaultShowcaseStagesTest {
         assertTrue(wizardRules.contains("[recipes]"));
         assertTrue(wizardRules.contains("locked_items = [\"minecraft:enchanting_table\"]"));
         assertFalse(wizardRules.contains("targets.recipes"));
+        String pathfinderRules = DefaultShowcaseStages.files().get("pathfinder/rules.toml");
+        assertFalse(pathfinderRules.contains("targets.regions"),
+            "showcase region controls need coordinates and prevention flags, not a generic target");
         assertTrue(DefaultShowcaseStages.files().values().stream()
             .filter(content -> content.contains("[abilities]"))
             .noneMatch(content -> content.contains("locked")),
@@ -63,6 +66,16 @@ class DefaultShowcaseStagesTest {
             compiledStages.put(compiled.id(), compiled);
             if (compiled.id().equals(StageId.parse("showcase:diamond_engineer"))) diamondEngineer = compiled;
         }
+        StageDefinition deadeye = stage(definitions, "showcase:deadeye");
+        var itemOnEntityRule = deadeye.getLocks().interactions().stream()
+            .filter(rule -> "item_on_entity".equals(rule.type())).findFirst().orElseThrow();
+        assertEquals("minecraft:spectral_arrow", itemOnEntityRule.heldItem());
+        assertEquals("all:*", itemOnEntityRule.target());
+        assertEquals(List.of("body"), stage(definitions, "showcase:knight").getLocks().curioLockedSlots());
+        assertTrue(DefaultShowcaseStages.files().get("nature_mage/rules.toml")
+            .contains("[loot]\nlocked = [\"minecraft:chests/jungle_temple\"]"));
+        assertTrue(DefaultShowcaseStages.files().get("wither_protocol/rules.toml")
+            .contains("[loot]\nlocked = [\"minecraft:entities/wither\"]"));
         assertTrue(StageOrder.validateDefinitions(definitions).isEmpty(),
             () -> String.join("\n", StageOrder.validateDefinitions(definitions)));
         assertNotNull(diamondEngineer);
