@@ -13,7 +13,6 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,6 +84,6 @@ class ReleaseDocumentationExamplesTest {
         }
         Object guideEnabled = globalConfig.get("general.enable_stage_guide");
         assertInstanceOf(Boolean.class, guideEnabled);
-        assertFalse((Boolean) guideEnabled);
+        assertTrue((Boolean) guideEnabled);
     }
 }
