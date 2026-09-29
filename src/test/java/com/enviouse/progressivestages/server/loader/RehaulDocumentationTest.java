@@ -12,7 +12,7 @@ class RehaulDocumentationTest {
 
     @Test
     void guideLinksEveryTestedExampleAndAllThirtyFeatures() throws Exception {
-        String guide = Files.readString(PROJECT.resolve("REHAUL_GUIDE.md"));
+        String guide = Files.readString(PROJECT.resolve("docs/rehaul/3.0.1/documentation.md"));
         for (String example : new String[] {"starter", "diamond", "mage", "structure_weapons",
                 "end_fight", "wither_trial", "kubejs"}) {
             assertTrue(guide.contains("examples/rehaul/" + example));

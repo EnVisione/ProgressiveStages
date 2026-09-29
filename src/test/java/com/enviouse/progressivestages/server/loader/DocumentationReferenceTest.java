@@ -46,13 +46,13 @@ class DocumentationReferenceTest {
         assertTrue(documentation.contains("### 4.34 Temporary, triggered, and priority-based lock rules"));
         assertTrue(documentation.contains("### 4.35 Structure session providers, leased stages, and active locks"));
         assertTrue(documentation.contains("[STRUCTURE_SESSION_COMPATIBILITY.md](docs/structures/3.0.1/documentation.md)"));
-        assertTrue(Files.readString(PROJECT.resolve("STRUCTURE_SESSION_COMPATIBILITY.md"))
+        assertTrue(Files.readString(PROJECT.resolve("docs/structures/3.0.1/documentation.md"))
             .contains("## 16. Acceptance test matrix"));
     }
 
     @Test
     void phaseGuideDocumentsEveryPhaseWithExamplesAndVerification() throws IOException {
-        String guide = Files.readString(PROJECT.resolve("PHASES_1_TO_19.md"));
+        String guide = Files.readString(PROJECT.resolve("docs/learning/3.0/documentation.md"));
 
         for (int phase = 1; phase <= 19; phase++) {
             String heading = "## Phase " + phase + ".";
@@ -81,14 +81,14 @@ class DocumentationReferenceTest {
     @Test
     void releasePresentationFilesAreConnected() throws IOException {
         String readme = Files.readString(PROJECT.resolve("README.md"));
-        String curseForge = Files.readString(PROJECT.resolve("CURSEFORGE.md"));
+        String releaseDocument = Files.readString(PROJECT.resolve("docs/release/3.0.1/documentation.md"));
         String metadata = Files.readString(PROJECT.resolve("src/main/templates/META-INF/neoforge.mods.toml"));
 
         assertTrue(Files.size(PROJECT.resolve("src/main/resources/progressivestages.png")) > 0);
         assertTrue(metadata.contains("logoFile=\"progressivestages.png\""));
         assertTrue(metadata.contains("displayURL=\"https://www.curseforge.com/minecraft/mc-mods/progressivestages\""));
         assertTrue(readme.contains("[CurseForge 3.0 Description](docs/release/3.0.1/documentation.md)"));
-        assertTrue(curseForge.contains("# ProgressiveStages 3.0"));
-        assertTrue(curseForge.contains("config/progressivestages/stages/"));
+        assertTrue(releaseDocument.contains("# ProgressiveStages 3.0"));
+        assertTrue(releaseDocument.contains("config/progressivestages/stages/"));
     }
 }
