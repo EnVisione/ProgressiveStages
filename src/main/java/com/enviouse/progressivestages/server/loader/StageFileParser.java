@@ -7,6 +7,7 @@ import com.enviouse.progressivestages.common.config.RevokeRule;
 import com.enviouse.progressivestages.common.config.StageAttribute;
 import com.enviouse.progressivestages.common.config.StageCost;
 import com.enviouse.progressivestages.common.config.StageDefinition;
+import com.enviouse.progressivestages.common.config.StageGuide;
 import com.enviouse.progressivestages.common.config.LuckPermsStageOptions;
 import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.stage.FieldDiagnostic;
@@ -232,6 +233,7 @@ public final class StageFileParser {
         // v2.3: per-stage [[triggers]] auto-grant rules + [display] overrides.
         builder.triggers(parseTriggers(config));
         applyDisplaySection(config, builder);
+        builder.guide(parseGuide(config));
 
         // v2.4: [stage] presentation/scope metadata + new sections.
         builder.hidden(readBool(stageSection, "hidden"));
@@ -296,6 +298,45 @@ public final class StageFileParser {
         builder.activeLocks(parseActiveLocks(config));
 
         return ParseResult.success(builder.build(), schemaVersion == 4 ? Config.copy(config) : null);
+    }
+
+    private static StageGuide parseGuide(Config config) {
+        Object raw = config.get("guide");
+        if (raw == null) return StageGuide.EMPTY;
+        if (!(raw instanceof Config section)) {
+            throw new FieldValidationException("guide", null, "invalid_type", "The guide section must be a table");
+        }
+        String howToUnlock = guideText(section, "how_to_unlock");
+        String nextSteps = guideText(section, "next_steps");
+        String whereToFind = guideText(section, "where_to_find");
+        Object enabledValue = section.get("enabled");
+        if (enabledValue != null && !(enabledValue instanceof Boolean)) {
+            throw new FieldValidationException("guide.enabled", null, "invalid_type", "Guide enabled must be a boolean");
+        }
+        boolean enabled = enabledValue == null || (Boolean) enabledValue;
+        Object recommendation = section.get("recommendation");
+        if (recommendation != null && !(recommendation instanceof String)) {
+            throw new FieldValidationException("guide.recommendation", null, "invalid_type", "Guide recommendation must be a string");
+        }
+        try {
+            return new StageGuide(howToUnlock, nextSteps, whereToFind,
+                StageGuide.Recommendation.parse((String) recommendation), enabled);
+        } catch (IllegalArgumentException error) {
+            throw new FieldValidationException("guide", null, "invalid_value", error.getMessage());
+        }
+    }
+
+    private static String guideText(Config section, String key) {
+        Object value = section.get(key);
+        if (value == null) return "";
+        if (!(value instanceof String text)) {
+            throw new FieldValidationException("guide." + key, null, "invalid_type", "Guide text must be a string");
+        }
+        try {
+            return new StageGuide(text, "", "", StageGuide.Recommendation.AUTO).howToUnlock();
+        } catch (IllegalArgumentException error) {
+            throw new FieldValidationException("guide." + key, null, "invalid_value", error.getMessage());
+        }
     }
 
     private static LuckPermsStageOptions parseLuckPerms(Config config) {
@@ -1197,6 +1238,8 @@ public final class StageFileParser {
     private static LockDefinition parseLocks(Config config, int schemaVersion) {
         LockDefinition.Builder b = LockDefinition.builder();
 
+        validateKnownIneffectiveCategoryFields(config, schemaVersion);
+
         b.items(        parseCategory(config, "items"));
         b.blocks(       parseCategory(config, "blocks"));
         b.fluids(       parseCategory(config, "fluids"));
@@ -1244,7 +1287,7 @@ public final class StageFileParser {
         b.mobReplacements(parseMobReplacements(config));
         b.regions(parseRegions(config));
         b.structures(parseStructures(config, schemaVersion));
-        b.oreOverrides(parseOreOverrides(config));
+        b.blockOverrides(parseBlockOverrides(config));
 
         parseEnforcement(config, b);
 
@@ -1668,23 +1711,156 @@ public final class StageFileParser {
         return (int) parsed;
     }
 
-    private static List<LockDefinition.OreOverride> parseOreOverrides(Config config) {
-        Config oresSection = config.get("ores");
-        if (oresSection == null) return Collections.emptyList();
-        List<Config> entries = oresSection.get("overrides");
-        if (entries == null) return Collections.emptyList();
+    private static List<LockDefinition.BlockOverride> parseBlockOverrides(Config config) {
+        List<LockDefinition.BlockOverride> out = new ArrayList<>();
+        out.addAll(parseBlockOverrideTable(config, "blocks", "blocks.overrides"));
+        out.addAll(parseBlockOverrideTable(config, "ores", "ores.overrides"));
+        return List.copyOf(out);
+    }
 
-        List<LockDefinition.OreOverride> out = new ArrayList<>();
-        for (Config c : entries) {
-            ResourceLocation target = parseExactId(c.get("target"));
-            ResourceLocation display = parseExactId(c.get("display_as"));
-            ResourceLocation drop = parseExactId(c.get("drop_as"));
-            if (target == null || display == null || drop == null) {
-                throw new IllegalArgumentException("Invalid ore override entry");
+    private static List<LockDefinition.BlockOverride> parseBlockOverrideTable(Config config,
+                                                                               String sectionName,
+                                                                               String sourceTable) {
+        Config section = config.get(sectionName);
+        if (section == null) return Collections.emptyList();
+        Object rawRows = section.get("overrides");
+        if (rawRows == null) return Collections.emptyList();
+        if (!(rawRows instanceof List<?> rows)) {
+            throw new IllegalArgumentException("[" + sourceTable + "] must be an array of tables.");
+        }
+        List<LockDefinition.BlockOverride> out = new ArrayList<>();
+        for (int index = 0; index < rows.size(); index++) {
+            Object rawRow = rows.get(index);
+            String field = sourceTable + "[" + index + "]";
+            if (!(rawRow instanceof Config row)) {
+                throw new IllegalArgumentException(field + " must be a table.");
             }
-            out.add(new LockDefinition.OreOverride(target, display, drop));
+            Object scalar = row.get("target");
+            Object multiple = row.get("targets");
+            String selectorField = field + (scalar != null ? ".target" : ".targets");
+            if (scalar != null && multiple != null) {
+                throw new IllegalArgumentException(field + " must use target or targets, not both.");
+            }
+            List<String> rawTargets = new ArrayList<>();
+            if (scalar instanceof String value) rawTargets.add(value);
+            else if (scalar != null) throw new IllegalArgumentException(field + ".target must be a selector string.");
+            if (multiple instanceof List<?> values) {
+                for (int targetIndex = 0; targetIndex < values.size(); targetIndex++) {
+                    Object value = values.get(targetIndex);
+                    if (!(value instanceof String text)) {
+                        throw new IllegalArgumentException(field + ".targets[" + targetIndex + "] must be a selector string.");
+                    }
+                    rawTargets.add(text);
+                }
+            } else if (multiple != null) {
+                throw new IllegalArgumentException(field + ".targets must be an array of selector strings.");
+            }
+            if (rawTargets.isEmpty()) {
+                throw new IllegalArgumentException(field + " needs one nonempty target or targets array.");
+            }
+
+            List<PrefixEntry> targets = new ArrayList<>();
+            for (int targetIndex = 0; targetIndex < rawTargets.size(); targetIndex++) {
+                String rawTarget = rawTargets.get(targetIndex);
+                String targetField = scalar != null ? selectorField : selectorField + "[" + targetIndex + "]";
+                if (rawTarget == null || rawTarget.isBlank()) {
+                    throw new IllegalArgumentException(targetField + " cannot be blank.");
+                }
+                String normalized = rawTarget.trim().replaceFirst("(?i)^tags:", "tag:");
+                PrefixEntry target = PrefixEntry.parse(normalized);
+                if (target == null || !java.util.Set.of(PrefixEntry.Kind.ID, PrefixEntry.Kind.TAG,
+                        PrefixEntry.Kind.MOD).contains(target.kind())) {
+                    throw new IllegalArgumentException(targetField
+                        + " must be a block ID, block tag, or mod namespace. Unsupported selector. " + rawTarget);
+                }
+                targets.add(target);
+            }
+
+            String displayText = strictOverrideString(row, "display_as", field + ".display_as");
+            String dropText = strictOverrideString(row, "drop_as", field + ".drop_as");
+            ResourceLocation display = parseExactId(displayText);
+            ResourceLocation drop = parseExactId(dropText);
+            if (display == null || !net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(display)
+                    || net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(display)
+                        == net.minecraft.world.level.block.Blocks.AIR) {
+                throw new IllegalArgumentException(field + ".display_as must be a registered non-air block ID. " + displayText);
+            }
+            if (drop == null || !net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(drop)
+                    || net.minecraft.core.registries.BuiltInRegistries.ITEM.get(drop)
+                        == net.minecraft.world.item.Items.AIR) {
+                throw new IllegalArgumentException(field + ".drop_as must be a registered non-air item ID. " + dropText);
+            }
+            Integer priority = strictInt32(row, "priority", field + ".priority");
+            out.add(new LockDefinition.BlockOverride(targets, display, drop, priority, sourceTable, selectorField));
         }
         return out;
+    }
+
+    private static String strictOverrideString(Config row, String key, String field) {
+        Object raw = row.get(key);
+        if (!(raw instanceof String value) || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must be a nonempty exact ID.");
+        }
+        return value.trim();
+    }
+
+    private static void validateKnownIneffectiveCategoryFields(Config config, int schemaVersion) {
+        Config ores = config.get("ores");
+        if (ores != null) {
+            for (String key : List.of("locked", "always_unlocked", "allowed")) {
+                if (!ores.contains(key)) continue;
+                if (key.equals("locked")) {
+                    throw new IllegalArgumentException("[ores].locked is not read as a block lock or override. Use [blocks].locked for block actions, or [[blocks.overrides]] with target, display_as, and drop_as for a visual and drop override.");
+                }
+                throw new IllegalArgumentException("[ores]." + key + " is not read. Use [[blocks.overrides]] with target, display_as, and drop_as.");
+            }
+        }
+        if (schemaVersion >= 4) return;
+
+        rejectIneffectiveCategoryField(config, "recipes", "locked",
+            "[recipes].locked is ambiguous. Use locked_items to lock recipe outputs or locked_ids to lock recipe IDs.");
+        rejectIneffectiveCategoryField(config, "mobs", "locked",
+            "[mobs].locked is not read. Use [mobs].locked_spawns or [[mobs.replacements]].");
+        rejectIneffectiveCategoryField(config, "mobs", "always_unlocked",
+            "[mobs].always_unlocked is not read. Use a supported spawn rule or an exact mob replacement.");
+        rejectIneffectiveCategoryField(config, "pets", "locked",
+            "[pets].locked is not read. Use locked_taming, locked_breeding, or locked_commanding.");
+        rejectIneffectiveCategoryField(config, "pets", "always_unlocked",
+            "[pets].always_unlocked is not read. Use the named pet action lists.");
+        rejectIneffectiveCategoryField(config, "structures", "locked",
+            "[structures].locked is not read. Use locked_entry or [[structures.rules]].");
+        rejectIneffectiveCategoryField(config, "structures", "always_unlocked",
+            "[structures].always_unlocked is not read. Use [structures.rules].entry_allowed.");
+        rejectIneffectiveCategoryField(config, "curios", "locked",
+            "[curios].locked is not read. Use [curios].locked_slots with plain slot names.");
+        rejectIneffectiveCategoryField(config, "curios", "always_unlocked",
+            "[curios].always_unlocked is not read. Use the Curios slot controls.");
+        rejectIneffectiveCategoryField(config, "dimensions", "always_unlocked",
+            "[dimensions].always_unlocked is not read. This section accepts locked dimension IDs only.");
+        rejectIneffectiveCategoryField(config, "abilities", "always_unlocked",
+            "[abilities].always_unlocked is not read. This section accepts locked ability names only.");
+
+        for (String category : List.of("items", "blocks", "fluids", "entities", "enchants", "crops",
+                "screens", "loot", "trades", "professions", "advancements", "beacon", "brewing")) {
+            Config section = config.get(category);
+            if (section == null) continue;
+            if (section.contains("allowed")) {
+                throw new IllegalArgumentException("[" + category + "].allowed is not read. Use always_unlocked for exact IDs or a supported schema 4 rule.");
+            }
+            if (section.contains("priority") || section.contains("priorities")) {
+                throw new IllegalArgumentException("[" + category + "].priority and priorities are not read by legacy category lists. Use [stage].priority or a schema 4 rule priority.");
+            }
+            if (section.contains("presentation")) {
+                throw new IllegalArgumentException("[" + category + "].presentation is not read by legacy category lists. Use a schema 4 rule presentation setting.");
+            }
+        }
+    }
+
+    private static void rejectIneffectiveCategoryField(Config config, String category, String key, String message) {
+        Object value = config.get(category);
+        if (value instanceof Config section && section.contains(key)) {
+            throw new IllegalArgumentException(message);
+        }
     }
 
     private static ResourceLocation parseExactId(String raw) {

@@ -63,6 +63,25 @@ import java.util.Set;
 public final class Schema4StageCompiler {
 
     private static final ConditionCompiler CONDITIONS = new ConditionCompiler(ConditionRegistry.get());
+    private static final Map<String, Set<String>> CORE_RULE_ACTIONS = Map.ofEntries(
+        Map.entry("items", Set.of("use", "pickup", "inventory", "hotbar", "drop")),
+        Map.entry("blocks", Set.of("place", "break", "interact")),
+        Map.entry("fluids", Set.of("pickup", "place", "flow", "submerge")),
+        Map.entry("crops", Set.of("plant", "grow", "bonemeal", "harvest")),
+        Map.entry("dimensions", Set.of("enter", "portal", "teleport")),
+        Map.entry("enchants", Set.of("table", "anvil", "trade", "hold")),
+        Map.entry("entities", Set.of("presence", "attack", "interact", "mount")),
+        Map.entry("mobs", Set.of("spawn")),
+        Map.entry("pets", Set.of("tame", "breed", "command")),
+        Map.entry("screens", Set.of("open")),
+        Map.entry("trades", Set.of("display", "purchase")),
+        Map.entry("professions", Set.of("trade")),
+        Map.entry("advancements", Set.of("display", "toast")),
+        Map.entry("structures", Set.of("enter", "break", "place", "open_container", "item_use", "interact_block", "interact_entity")),
+        Map.entry("beacon", Set.of("apply")),
+        Map.entry("brewing", Set.of("brew", "take")),
+        Map.entry("abilities", Set.of("use", "perform"))
+    );
 
     private Schema4StageCompiler() {}
 
@@ -176,13 +195,13 @@ public final class Schema4StageCompiler {
             int firstParent = output.size();
             for (Map.Entry<String, Object> target : targets.entrySet()) {
                 String category = singularCategory(target.getKey());
+                rejectSpecializedGenericCategory(key + ".targets." + target.getKey(), category);
                 String action = String.valueOf(entry.getOrDefault("action", defaultAction(category)));
-                if ("recipes".equals(category) && "craft".equals(action)) {
-                    throw new IllegalArgumentException("rules.targets.recipes cannot create recipe output locks. Use [recipes].locked_items for output items or [recipes].locked_ids for exact recipe identifiers.");
-                }
+                validateGenericRule(key + ".targets." + target.getKey(), category, action, effect, false);
                 for (String raw : strings(target.getValue())) {
                     SelectorSpec selector = SelectorSpec.parse(raw).orElseThrow(() ->
                         new IllegalArgumentException("Invalid rule selector. " + raw));
+                    validateGenericSelector(key + ".targets." + target.getKey(), category, selector);
                     ResolvedPriority priority = PriorityCascade.resolve(selector.explicitPriority(), rulePriority,
                         null, stagePriority(stage), globalPriority);
                     ResourceLocation id = selectorIndex == 0 && totalTargetCount(targets) == 1
@@ -200,8 +219,12 @@ public final class Schema4StageCompiler {
                 Map<String, Object> exceptionTargets = map(exception.get("targets"));
                 for (Map.Entry<String, Object> target : exceptionTargets.entrySet()) {
                     String category = singularCategory(target.getKey());
+                    rejectSpecializedGenericCategory(key + ".exceptions.targets." + target.getKey(), category);
+                    String action = String.valueOf(entry.getOrDefault("action", defaultAction(category)));
+                    validateGenericRule(key + ".exceptions.targets." + target.getKey(), category, action, exceptionEffect, true);
                     for (String raw : strings(target.getValue())) {
                         SelectorSpec selector = SelectorSpec.parse(raw).orElseThrow();
+                        validateGenericSelector(key + ".exceptions.targets." + target.getKey(), category, selector);
                         Integer exceptionPriority = integer(exception.get("priority"));
                         ResolvedPriority priority = PriorityCascade.resolve(selector.explicitPriority(),
                             exceptionPriority != null ? exceptionPriority : rulePriority, null,
@@ -214,7 +237,7 @@ public final class Schema4StageCompiler {
                         exceptionSettings.putAll(settings(exception));
                         for (ResourceLocation parentRule : parents) {
                             output.add(new CompiledRule(childId(baseId, "exception/" + selectorIndex++),
-                                stage.getId(), category, String.valueOf(entry.getOrDefault("action", defaultAction(category))),
+                                stage.getId(), category, action,
                                 exceptionEffect, selector, priority.value(), lifetime, condition, parentRule,
                                 viewerPolicy(exception), exceptionSettings,
                                 provenance(stage, key + ".exceptions", raw)));
@@ -565,17 +588,76 @@ public final class Schema4StageCompiler {
             case "dimension" -> "dimensions";
             case "structure" -> "structures";
             case "ability" -> "abilities";
+            case "region" -> "regions";
+            case "ore" -> "ores";
             default -> category.toLowerCase(Locale.ROOT);
         };
+    }
+
+    private static void rejectSpecializedGenericCategory(String field, String category) {
+        String guidance = switch (category) {
+            case "ores" -> "Use [[blocks.overrides]] with target blocks, display_as, and drop_as.";
+            case "regions" -> "Use [[regions]] with dimension, pos1, pos2, and prevention flags.";
+            case "recipes" -> "Use [recipes].locked_items for output items or [recipes].locked_ids for exact recipe identifiers.";
+            case "loot" -> "Use [loot].locked or [loot].always_unlocked. Loot rules use exact loot table IDs.";
+            case "curios" -> "Use [curios].locked_slots with exact Curios slot IDs.";
+            case "interactions" -> "Use [[interactions]] with type = \"item_into_inventory\", held_item, target_kind, and target.";
+            default -> null;
+        };
+        if (guidance != null) {
+            throw new IllegalArgumentException(field + " cannot be used in a generic rule because it needs specialized fields. " + guidance);
+        }
+    }
+
+    private static void validateGenericRule(String field, String category, String action,
+                                            RuleEffect effect, boolean exception) {
+        Set<String> supportedActions = CORE_RULE_ACTIONS.get(category);
+        if (supportedActions == null) return; // Leave extension categories available to integrations.
+        if (!supportedActions.contains(action) && !"access".equals(action)) {
+            String guidance = switch (category + "." + action) {
+                case "mobs.replace" -> "Mob replacement uses [[mobs.replacements]].";
+                case "pets.ride" -> "Use targets.entities with action = \"mount\" to gate riding.";
+                case "structures.leave", "structures.stay" -> "Use stage progression conditions for structure exit or time spent inside.";
+                default -> "Choose a supported action for " + category + ".";
+            };
+            throw new IllegalArgumentException(field + " has unsupported action '" + action + "'. " + guidance);
+        }
+        boolean supportedEffect = switch (effect) {
+            case LOCK, DENY, ALLOW, UNLOCK -> true;
+            case EXCLUDE -> exception;
+            default -> false;
+        };
+        if (!supportedEffect) {
+            String detail = exception
+                ? "Exceptions support lock, deny, allow, unlock, or exclude."
+                : "Generic rules support lock, deny, allow, or unlock. Use a specialized table for replacements or presentation changes.";
+            throw new IllegalArgumentException(field + " has an unsupported result. " + detail);
+        }
+    }
+
+    private static void validateGenericSelector(String field, String category, SelectorSpec selector) {
+        if (Set.of("dimensions", "structures", "abilities").contains(category)
+                && !SelectorSpec.ID.equals(selector.matcherId())) {
+            throw new IllegalArgumentException(field + " needs one exact ID. Mod, tag, name, and all selectors are not supported.");
+        }
     }
 
     private static String defaultAction(String category) {
         return switch (singularCategory(category)) {
             case "items" -> "use";
             case "blocks" -> "interact";
-            case "fluids" -> "interact";
+            case "fluids" -> "place";
+            case "crops" -> "grow";
+            case "enchants" -> "hold";
             case "entities" -> "presence";
-            case "recipes" -> "craft";
+            case "mobs" -> "spawn";
+            case "pets" -> "tame";
+            case "screens" -> "open";
+            case "trades" -> "purchase";
+            case "professions" -> "trade";
+            case "advancements" -> "display";
+            case "beacon" -> "apply";
+            case "brewing" -> "take";
             case "dimensions", "structures" -> "enter";
             case "abilities" -> "perform";
             default -> "access";

@@ -21,12 +21,24 @@ public class ClientStageCache {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Set<StageId> stages = new HashSet<>();
     private static long revision;
+    private static long definitionSnapshotRevision = Long.MIN_VALUE;
     private static StageId currentStage = null;
     private static volatile boolean hideStageNamesFromNonOps = false;
+    // The server must publish the current policy before client guide controls become available.
+    private static volatile boolean stageGuideEnabled = false;
 
     public static boolean isHideStageNamesFromNonOps() { return hideStageNamesFromNonOps; }
     public static long revision() { return revision; }
+    public static long definitionSnapshotRevision() { return definitionSnapshotRevision; }
+    public static void setDefinitionSnapshotRevision(long value) { definitionSnapshotRevision = value; }
     public static void setHideStageNamesFromNonOps(boolean v) { hideStageNamesFromNonOps = v; }
+    public static boolean isStageGuideEnabled() { return stageGuideEnabled; }
+    public static void setStageGuideEnabled(boolean enabled) { stageGuideEnabled = enabled; revision++; }
+
+    public static boolean isStageGuideVisible(StageId stageId) {
+        StageDefinitionData definition = stageDefinitions.get(stageId);
+        return stageGuideEnabled && definition != null && definition.showGuide();
+    }
 
     // v1.3: Stage definitions with dependencies
     private static final Map<StageId, StageDefinitionData> stageDefinitions = new HashMap<>();
@@ -47,7 +59,9 @@ public class ClientStageCache {
                                       boolean hidden, String color, String category,
                                       String slotGroup, int slotLimit, String slotPolicy,
                                       Integer uiX, Integer uiY, String uiFrame,
-                                      String uiBackground, String uiReveal, int uiSortOrder) {
+                                      String uiBackground, String uiReveal, int uiSortOrder,
+                                      String howToUnlock, String nextSteps, String whereToFind,
+                                      String recommendation, boolean showGuide) {
     }
 
     /** v2.5: true if the stage opted out of the GUI tree via {@code [stage].hidden = true}. */
@@ -465,6 +479,8 @@ public class ClientStageCache {
         revision++;
         currentStage = null;
         stageDefinitions.clear();
+        definitionSnapshotRevision = Long.MIN_VALUE;
+        stageGuideEnabled = false;
         ClientLockCache.clear();
     }
 

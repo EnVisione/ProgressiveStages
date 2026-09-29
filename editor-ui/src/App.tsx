@@ -26,13 +26,13 @@ export function App() {
   if (!boot) return <LoadingScreen message={busy || "Connecting to Minecraft"}/>;
   return <div className={`editor-app page-${page}`}>
     <header className="app-header">
-      <button className="brand-button" onClick={() => setPage("stages")}><img src="/logo.png" alt=""/><strong>ProgressiveStages</strong></button>
-      <nav className="top-navigation" aria-label="Editor pages">{NAVIGATION.map(item => <button key={item.id} className={page === item.id ? "active" : ""} onClick={() => setPage(item.id as PageId)}><Icon name={item.icon} size={16}/><span>{item.label}</span></button>)}</nav>
+      <button className="brand-button" onClick={() => setPage("stages")}><img src="/favicon.svg" alt=""/><strong>ProgressiveStages</strong></button>
+      <nav className="top-navigation" aria-label="Editor pages">{NAVIGATION.map(item => <button key={item.id} title={`Open ${item.label}`} className={page === item.id ? "active" : ""} onClick={() => setPage(item.id as PageId)}><Icon name={item.icon} size={16}/><span>{item.label}</span></button>)}</nav>
       <div className="header-actions">
         <span className="save-state"><i/>{busy || (boot.draft.diff.length ? `${boot.draft.diff.length} change${boot.draft.diff.length === 1 ? "" : "s"}` : "Saved")}</span>
-        <Button tone="quiet" icon="undo" disabled={!boot.draft.canUndo || Boolean(busy)} onClick={() => void undo()}>Undo</Button>
-        <Button tone="quiet" icon="redo" disabled={!boot.draft.canRedo || Boolean(busy)} onClick={() => void redo()}>Redo</Button>
-        <Button tone="primary" disabled={Boolean(busy)} onClick={() => void openReview()}>Apply changes</Button>
+        <Button tone="quiet" icon="undo" help="Undo the last draft edit. This changes the draft only until you apply it." disabled={!boot.draft.canUndo || Boolean(busy)} onClick={() => void undo()}>Undo</Button>
+        <Button tone="quiet" icon="redo" help="Redo the last draft edit. This changes the draft only until you apply it." disabled={!boot.draft.canRedo || Boolean(busy)} onClick={() => void redo()}>Redo</Button>
+        <Button tone="primary" help="Review validation and the exact files that will be applied to the server." disabled={Boolean(busy)} onClick={() => void openReview()}>Apply changes</Button>
       </div>
     </header>
     <div className={`app-body ${page === "stages" ? "with-stage-library" : ""}`}>{page === "stages" ? <StageSidebar/> : null}<main className="page-content"><CurrentPage/></main></div>

@@ -41,7 +41,6 @@ public final class StagePurchaseGameTests {
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "Purchases require an isolated fixture server.");
         UUID actorId = new UUID(0x5735, 5);
         var actor = new FakePlayer(helper.getLevel(), new GameProfile(actorId, "purchase_reward"));
-        net.luckperms.api.LuckPermsProvider.get().getUserManager().loadUser(actorId, "purchase_reward").join();
         var lookup = PlayerList.class.getDeclaredField("playersByUUID");
         lookup.setAccessible(true);
         var players = (Map<UUID, ServerPlayer>) lookup.get(server.getPlayerList());
@@ -107,8 +106,6 @@ public final class StagePurchaseGameTests {
             server.overworld().setData(StageAttachments.TEAM_STAGES, original);
             order.clear();
             definitions.forEach(order::registerStage);
-            var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(actorId);
-            if (user != null) net.luckperms.api.LuckPermsProvider.get().getUserManager().cleanupUser(user);
         }
     }
 

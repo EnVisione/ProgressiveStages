@@ -49,7 +49,7 @@ export function CatalogPicker({ catalogId, selected = "", allowPrefixes = true, 
       {loading ? <div className="catalog-loading"><span/><p>Searching the running server</p></div>
         : error ? <EmptyState icon="warning" title="Registry search failed" description={error}/>
         : entries.length ? entries.map(entry => <button key={`${entry.key}:${entry.sourceType}`} className="catalog-result" onClick={() => choose(entry)}>
-          <span className="catalog-cube">◆</span><span><strong>{entry.label || entry.key}</strong><code>{entry.key}</code></span><span className="catalog-meta"><Badge>{entry.modName || entry.modId || entry.namespace}</Badge><small>{entry.sourceType}</small></span>
+          <span className="catalog-cube">◆</span><span><strong>{entry.label || entry.key}</strong><code>{entry.key}</code></span><span className="catalog-meta"><Badge focusable={false} help="The mod or namespace that registered this result.">{entry.modName || entry.modId || entry.namespace}</Badge><small>{entry.sourceType}</small></span>
         </button>)
         : <EmptyState icon="search" title="No matching registry entries" description="Try a broader search or remove the mod filter."/>}
     </div>

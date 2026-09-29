@@ -16,7 +16,7 @@ public final class StagePackageParser {
 
     private static final TomlParser PARSER = new TomlParser();
 
-    private static final Set<String> IDENTITY_SECTIONS = Set.of("schema", "package", "stage", "display", "dependencies", "metadata", "luckperms", "command_permissions");
+    private static final Set<String> IDENTITY_SECTIONS = Set.of("schema", "package", "stage", "display", "guide", "dependencies", "metadata", "luckperms", "command_permissions");
     private static final Set<String> PROGRESSION_SECTIONS = Set.of(
         "triggers", "grants", "revoke", "revokes", "duration", "cost", "unlock", "rewards",
         "challenges", "sequences", "variables", "formulas", "states", "transitions", "actions",

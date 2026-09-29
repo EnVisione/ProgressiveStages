@@ -78,6 +78,115 @@ class StageTreeScreenRenderOrderTest {
     }
 
     @Test
+    void guideHelpStaysInsideTheSelectedInspector() throws IOException {
+        String source = Files.readString(SCREEN);
+
+        assertFalse(source.contains("renderGuideView(g, mouseX, mouseY)"));
+        assertFalse(source.contains("gui.progressivestages.tree.tab.guide"));
+        assertTrue(source.contains("gui.progressivestages.tree.guide.unlock.title"));
+        assertTrue(source.contains("helpX = panelX + panelW - 31"));
+        assertTrue(source.contains("unlockHelpOpen = !unlockHelpOpen"));
+        assertTrue(source.contains("renderInspector(g, mouseX, mouseY)"));
+        assertTrue(source.contains("guideStages().stream().findFirst()"));
+        assertTrue(source.contains("!ClientStageCache.isStageGuideVisible(id)"));
+        assertTrue(source.contains("id != null && ClientStageCache.isStageGuideVisible(id)"));
+    }
+
+    @Test
+    void guideHelpClosesWhenStageFiltersChange() throws IOException {
+        String source = Files.readString(SCREEN);
+        int searchStart = source.indexOf("searchBox.setResponder(value -> {");
+        int searchEnd = source.indexOf("searchBox.visible = true;", searchStart);
+        int categoryStart = source.indexOf("private void selectCategory(int index)");
+        int categoryEnd = source.indexOf("private int categoryOptionCount()", categoryStart);
+        int ownedStart = source.indexOf("if (button == 0 && inside(mouseX, mouseY, ownedX");
+        int ownedEnd = source.indexOf("if (button == 0 && inside(mouseX, mouseY, homeX", ownedStart);
+
+        assertTrue(searchStart >= 0 && searchEnd > searchStart);
+        assertTrue(categoryStart >= 0 && categoryEnd > categoryStart);
+        assertTrue(ownedStart >= 0 && ownedEnd > ownedStart);
+        assertTrue(source.contains("private void closeUnlockHelp()"));
+        assertTrue(source.contains("unlockHelpOpen = false;\n        keyboardControlFocus = -1;\n        panelScroll = 0;"));
+        assertTrue(source.substring(searchStart, searchEnd).contains("closeUnlockHelp();"));
+        assertTrue(source.substring(categoryStart, categoryEnd).contains("closeUnlockHelp();"));
+        assertTrue(source.substring(ownedStart, ownedEnd).contains("closeUnlockHelp();"));
+    }
+
+    @Test
+    void helpAndCloseIconsUseTheSharedPixelRenderer() throws IOException {
+        String source = Files.readString(SCREEN);
+
+        assertTrue(source.contains("renderControlIcon(g, panelX + panelW - 16, panelY + 4, 13, 13,"));
+        assertTrue(source.contains("CLOSE_CONTROL_ICON, closeHover ? RED : 0xFFFFFFFF)"));
+        assertTrue(source.contains("renderControlIcon(g, helpX, helpY, helpW, helpH, HELP_CONTROL_ICON, GOLD)"));
+        assertTrue(source.contains("private static void renderControlIcon("));
+    }
+
+    @Test
+    void unlockHelpExplainsEveryConfiguredUnlockRoute() throws IOException {
+        String source = Files.readString(SCREEN);
+        String summary = Files.readString(PROJECT.resolve(
+            "src/main/java/com/enviouse/progressivestages/client/GuideRequirementSummary.java"));
+
+        int currentRequirements = source.indexOf("guideRequirementLines(selected, data)");
+        int authoredInstructions = source.indexOf("if (!guide.howToUnlock().isBlank())", currentRequirements);
+        assertTrue(currentRequirements >= 0);
+        assertTrue(authoredInstructions > currentRequirements);
+        assertTrue(source.contains("data.purchasable() && !data.purchaseBypassesTriggers()"));
+        assertTrue(source.contains("guideRequirementText(id, data)"));
+        assertTrue(summary.contains("gui.progressivestages.tree.guide.requirements.trigger.any"));
+        assertTrue(summary.contains("gui.progressivestages.tree.guide.requirements.purchase.with_triggers"));
+        assertTrue(source.contains("gui.progressivestages.tree.guide.progress.trigger_purchase"));
+    }
+
+    @Test
+    void guideSummaryHidesThePurchaseAndSlotDetailsItAlreadyShows() throws IOException {
+        String source = Files.readString(SCREEN);
+        int start = source.indexOf("private void renderInspector(GuiGraphics g, int mouseX, int mouseY)");
+        int end = source.indexOf("private int renderModifierPreview", start);
+
+        assertTrue(start >= 0 && end > start);
+        String inspector = source.substring(start, end);
+        assertTrue(inspector.contains("data.purchasable() && !unlockHelpOpen"));
+        assertTrue(inspector.contains("GuideRequirementSummary.displayPlan(requirementSummary, summaryEmbedded)"));
+        assertTrue(inspector.contains("if (displayPlan.showGeneratedSummary())"));
+        assertTrue(inspector.contains("if (!dependencies.isEmpty() && !suppressPrerequisiteDetails)"));
+        assertTrue(inspector.contains("if (!slotGroup.isBlank() && !suppressSlotDetails)"));
+    }
+
+    @Test
+    void guideEntryPointsRespectTheServerGuideSwitch() throws IOException {
+        String source = Files.readString(SCREEN);
+        String cacheSource = Files.readString(PROJECT.resolve(
+            "src/main/java/com/enviouse/progressivestages/client/ClientStageCache.java"));
+        String eventSource = Files.readString(PROJECT.resolve(
+            "src/main/java/com/enviouse/progressivestages/client/ClientEventHandler.java"));
+        String keySource = Files.readString(PROJECT.resolve(
+            "src/main/java/com/enviouse/progressivestages/client/ClientModBusEvents.java"));
+
+        assertTrue(source.contains("if (!ClientStageCache.isStageGuideEnabled()) return;"));
+        assertTrue(source.contains("if (!ClientStageCache.isStageGuideVisible(selected)) unlockHelpOpen = false;"));
+        assertTrue(cacheSource.contains("stageGuideEnabled = false"));
+        assertTrue(cacheSource.contains("stageGuideEnabled = false;\n        ClientLockCache.clear()"));
+        assertTrue(eventSource.contains("OPEN_GUIDE.consumeClick()"));
+        assertTrue(eventSource.contains("ClientStageCache.isStageGuideEnabled()"));
+        assertTrue(keySource.contains("public static final KeyMapping OPEN_GUIDE"));
+    }
+
+    @Test
+    void categoryFiltersDoNotExposeHiddenOrUnrevealedStages() throws IOException {
+        String source = Files.readString(SCREEN);
+        int start = source.indexOf("private void refreshCategories()");
+        int end = source.indexOf("private void selectCategory", start);
+        assertTrue(start >= 0 && end > start);
+        String method = source.substring(start, end);
+        assertTrue(method.contains("filter(this::categoryVisible)"));
+        assertTrue(method.contains("private boolean categoryVisible(StageId id)"));
+        assertTrue(method.contains("ClientStageCache.isHidden(id)"));
+        assertTrue(method.contains("return revealed(id, owned, !owned && dependenciesSatisfied(id))"));
+    }
+
+    @Test
     void categoryMenuRendersAboveStageItemDepth() throws IOException {
         String source = Files.readString(SCREEN);
         int start = source.indexOf("private void renderCategoryMenu(GuiGraphics g, int mouseX, int mouseY)");
@@ -99,7 +208,7 @@ class StageTreeScreenRenderOrderTest {
     }
 
     @Test
-    void openCategoryOverlayConsumesMapClickAndScrollInput() throws IOException {
+    void openCategoryOverlayConsumesItsClickAndWheelInput() throws IOException {
         String source = Files.readString(SCREEN);
         int clickStart = source.indexOf("public boolean mouseClicked(double mouseX, double mouseY, int button)");
         int clickEnd = source.indexOf("public boolean mouseDragged", clickStart);
@@ -109,7 +218,8 @@ class StageTreeScreenRenderOrderTest {
         String click = source.substring(clickStart, clickEnd);
         String scroll = source.substring(scrollStart, scrollEnd);
         assertTrue(click.contains("categoryOpen = false;\n                return true;"));
-        assertTrue(scroll.contains("if (categoryOpen) {"));
+        assertTrue(scroll.contains("if (categoryOpen && inside(mouseX, mouseY, categoryMenuX, categoryMenuY,"));
+        assertTrue(scroll.contains("if (categoryOpen) {\n            return true;"));
         assertTrue(scroll.contains("return true;"));
     }
 

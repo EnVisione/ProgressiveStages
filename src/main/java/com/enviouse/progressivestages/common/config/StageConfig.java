@@ -5,6 +5,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.core.UnmodifiableConfig;
 
@@ -36,6 +37,11 @@ public class StageConfig {
                  "Example: [\"showcase:mage\", \"my_pack:tutorial_complete\"]",
                  "Set to empty list [] for no starting stages")
         .defineList("general.starting_stages", List.of(), () -> "", obj -> obj instanceof String);
+
+    private static final ModConfigSpec.BooleanValue ENABLE_STAGE_GUIDE = BUILDER
+        .comment("Show the What to do next guide in the stages menu and guide keybind.",
+                 "Pack authors provide the guide text in each stage's optional [guide] section.")
+        .define("general.enable_stage_guide", true);
 
     private static final ModConfigSpec.ConfigValue<String> TEAM_MODE = BUILDER
         .comment("Team mode: \"ftb_teams\" (requires FTB Teams mod) or \"solo\" (each player is their own team)",
@@ -775,6 +781,7 @@ public class StageConfig {
     // ============ Cached Values ============
 
     private static List<String> startingStages;
+    private static boolean enableStageGuide;
     private static String teamMode;
     private static boolean debugLogging;
     private static boolean linearProgression;
@@ -939,6 +946,7 @@ public class StageConfig {
             com.enviouse.progressivestages.server.enforcement.InteractionCaptureManager.stopForReload();
             if (EDITOR_CONFIG_TRANSACTION) return;
             loadValuesPreservingPendingRestartValues();
+            syncGuidePolicyToPlayers();
             return;
         }
     }
@@ -975,6 +983,7 @@ public class StageConfig {
             if (effective.containsKey(path)) EDITOR_EFFECTIVE_RESTART_VALUES.put(path, effective.get(path));
         }
         loadValues();
+        syncGuidePolicyToPlayers();
     }
 
     /** Captures the loaded raw values so an editor transaction can restore them on failure. */
@@ -1016,6 +1025,13 @@ public class StageConfig {
             Object value = SPEC.getValues().get(List.of(entry.getKey().split("\\.")));
             if (value instanceof ModConfigSpec.ConfigValue<?> configValue) setEditorValue(configValue, entry.getValue());
         }
+    }
+
+    private static void syncGuidePolicyToPlayers() {
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return;
+        server.getPlayerList().getPlayers().forEach(
+            com.enviouse.progressivestages.common.network.NetworkHandler::sendStageDefinitionsSync);
     }
 
     private static Map<String, Object> captureEffectiveRestartValues() {
@@ -1110,6 +1126,8 @@ public class StageConfig {
                 startingStages.add(s);
             }
         }
+
+        enableStageGuide = ENABLE_STAGE_GUIDE.get();
 
         teamMode = TEAM_MODE.get();
         debugLogging = DEBUG_LOGGING.get();
@@ -1295,6 +1313,8 @@ public class StageConfig {
     public static List<String> getStartingStages() {
         return startingStages != null ? Collections.unmodifiableList(startingStages) : Collections.emptyList();
     }
+
+    public static boolean isEnableStageGuide() { return enableStageGuide; }
 
     public static String getTeamMode() { return teamMode; }
     public static boolean isDebugLogging() { return debugLogging; }

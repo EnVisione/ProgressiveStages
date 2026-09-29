@@ -196,7 +196,6 @@ public final class GuiResponseGameTests {
     private static FakePlayer player(GameTestHelper helper, Capture capture) {
         var profile = new GameProfile(UUID.randomUUID(), "gui_response");
         var player = new FakePlayer(helper.getLevel(), profile);
-        net.luckperms.api.LuckPermsProvider.get().getUserManager().loadUser(profile.getId(), "gui_response").join();
         player.connection = new ServerGamePacketListenerImpl(helper.getLevel().getServer(),
             new Connection(PacketFlow.SERVERBOUND), player, CommonListenerCookie.createInitial(profile, false)) {
             @Override public boolean hasChannel(net.minecraft.resources.ResourceLocation channel) {
@@ -216,8 +215,6 @@ public final class GuiResponseGameTests {
     }
 
     private static void cleanupPlayer(ServerPlayer player) {
-        var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(player.getUUID());
-        if (user != null) net.luckperms.api.LuckPermsProvider.get().getUserManager().cleanupUser(user);
         player.discard();
     }
 

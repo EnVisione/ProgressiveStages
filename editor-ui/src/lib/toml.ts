@@ -127,7 +127,17 @@ function arrayBlocks(text: string, table: string, children: boolean): ArrayBlock
     if (!header.array || !samePath(header.path, path)) continue;
     const child = (entry: TableSpan) => entry.path.length > path.length && samePath(entry.path.slice(0, path.length), path);
     const next = tables.slice(index + 1).find(entry => !children || !child(entry));
-    const end = next?.start ?? text.length;
+    const boundary = next?.start ?? text.length;
+    let end = boundary;
+    if (next) {
+      while (end > header.start) {
+        const lineEnd = end > 0 && text[end - 1] === "\n" ? end - 1 : end;
+        const lineStart = text.lastIndexOf("\n", lineEnd - 1) + 1;
+        const line = text.slice(lineStart, lineEnd).trim();
+        if (line && !line.startsWith("#")) break;
+        end = lineStart;
+      }
+    }
     blocks.push({ table, index: blocks.length, start: lineAt(header.start), end: next ? lineAt(end) : text.split("\n").length,
       startOffset: header.start, endOffset: end, text: text.slice(header.start, end) });
   }

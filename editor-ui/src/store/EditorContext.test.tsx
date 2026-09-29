@@ -17,6 +17,9 @@ function Controls() {
     <button onClick={() => void editor.openReview()}>Review</button>
     <button onClick={() => void editor.validate()}>Validate</button>
     <button onClick={() => void editor.mutateFile("stages/chef.toml", "new source")}>Edit</button>
+    <button onClick={() => void editor.mutateFile("stages/guide/stage.toml", current => current + "how_to_unlock = \"unlock\"\n")}>Save how to unlock</button>
+    <button onClick={() => void editor.mutateFile("stages/guide/stage.toml", current => current + "next_steps = \"next\"\n")}>Save next steps</button>
+    <button onClick={() => void editor.mutateFile("stages/guide/stage.toml", current => current + "where_to_find = \"here\"\n")}>Save location</button>
     <output>{editor.boot ? `Draft ${editor.boot.draft.revision}` : "Loading"}</output>
     <output>{editor.validationResult ? `Validation ${editor.validationResult.validatedRevision}` : "No current validation"}</output>
     <button onClick={() => void editor.apply()}>Apply</button>
@@ -32,6 +35,32 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+it("serializes quick field saves against the latest file and server revision", async () => {
+  const guidePath = "stages/guide/stage.toml";
+  vi.mocked(EditorApi.prototype.bootstrap).mockResolvedValue({
+    ...bootstrap,
+    draft: { ...bootstrap.draft, files: { [guidePath]: "[guide]\n" } }
+  });
+  const request = vi.spyOn(EditorApi.prototype, "request").mockImplementation(async payload => ({
+    revision: Number(payload.revision) + 1, diff: [], canUndo: true, canRedo: false
+  }));
+  render(<EditorProvider><Controls/></EditorProvider>);
+  await screen.findByText("Draft 9");
+
+  fireEvent.click(screen.getByRole("button", { name: "Save how to unlock" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save next steps" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save location" }));
+
+  await screen.findByText("Draft 12");
+  const mutations = request.mock.calls.map(([payload]) => payload).filter(payload => payload.action === "mutate");
+  expect(mutations.map(payload => payload.revision)).toEqual([9, 10, 11]);
+  expect(mutations.map(payload => payload.content)).toEqual([
+    "[guide]\nhow_to_unlock = \"unlock\"\n",
+    "[guide]\nhow_to_unlock = \"unlock\"\nnext_steps = \"next\"\n",
+    "[guide]\nhow_to_unlock = \"unlock\"\nnext_steps = \"next\"\nwhere_to_find = \"here\"\n"
+  ]);
 });
 
 it("applies the displayed review revision and updates it when a new review opens", async () => {

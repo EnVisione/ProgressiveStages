@@ -1,0 +1,20 @@
+[stage]
+id = "challenge4"
+display_name = "Industrial Age"
+
+[blocks]
+locked = ["mod:immersiveengineering"]
+
+[[blocks.overrides]]
+target = "id:minecraft:diamond_ore"
+display_as = "minecraft:stone"
+drop_as = "minecraft:cobblestone"
+priority = 0
+
+# Keep this comment.
+[[ores.overrides]]
+targets = ["tags:c:ores", "mod:immersiveengineering"]
+display_as = "minecraft:deepslate"
+drop_as = "minecraft:cobbled_deepslate"
+priority = 7
+custom_note = "keep"

@@ -1,0 +1,35 @@
+[schema]
+version = 4
+
+[stage]
+id = "challenge4"
+
+[[blocks.overrides]]
+target = "id:minecraft:diamond_ore"
+display_as = "minecraft:stone"
+drop_as = "minecraft:cobblestone"
+priority = 40
+
+[[blocks.overrides]]
+target = "id:minecraft:stone"
+display_as = "minecraft:dirt"
+drop_as = "minecraft:oak_planks"
+priority = 50
+
+[[blocks.overrides]]
+target = "tag:minecraft:coal_ores"
+display_as = "minecraft:gravel"
+drop_as = "minecraft:coal"
+priority = 20
+
+[[blocks.overrides]]
+target = "mod:minecraft"
+display_as = "minecraft:netherrack"
+drop_as = "minecraft:redstone"
+priority = 10
+
+[[blocks.overrides]]
+targets = ["id:minecraft:iron_ore", "tag:minecraft:iron_ores"]
+display_as = "minecraft:deepslate"
+drop_as = "minecraft:raw_iron"
+priority = 15

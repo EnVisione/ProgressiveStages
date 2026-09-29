@@ -5,6 +5,7 @@ import com.enviouse.progressivestages.common.rehaul.RuleLifetime;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Schema4StageCompilerTest {
@@ -140,6 +141,142 @@ class Schema4StageCompilerTest {
         assertTrue(compiled.rules().stream().anyMatch(rule -> rule.category().equals("structures")
             && rule.priority() == -2));
     }
+
+    @Test
+    void rejectsSpecializedCategoriesInGenericRulesAndExceptions() {
+        var parsed = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:specialized\"\n", "rules.toml", """
+                [[rules]]
+                id = "pack:ore-rule"
+                effect = "lock"
+                action = "display"
+                targets.ores = ["id:minecraft:diamond_ore"]
+
+                """, "progression.toml", "");
+        assertTrue(parsed.isSuccess(), parsed.getErrorMessage());
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> Schema4StageCompiler.compile(parsed.getStageDefinition(), parsed.getSourceConfig(), "test", 0));
+        assertTrue(error.getMessage().contains("rules.targets.ores"));
+        assertTrue(error.getMessage().contains("[[blocks.overrides]]"));
+
+        var region = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:region\"\n", "rules.toml", """
+                [[rules]]
+                id = "pack:region-rule"
+                effect = "lock"
+                action = "break"
+                targets.region = ["id:minecraft:overworld"]
+                """, "progression.toml", "");
+        assertTrue(region.isSuccess(), region.getErrorMessage());
+        IllegalArgumentException regionError = assertThrows(IllegalArgumentException.class,
+            () -> Schema4StageCompiler.compile(region.getStageDefinition(), region.getSourceConfig(), "test", 0));
+        assertTrue(regionError.getMessage().contains("rules.targets.region"));
+        assertTrue(regionError.getMessage().contains("[[regions]]"));
+
+        var exception = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:exception\"\n", "rules.toml", """
+                [[rules]]
+                id = "pack:block-rule"
+                effect = "lock"
+                targets.blocks = ["id:minecraft:diamond_block"]
+
+                [[rules.exceptions]]
+                effect = "exclude"
+                targets.ore = ["id:minecraft:diamond_ore"]
+                """, "progression.toml", "");
+        assertTrue(exception.isSuccess(), exception.getErrorMessage());
+        IllegalArgumentException exceptionError = assertThrows(IllegalArgumentException.class,
+            () -> Schema4StageCompiler.compile(exception.getStageDefinition(), exception.getSourceConfig(), "test", 0));
+        assertTrue(exceptionError.getMessage().contains("rules.exceptions.targets.ore"));
+        assertTrue(exceptionError.getMessage().contains("[[blocks.overrides]]"));
+    }
+
+    @Test
+    void rejectsActionsAndResultsThatHaveNoCoreRuntimeHandler() {
+        var fluid = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:fluid\"\n", "rules.toml", """
+                [[rules]]
+                effect = "lock"
+                action = "interact"
+                targets.fluids = ["id:minecraft:water"]
+                """, "progression.toml", "");
+        assertTrue(fluid.isSuccess(), fluid.getErrorMessage());
+        var fluidError = assertThrows(IllegalArgumentException.class,
+            () -> Schema4StageCompiler.compile(fluid.getStageDefinition(), fluid.getSourceConfig(), "test", 0));
+        assertTrue(fluidError.getMessage().contains("unsupported action 'interact'"));
+
+        var pet = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:pet\"\n", "rules.toml", """
+                [[rules]]
+                effect = "lock"
+                action = "ride"
+                targets.pets = ["id:minecraft:wolf"]
+                """, "progression.toml", "");
+        assertTrue(pet.isSuccess(), pet.getErrorMessage());
+        var petError = assertThrows(IllegalArgumentException.class,
+            () -> Schema4StageCompiler.compile(pet.getStageDefinition(), pet.getSourceConfig(), "test", 0));
+        assertTrue(petError.getMessage().contains("targets.entities"));
+
+        var result = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:result\"\n", "rules.toml", """
+                [[rules]]
+                effect = "replace"
+                action = "place"
+                targets.blocks = ["id:minecraft:stone"]
+                """, "progression.toml", "");
+        assertTrue(result.isSuccess(), result.getErrorMessage());
+        var resultError = assertThrows(IllegalArgumentException.class,
+            () -> Schema4StageCompiler.compile(result.getStageDefinition(), result.getSourceConfig(), "test", 0));
+        assertTrue(resultError.getMessage().contains("unsupported result"));
+    }
+
+    @Test
+    void usesLiveFluidActionAsDefaultAndRequiresExactSelectorsForExactCategories() {
+        var fluid = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:fluid\"\n", "rules.toml", """
+                [[rules]]
+                effect = "lock"
+                targets.fluids = ["id:minecraft:water"]
+                """, "progression.toml", "");
+        assertTrue(fluid.isSuccess(), fluid.getErrorMessage());
+        var compiled = Schema4StageCompiler.compile(fluid.getStageDefinition(), fluid.getSourceConfig(), "test", 0);
+        assertTrue(compiled.rules().stream().anyMatch(rule -> rule.category().equals("fluids")
+            && rule.action().equals("place")));
+
+        var dimension = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:dimension\"\n", "rules.toml", """
+                [[rules]]
+                effect = "lock"
+                action = "enter"
+                targets.dimensions = ["mod:minecraft"]
+                """, "progression.toml", "");
+        assertTrue(dimension.isSuccess(), dimension.getErrorMessage());
+        var selectorError = assertThrows(IllegalArgumentException.class,
+            () -> Schema4StageCompiler.compile(dimension.getStageDefinition(), dimension.getSourceConfig(), "test", 0));
+        assertTrue(selectorError.getMessage().contains("needs one exact ID"));
+    }
+
+    @Test
+    void allowsAnyActionForCoreCategoriesAndLeavesUnknownCategoriesToIntegrations() {
+        var parsed = StagePackageParser.parseContents("test", "stage.toml",
+            "[schema]\nversion=4\n[stage]\nid=\"pack:extensions\"\n", "rules.toml", """
+                [[rules]]
+                effect = "lock"
+                action = "access"
+                targets.blocks = ["id:minecraft:stone"]
+
+                [[rules]]
+                effect = "replace"
+                action = "replace"
+                targets."addon:custom" = ["id:addon:thing"]
+                """, "progression.toml", "");
+        assertTrue(parsed.isSuccess(), parsed.getErrorMessage());
+        var compiled = Schema4StageCompiler.compile(parsed.getStageDefinition(), parsed.getSourceConfig(), "test", 0);
+        assertTrue(compiled.rules().stream().anyMatch(rule -> rule.category().equals("blocks") && rule.action().equals("access")));
+        assertTrue(compiled.rules().stream().anyMatch(rule -> rule.category().equals("addon:custom")
+            && rule.effect() == RuleEffect.REPLACE));
+    }
+
     @Test
     void exceptionsReferenceEveryExpandedParentAndInheritOwnership() {
         var parsed = StagePackageParser.parseContents("test", "stage.toml",

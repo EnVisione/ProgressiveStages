@@ -320,7 +320,6 @@ public final class PermissionEpisodeGameTests {
             original = server.overworld().getData(StageAttachments.TEAM_STAGES);
             server.overworld().setData(StageAttachments.TEAM_STAGES, original.copy());
             player = new FakePlayer(helper.getLevel(), new GameProfile(subject, "episode_test"));
-            net.luckperms.api.LuckPermsProvider.get().getUserManager().loadUser(subject, "episode_test").join();
             previousClock = StageRegressionData.get(server).getGrantTime(owner, stage);
             LuckPermsBridge.getInstance().setAdapterForTests(adapter);
         }
@@ -374,8 +373,6 @@ public final class PermissionEpisodeGameTests {
             else StageRegressionData.get(player.server).markGranted(owner, stage, previousClock);
             LuckPermsBridge.disconnect(player);
             LuckPermsBridge.getInstance().setAdapterForTests(null);
-            var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(subject);
-            if (user != null) net.luckperms.api.LuckPermsProvider.get().getUserManager().cleanupUser(user);
             order.clear();
             definitions.forEach(order::registerStage);
             player.discard();

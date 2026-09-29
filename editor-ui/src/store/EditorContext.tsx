@@ -40,7 +40,7 @@ interface EditorContextValue {
   openDialog: (dialog: DialogState) => void;
   closeDialog: () => void;
   refresh: () => Promise<void>;
-  mutateFile: (path: string, content: string | null, successMessage?: string) => Promise<void>;
+  mutateFile: (path: string, content: string | null | ((current: string) => string | null), successMessage?: string) => Promise<void>;
   mutateFiles: (changes: Array<{ path: string; content: string | null }>, successMessage?: string) => Promise<void>;
   runDraftAction: <T>(payload: Record<string, unknown>, successMessage?: string) => Promise<T>;
   undo: () => Promise<void>;
@@ -68,6 +68,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const bootRef = useRef<Bootstrap | null>(null);
   bootRef.current = boot;
+  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [page, setPageState] = useState<PageId>("stages");
   const [stageTab, setStageTab] = useState<StageTab>("essentials");
   const [selectedStageKey, setSelectedStageKey] = useState("");
@@ -135,43 +136,53 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const mutateFile = useCallback(async (path: string, content: string | null, successMessage?: string) => {
-    if (!boot) return;
-    setBusy(`Saving ${path.split("/").pop() || path}`);
-    try {
-      const result = await api.request<Pick<DraftView, "revision" | "diff" | "canUndo" | "canRedo">>({
-        action: "mutate",
-        path,
-        content,
-        revision: boot.draft.revision
-      });
-      setBoot(current => current ? mergeDraft(current, {
-        revision: result.revision,
-        diff: result.diff,
-        canUndo: result.canUndo,
-        canRedo: result.canRedo,
-        files: content == null
-          ? Object.fromEntries(Object.entries(current.draft.files).filter(([key]) => key !== path))
-          : { ...current.draft.files, [path]: content }
-      }) : current);
-      setBusy("");
-      if (successMessage) notify("success", successMessage);
-    } catch (failure) {
-      setBusy("");
+  const mutateFile = useCallback((path: string, update: string | null | ((current: string) => string | null), successMessage?: string) => {
+    const task = mutationQueueRef.current.then(async () => {
+      const current = bootRef.current;
+      if (!current) return;
+      const content = typeof update === "function" ? update(current.draft.files[path] || "") : update;
+      setBusy(`Saving ${path.split("/").pop() || path}`);
       try {
-        const fresh = await api.bootstrap();
-        setBoot(fresh);
-        rememberValidation(fresh.validation, fresh.draft.id);
-        setSelectedStageKey(current => current && discoverStages(fresh.draft.files).some(stage => stage.key === current)
-          ? current
-          : discoverStages(fresh.draft.files).find(stage => !stage.archived)?.key || "");
-      } catch (_) {
-        // Keep the existing draft visible when the recovery bootstrap also fails.
+        const result = await api.request<Pick<DraftView, "revision" | "diff" | "canUndo" | "canRedo">>({
+          action: "mutate",
+          path,
+          content,
+          revision: current.draft.revision
+        });
+        const files = content == null
+          ? Object.fromEntries(Object.entries(current.draft.files).filter(([key]) => key !== path))
+          : { ...current.draft.files, [path]: content };
+        const next = mergeDraft(current, {
+          revision: result.revision,
+          diff: result.diff,
+          canUndo: result.canUndo,
+          canRedo: result.canRedo,
+          files
+        });
+        bootRef.current = next;
+        setBoot(next);
+        setBusy("");
+        if (successMessage) notify("success", successMessage);
+      } catch (failure) {
+        setBusy("");
+        try {
+          const fresh = await api.bootstrap();
+          bootRef.current = fresh;
+          setBoot(fresh);
+          rememberValidation(fresh.validation, fresh.draft.id);
+          setSelectedStageKey(key => key && discoverStages(fresh.draft.files).some(stage => stage.key === key)
+            ? key
+            : discoverStages(fresh.draft.files).find(stage => !stage.archived)?.key || "");
+        } catch (_) {
+          // Keep the existing draft visible when the recovery bootstrap also fails.
+        }
+        notify("danger", "The draft was not saved", failure instanceof Error ? failure.message : String(failure));
+        throw failure;
       }
-      notify("danger", "The draft was not saved", failure instanceof Error ? failure.message : String(failure));
-      throw failure;
-    }
-  }, [api, boot, notify, rememberValidation]);
+    });
+    mutationQueueRef.current = task.catch(() => {});
+    return task;
+  }, [api, notify, rememberValidation]);
 
   const mutateFiles = useCallback(async (changes: Array<{ path: string; content: string | null }>, successMessage?: string) => {
     if (!boot || !changes.length) return;

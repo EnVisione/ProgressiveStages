@@ -17,7 +17,7 @@ class EditorAvailabilityTest {
             "src/main/java/com/enviouse/progressivestages/server/commands/StageCommand.java"));
         String service = Files.readString(PROJECT.resolve(
             "src/main/java/com/enviouse/progressivestages/server/editor/EditorSessionService.java"));
-        String guide = Files.readString(PROJECT.resolve("REHAUL_GUIDE.md"));
+        String guide = Files.readString(PROJECT.resolve("docs/rehaul/3.0.1/documentation.md"));
 
         assertFalse(command.contains("getServer().isDedicatedServer()"));
         assertFalse(service.contains("isDedicatedServer()"));

@@ -147,6 +147,25 @@ class LuckPermsProjectionContextsTest {
     }
 
     @Test
+    void cleanupDoesNotNotifyForAProjectionThatWasNeverPublished() {
+        Fixture fixture = new Fixture();
+        Object target = new Object();
+        try (var contexts = fixture.contexts) {
+            long ticket = contexts.prepare(SUBJECT, target);
+            fixture.failSignal = true;
+
+            assertTrue(contexts.invalidateAll());
+            assertFalse(contexts.tracksSubject(SUBJECT));
+            assertTrue(fixture.observedActive.isEmpty());
+            assertFalse(contexts.publish(SUBJECT, ticket));
+        } finally {
+            fixture.failSignal = false;
+        }
+        assertNull(fixture.calculator);
+        assertEquals(1, fixture.unregisters);
+    }
+
+    @Test
     void shutdownWithdrawsEveryMarkerBeforeSignalingAndRetriesUnregistration() {
         Fixture fixture = new Fixture();
         Object first = new Object();

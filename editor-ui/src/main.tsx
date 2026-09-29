@@ -9,7 +9,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string }
   static getDerivedStateFromError(error: Error) { return { error: error.message || "The React editor stopped unexpectedly." }; }
   componentDidCatch(error: Error, info: ErrorInfo) { console.error("ProgressiveStages editor failure", error, info); }
   render() {
-    if (this.state.error) return <main className="loading-screen error-screen"><img src="/logo.png" alt="ProgressiveStages lock logo"/><h1>The editor needs to restart</h1><p>{this.state.error}</p><button className="button button-primary" onClick={() => window.location.reload()}>Reload editor</button></main>;
+    if (this.state.error) return <main className="loading-screen error-screen"><img src="/favicon.svg" alt="ProgressiveStages lock logo"/><h1>The editor needs to restart</h1><p>{this.state.error}</p><button className="button button-primary" onClick={() => window.location.reload()}>Reload editor</button></main>;
     return this.props.children;
   }
 }

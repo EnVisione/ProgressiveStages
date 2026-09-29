@@ -54,15 +54,23 @@ final class LuckPermsProjectionContexts implements ContextCalculator<Object>, Au
             projection.current = current;
             projection.active = current.getAsBoolean();
             if (!projection.active) projection.valid = false;
+            else projection.contextMayBeCached = true;
         }
-        try {
-            signalUpdate(projection.target);
-        } catch (RuntimeException | LinkageError failure) {
-            projection.active = false;
-            projection.valid = false;
-            try { signalUpdate(projection.target); }
-            catch (RuntimeException | LinkageError invalidation) { failure.addSuppressed(invalidation); }
-            throw failure;
+        if (projection.contextMayBeCached) {
+            try {
+                signalUpdate(projection.target);
+            } catch (RuntimeException | LinkageError failure) {
+                projection.active = false;
+                projection.valid = false;
+                try {
+                    signalUpdate(projection.target);
+                    projection.contextMayBeCached = false;
+                } catch (RuntimeException | LinkageError invalidation) {
+                    failure.addSuppressed(invalidation);
+                }
+                throw failure;
+            }
+            if (!projection.active) projection.contextMayBeCached = false;
         }
         return projection.valid && projection.active && !closing && projection.generation == generation
             && projection.current.getAsBoolean();
@@ -90,7 +98,10 @@ final class LuckPermsProjectionContexts implements ContextCalculator<Object>, Au
             projection.active = false;
             projection.valid = false;
         }
-        signalUpdate(projection.target);
+        if (projection.contextMayBeCached) {
+            signalUpdate(projection.target);
+            projection.contextMayBeCached = false;
+        }
         synchronized (this) {
             subjects.remove(subject, projection);
             targets.remove(projection.target, projection);
@@ -164,6 +175,7 @@ final class LuckPermsProjectionContexts implements ContextCalculator<Object>, Au
         final long generation;
         volatile boolean valid = true;
         volatile boolean active;
+        volatile boolean contextMayBeCached;
         volatile java.util.function.BooleanSupplier current = () -> true;
 
         Projection(Object target, long ticket, long generation) {

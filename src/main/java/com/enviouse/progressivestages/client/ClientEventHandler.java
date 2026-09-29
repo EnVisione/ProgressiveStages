@@ -170,6 +170,7 @@ public class ClientEventHandler {
     /** Prevent lock and progression snapshots from leaking between multiplayer servers/worlds. */
     @SubscribeEvent
     public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        com.enviouse.progressivestages.common.network.NetworkHandler.clearClientDefinitionAssembly();
         EmiLifecycleBridge.beginClientDisconnect();
         ClientStageCache.clear();
         ClientTriggerProgress.clear();
@@ -198,6 +199,7 @@ public class ClientEventHandler {
     public static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
         enforceAbilityState();
         clearConcealedCrosshairTarget();
+        com.enviouse.progressivestages.common.network.NetworkHandler.tickClientDefinitionAssemblies();
         // Drain all queued presses (so the keymapping counter is reset) but send at most one
         // request per tick to avoid flooding the server on a double-tap.
         boolean pressed = false;
@@ -206,6 +208,14 @@ public class ClientEventHandler {
         }
         if (pressed) {
             ClientTriggerProgress.requestFromServer();
+        }
+        boolean guidePressed = false;
+        while (ClientModBusEvents.OPEN_GUIDE.consumeClick()) guidePressed = true;
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        if (guidePressed && minecraft.player != null
+                && (minecraft.screen == null || minecraft.screen instanceof com.enviouse.progressivestages.client.gui.StageTreeScreen)
+                && ClientStageCache.isStageGuideEnabled()) {
+            com.enviouse.progressivestages.client.gui.StageTreeScreen.openGuide();
         }
     }
 

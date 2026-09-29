@@ -42,7 +42,7 @@ class BeginnerExamplePackTest {
     @Test
     void generatedDiamondStageLinksTheGitHubGuides() {
         String diamond = DefaultStageTemplates.diamondAge();
-        assertTrue(diamond.contains("https://github.com/EnVisione/ProgressiveStages/blob/master/GETTING_STARTED.md"));
+        assertTrue(diamond.contains("https://github.com/EnVisione/ProgressiveStages/blob/master/docs/getting-started/documentation.md"));
         assertTrue(diamond.contains("https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md"));
     }
 }

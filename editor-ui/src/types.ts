@@ -221,7 +221,7 @@ export interface InteractionModel {
 }
 
 export interface RuleModel {
-  classicField?: "locked" | "allowed" | "always_unlocked";
+  classicField?: string;
   stageState?: string;
   table: "rules" | "temporary_rules" | "classic" | "recipe_items" | "recipe_ids" | "interactions";
   tableIndex: number;
@@ -249,6 +249,7 @@ export interface RuleModel {
   conditionSource?: string;
   resetConditionSource?: string;
   ambiguous?: boolean;
+  ineffectivePriority?: boolean;
 }
 
 export interface ProgressionModel {

@@ -33,11 +33,18 @@ public final class ClientModBusEvents {
         InputConstants.UNKNOWN.getValue(),
         "key.categories.progressivestages");
 
+    public static final KeyMapping OPEN_GUIDE = new KeyMapping(
+        "key.progressivestages.open_guide",
+        InputConstants.Type.KEYSYM,
+        InputConstants.UNKNOWN.getValue(),
+        "key.categories.progressivestages");
+
     private ClientModBusEvents() {}
 
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(OPEN_TREE);
+        event.register(OPEN_GUIDE);
     }
 
     /** v2.4: register the active-goal HUD bar just above the vanilla XP bar. */

@@ -1,16 +1,19 @@
 import { OwnershipFeedback } from "../../components/StageCapabilityFeedback";
 import { FieldDiagnostics } from "../../components/ValidationMessages";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CatalogPicker } from "../../components/CatalogPicker";
 import { Badge, Button, Field, Section, Toggle } from "../../components/ui";
+import { GUIDE_BYTE_LIMIT, GUIDE_CODE_POINT_LIMIT, GUIDE_PLACEHOLDERS, GUIDE_PLACEHOLDER_VALUES, expandGuideTemplate, guideTextMetrics, hasInlineStageRequirements, truncateGuideText } from "../../lib/guide";
 import { dependenciesFor, dependencySummary, stageDependsOn } from "../../lib/model";
 import { parseOwnership, writeOwnership } from "../../lib/integrations";
 import { booleanValue, lineValues, numberValue, parseSimpleArray, readTomlValue, removeTomlValue, stringValue, upsertToml } from "../../lib/toml";
 import { useEditor } from "../../store/EditorContext";
 import type { StagePackage } from "../../types";
 
-function TextDraftField({ label, value, help, wide, multiline, type = "text", onSave }:
-  { label: string; value: string | number; help?: string; wide?: boolean; multiline?: boolean; type?: string; onSave: (value: string) => Promise<void> }) {
+const guidePreviewValues = (stageName: string) => ({ ...GUIDE_PLACEHOLDER_VALUES, stage_name: stageName });
+
+function TextDraftField({ label, value, help, wide, multiline, type = "text", maxLength, onSave }:
+  { label: string; value: string | number; help?: string; wide?: boolean; multiline?: boolean; type?: string; maxLength?: number; onSave: (value: string) => Promise<void> }) {
   const [draft, setDraft] = useState(String(value));
   const [saving, setSaving] = useState(false);
   useEffect(() => setDraft(String(value)), [value]);
@@ -20,8 +23,84 @@ function TextDraftField({ label, value, help, wide, multiline, type = "text", on
     try { await onSave(draft); } finally { setSaving(false); }
   };
   return <Field label={label} help={saving ? "Saving to the server draft" : help} wide={wide}>
-    {multiline ? <textarea rows={3} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => void save()}/>
-      : <input type={type} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => void save()}/>}
+    {multiline ? <textarea rows={3} maxLength={maxLength} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => void save()}/>
+      : <input type={type} maxLength={maxLength} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => void save()}/>}
+  </Field>;
+}
+
+function GuideEditor({ content, save }: { stage: StagePackage; content: string; save: (path: string, value: unknown) => Promise<void> }) {
+  const text = (path: string) => stringValue(readTomlValue(content, path));
+  const guideEnabled = booleanValue(readTomlValue(content, "guide.enabled") || "true");
+  const stageName = text("stage.display_name") || "This stage";
+  const previewValues = guidePreviewValues(stageName);
+  const field = (path: string, label: string, help: string) => <GuideTextField
+    label={label}
+    value={text(path)}
+    help={help}
+    stageName={stageName}
+    onSave={value => save(path, value)}
+  />;
+  const previews = ["guide.how_to_unlock", "guide.next_steps", "guide.where_to_find"]
+    .map(path => expandGuideTemplate(text(path), previewValues))
+    .filter(value => value.text.trim());
+  return <Section title="What to do next" description="Write the short instructions players see in the guide. Text is shown as written and never runs commands or grants stages.">
+    <div className="form-grid">
+      <Toggle label="Show this stage's player guide" help="When off, this stage has no in-game ? button and is skipped by the What to do next keybind. The global guide setting in Setup still controls every stage." checked={guideEnabled} onChange={value => void save("guide.enabled", value)}/>
+      {field("guide.how_to_unlock", "How to unlock", "Explain how the player can earn this stage. Put the full unlock summary placeholder on its own line; it may include complete sentences about costs and group slots.")}
+      {field("guide.next_steps", "Next steps", "Tell the player what to do after this stage.")}
+      {field("guide.where_to_find", "Where to find it", "Point to a place, menu, quest, or nearby landmark.")}
+      <Field label="Guide recommendation" help="Automatic suggests a visible stage when its prerequisites are ready and it has a trigger or guide text. Always include keeps it eligible. Never include removes it.">
+        <select value={text("guide.recommendation") || "auto"} onChange={event => void save("guide.recommendation", event.target.value)}>
+          <option value="auto">Automatic</option>
+          <option value="include">Always include</option>
+          <option value="exclude">Never include</option>
+        </select>
+      </Field>
+    </div>
+    <div className="guide-preview" aria-label="Example guide preview">
+      <strong>Example guide preview</strong>
+      <small>Placeholder values are examples. The game uses the server's current requirements.</small>
+      {previews.length ? previews.map((value, index) => <p key={`${index}:${value.text}`}>{value.text}</p>) : <p className="muted">Add guide text to preview it here.</p>}
+      {previews.some(value => value.unknown.length) ? <small className="setting-error">Unknown placeholders stay visible until corrected.</small> : null}
+    </div>
+  </Section>;
+}
+
+function GuideTextField({ label, value, help, stageName, onSave }: { label: string; value: string; help: string; stageName: string; onSave: (value: string) => Promise<void> }) {
+  const [draft, setDraft] = useState(value);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const area = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => setDraft(value), [value]);
+  const saveDraft = async () => {
+    if (draft === value) return;
+    if (!guideTextMetrics(draft).valid) return;
+    setSaving(true);
+    try { await onSave(draft); } finally { setSaving(false); }
+  };
+  const insert = (token: string) => {
+    const element = area.current;
+    const start = element?.selectionStart ?? draft.length;
+    const end = element?.selectionEnd ?? draft.length;
+    const next = `${draft.slice(0, start)}${token}${draft.slice(end)}`;
+    setDraft(truncateGuideText(next));
+    setChooserOpen(false);
+    requestAnimationFrame(() => { element?.focus(); });
+  };
+  const preview = expandGuideTemplate(draft, guidePreviewValues(stageName));
+  const metrics = guideTextMetrics(draft);
+  const limitMessage = `${metrics.codePoints}/${GUIDE_CODE_POINT_LIMIT} characters, ${metrics.bytes}/${GUIDE_BYTE_LIMIT} bytes.`;
+  return <Field label={label} help={`${help} ${limitMessage}`} wide>
+    <textarea ref={element => { area.current = element; }} rows={3} value={draft} onChange={event => setDraft(event.target.value)} onBlur={() => void saveDraft()}/>
+    <div className="guide-placeholder-tools">
+      <Button type="button" tone="quiet" onClick={() => setChooserOpen(open => !open)} help="Insert a fixed read only value into this guide field.">Insert placeholder</Button>
+      {chooserOpen ? <div className="guide-placeholder-menu" role="group" aria-label="Guide placeholders">{GUIDE_PLACEHOLDERS.map(item => <Button key={item.token} type="button" tone="quiet" onClick={() => insert(item.token)} help={`${item.help} Example: ${item.example}.`}>{item.label}</Button>)}</div> : null}
+    </div>
+    {preview.text ? <small className="guide-inline-preview">Example preview. {preview.text}</small> : null}
+    {hasInlineStageRequirements(draft) ? <small className="muted" role="note">The unlock summary already includes a full message. Put {'{stage_requirements}'} on its own line to avoid awkward wording.</small> : null}
+    {preview.unknown.length ? <small className="setting-error">Unknown placeholders. {preview.unknown.join(", ")}</small> : null}
+    {!metrics.valid ? <small className="setting-error" role="alert">This guide field is too long. Keep it within {GUIDE_CODE_POINT_LIMIT} characters and {GUIDE_BYTE_LIMIT} UTF 8 bytes.</small> : null}
+    {saving ? <small className="muted">Saving to the draft.</small> : null}
   </Field>;
 }
 
@@ -53,7 +132,7 @@ function DependencyEditor({ stage }: { stage: StagePackage }) {
       const checked = selected.has(candidate.id);
       return <label key={candidate.id} className={`dependency-option ${checked ? "selected" : ""} ${cycle && !checked ? "disabled" : ""}`}><input type="checkbox" checked={checked} disabled={cycle && !checked} onChange={event => setSelected(current => { const next = new Set(current); if (event.target.checked) next.add(candidate.id); else next.delete(candidate.id); return next; })}/><span className="stage-orb">◆</span><span><strong>{candidate.name}</strong><small>{cycle && !checked ? "Would create a progression loop" : candidate.dependencies.length ? `Evolves from ${candidate.dependencies.length} path${candidate.dependencies.length === 1 ? "" : "s"}` : "Beginner path"}</small></span></label>;
     })}</div>
-    <div className="dependency-preview"><span>{stage.name}</span><strong>{selected.size ? `${selected.size} incoming path${selected.size === 1 ? "" : "s"}` : "Beginner stage"}</strong><div>{[...selected].map(id => <Badge key={id} tone="gold">{stages.find(candidate => candidate.id === id)?.name || id}</Badge>)}</div></div>
+    <div className="dependency-preview"><span>{stage.name}</span><strong>{selected.size ? `${selected.size} incoming path${selected.size === 1 ? "" : "s"}` : "Beginner stage"}</strong><div>{[...selected].map(id => <Badge key={id} tone="gold" help="Selected prerequisite path. The requirement policy decides how many selected stages a player needs.">{stages.find(candidate => candidate.id === id)?.name || id}</Badge>)}</div></div>
     <footer className="dialog-actions"><Button tone="quiet" onClick={closeDialog}>Cancel</Button><Button tone="primary" onClick={() => void save()}>Save paths</Button></footer>
   </div>;
 }
@@ -93,7 +172,7 @@ function SlotEditor({ stage }: { stage: StagePackage }) {
 export function EssentialsPanel({ stage }: { stage: StagePackage }) {
   const { boot, stages, mutateFile, openDialog } = useEditor();
   const content = boot?.draft.files[stage.stagePath] || "";
-  const save = (path: string, value: unknown) => mutateFile(stage.stagePath, upsertToml(boot?.draft.files[stage.stagePath] || "", path, value));
+  const save = (path: string, value: unknown) => mutateFile(stage.stagePath, current => upsertToml(current, path, value));
   const icon = stringValue(readTomlValue(content, "stage.icon")) || stage.icon;
   const tags = parseSimpleArray(readTomlValue(content, "stage.tags"));
   const ownership = parseOwnership(content);
@@ -114,7 +193,7 @@ export function EssentialsPanel({ stage }: { stage: StagePackage }) {
       </div>
     </Section>
     <Section title="Required stages" description="Choose which stages must be complete before this stage can be earned." action={<Button tone="primary" onClick={() => openDialog({ title: `Required stages for ${stage.name}`, description: "Select prerequisites and choose how their branches join.", content: <DependencyEditor stage={stage}/>, width: "wide" })}>Edit required stages</Button>}>
-      <div className="summary-row"><span className="summary-icon">↟</span><div><strong>{dependencySummary(stages, stage)}</strong><p>{stage.dependencies.length ? "These branches connect directly into this stage." : "This stage can begin a new progression path."}</p></div><div className="chip-row">{stage.dependencies.map(id => <Badge key={id} tone="gold">{stages.find(candidate => candidate.id === id)?.name || id}</Badge>)}</div></div>
+      <div className="summary-row"><span className="summary-icon">↟</span><div><strong>{dependencySummary(stages, stage)}</strong><p>{stage.dependencies.length ? "These branches connect directly into this stage." : "This stage can begin a new progression path."}</p></div><div className="chip-row">{stage.dependencies.map(id => <Badge key={id} tone="gold" help="Configured prerequisite path. Check the requirement policy to see whether players need every path or only some of them.">{stages.find(candidate => candidate.id === id)?.name || id}</Badge>)}</div></div>
     </Section>
     <Section title="Ownership and stacking" description="Control who shares the stage and how related choices combine." action={<Button onClick={() => openDialog({ title: "Stage slots and stacking", description: "Limit mutually exclusive classes or let specialist buffs stack.", content: <SlotEditor stage={stage}/> })}>Configure slots</Button>}>
       <div className="form-grid">
@@ -123,6 +202,7 @@ export function EssentialsPanel({ stage }: { stage: StagePackage }) {
         <Toggle label="Hide this stage from players" help="Reveal policy still controls when hidden content becomes visible." checked={booleanValue(readTomlValue(content, "stage.hidden"))} onChange={value => void save("stage.hidden", value)}/>
       </div>
     </Section>
+    <GuideEditor stage={stage} content={content} save={save}/>
     <Section title="Player map appearance" description="Use the advancement inspired presentation players see in game.">
       <div className="form-grid">
         <TextDraftField label="Map category" value={stringValue(readTomlValue(content, "stage.category"))} onSave={value => save("stage.category", value)} help="Categories become filters in the player screen."/>
