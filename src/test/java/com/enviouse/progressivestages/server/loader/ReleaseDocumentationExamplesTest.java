@@ -1,6 +1,8 @@
 package com.enviouse.progressivestages.server.loader;
 
 import com.enviouse.progressivestages.common.api.StageId;
+import com.electronwill.nightconfig.core.Config;
+import com.electronwill.nightconfig.toml.TomlParser;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +13,8 @@ import java.util.Comparator;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReleaseDocumentationExamplesTest {
@@ -59,14 +63,28 @@ class ReleaseDocumentationExamplesTest {
         assertTrue(protection.preventBlockBreak());
         assertTrue(protection.preventExplosions());
         assertTrue(protection.disableMobSpawning());
+        assertEquals(Integer.valueOf(50), protection.priority());
+
+        var access = parsed.stream()
+            .filter(stage -> stage.getId().equals(StageId.parse("example:stronghold_access")))
+            .findFirst().orElseThrow().getLocks().structures();
+        assertEquals(List.of("id:minecraft:stronghold"),
+            access.lockedEntry().locked().stream().map(entry -> entry.raw()).toList());
 
         var permit = parsed.stream().filter(stage -> stage.getId().equals(StageId.parse("example:stronghold_allow")))
             .findFirst().orElseThrow();
-        assertTrue(permit.getConditionalRules().stream()
-            .anyMatch(rule -> rule.effect().name().equals("UNLOCK")
-                && rule.stageState().name().equals("OWNED")));
+        var permitRule = permit.getConditionalRules().stream()
+            .filter(rule -> rule.effect().name().equals("UNLOCK")
+                && rule.stageState().name().equals("OWNED"))
+            .findFirst().orElseThrow();
+        assertEquals(100, permitRule.priority());
 
-        String globalConfig = Files.readString(PROJECT.resolve("examples/3.1.0/progressivestages.toml"));
-        assertTrue(globalConfig.contains("enable_stage_guide = false"));
+        Config globalConfig;
+        try (var reader = Files.newBufferedReader(PROJECT.resolve("examples/3.1.0/progressivestages.toml"))) {
+            globalConfig = new TomlParser().parse(reader);
+        }
+        Object guideEnabled = globalConfig.get("general.enable_stage_guide");
+        assertInstanceOf(Boolean.class, guideEnabled);
+        assertFalse((Boolean) guideEnabled);
     }
 }

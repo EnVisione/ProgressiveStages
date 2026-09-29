@@ -39,8 +39,10 @@ protection stage can therefore leave entry open while its placement, breaking, e
 spawning rules remain active. The `priority` field applies to that stage's structure contributions.
 
 `prevent_explosions` and `disable_mob_spawning` are actorless. The server does not look up a player
-or invent an owner for an explosion or spawn. The stage's ownership state still decides whether its
-configured protection is active.
+or invent an owner for an explosion or spawn. While `block_structure_entry` is enabled and these
+structure rules are loaded, explosion and mob-spawn protection remains active regardless of whether
+players own the stage. Player block-placement and block-breaking checks can evaluate the player's
+stage ownership; actorless checks cannot.
 
 ## Priority and explicit overrides
 
