@@ -49,3 +49,7 @@ Use the project's Brave browser extension for an editor check when browser behav
 change. Test the form through its visible controls, save and reopen the draft, and confirm the
 resulting configuration rather than treating a successful browser load as proof of an applied
 change.
+
+For the bounded production support capture, use the
+[diagnostics procedure](diagnostics/documentation.md). It covers exact commands, limits, output
+review, redaction, and cleanup.

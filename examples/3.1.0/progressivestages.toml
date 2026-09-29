@@ -1,0 +1,3 @@
+[general]
+# Global master switch for all player stage guides.
+enable_stage_guide = false

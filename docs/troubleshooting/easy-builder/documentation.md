@@ -48,6 +48,11 @@ lists, and enum values are checked before they reach review. Unknown keys and va
 server's configured range are rejected with the exact setting path. A blank numeric field is kept as
 an error instead of being silently changed to zero.
 
+The Settings page covers the server's full configuration schema, including `general`, client UI,
+enforcement, integrations, performance, team, and message settings. Use its field help to see each
+setting's purpose, accepted type, and range. The global player-guide control is
+`general.enable_stage_guide`; it defaults to `true` and is the master switch for every stage's guide.
+
 After review, live settings update the running server. Settings marked for a world or client restart
 are saved but appear as pending in the apply result. No restart is started automatically. If a stage
 reload or write fails, the editor restores the previous file and loaded setting snapshot, then keeps
@@ -137,11 +142,17 @@ the Rules tab. Use the same activation on both rules when they should apply toge
 
 ### translating labels safely
 
-Use the browser's page translation control, including Brave or a Google Translate browser action,
-on visible labels and help text only. Keep stage identifiers, registry IDs, commands, file paths,
-TOML, and selector values unchanged. The editor does not submit source text or session data to a
-translation service. If translation is unavailable, the English labels and hover help remain the
-source of truth.
+ProgressiveStages has no built-in Google Translate button. Use the browser's page-translation
+control, such as Brave's translation option or a Google Translate browser action, when it is
+available. An external provider may receive visible page content, including text currently entered
+in fields; avoid translating sensitive draft text. The editor itself does not send configuration to
+a translation service. Before saving translated content, compare stage IDs, registry IDs, commands,
+file paths, selectors, TOML values, and error messages with their untranslated source. If translation
+is unavailable, the English labels and hover help remain the source of truth.
+
+Field help uses small question marks beside labels. Hover over or keyboard-focus a question mark for
+the short explanation and example. Action buttons also show hover and focus help; keyboard users can
+reach the same information without moving the pointer.
 
 Editor responses complete independently of Minecraft's render thread. A hidden or minimized game
 window must not prevent the browser from receiving a completed server operation. Server draft
@@ -183,12 +194,30 @@ of UTF 8 data. The editor shows both counters, refuses an overlong save, and kee
 server draft when validation fails. The placeholder chooser inserts `{stage_name}`,
 `{stage_requirements}`, `{remaining_requirements}`, or `{stage_progress}`. Unknown placeholders
 stay visible with a warning. Double braces, such as `{{stage_name}}`, display a literal brace form.
+Its **Show this stage's player guide** switch controls that one stage. It defaults to on. The global
+`general.enable_stage_guide` setting hides all stages when off; turning it back on restores each
+stage's saved choice.
 
 The preview uses sample values and cannot apply, grant, purchase, execute a command, or change a
 rule. After applying the draft, open the ordinary advancement style stages map, select the stage,
-and press the gold `?` beside the close control. The help title includes the selected stage name and
-the guide disappears for an owned stage or when `general.enable_stage_guide = false`. The separate
-guide keybind starts unbound and selects the next visible suggestion; it never grants a stage.
+and press the gold `?` beside the close control. The map stays a single advancement-style screen;
+there is no separate guide tab. The question-mark button has no text label. Hover or focus it to see
+`How to unlock <stage name>`; the `X` says `Close`. Selecting another stage or changing search or
+category closes the current help panel. The guide disappears for an owned stage or when
+`general.enable_stage_guide = false`. The separate guide keybind starts unbound and selects the next
+visible suggestion; it never grants a stage.
+
+### Player preview and nearby graph actions
+
+The **Player UI** preview uses the current draft's name, icon, description, guide, category, search,
+reveal, and dependency settings. **Locked**, **Requirements met**, and **Unlocked** are sample views;
+changing them never grants or activates a stage. Hidden stages are omitted from the preview and its
+player-facing search and category results. Reveal controls what information is visible, while rule
+activation and stage ownership remain separate.
+
+Select a visible graph node to see its player-facing inspector and nearby edit actions. Right-click
+the node for the same stage actions without moving to another part of the page. A preview edit
+changes the draft only; validation, review, and **Apply changes** remain the server publication flow.
 
 
 ## Access configuration validation
@@ -276,5 +305,5 @@ Conditional crafting is rejected with instructions to use progression conditions
 category lists retain their original format and apply to the category's supported actions.
 Attributes created in a schema 4 package are saved in its rules file.
 
-The [runtime regression guide](../../test/editor-rule-runtime.md) lists the native action checks and
-the nearby player limits for fluid flow and brewing.
+For the runtime test workflow and release evidence template, see the
+[ProgressiveStages testing handbook](../../testing/3.0/documentation.md).

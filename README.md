@@ -120,6 +120,9 @@ can follow the [build and test guide](docs/testing/documentation.md).
 
 ## What's new in 3.1.0
 
+See the [3.1.0 release guide](docs/release/3.1.0/documentation.md) for the new player guide, editor
+settings, structure rules, block overrides, and upgrade notes.
+
 - **Safe movement defaults.** Fresh showcase files and editor-created stages leave jump, sprint,
   swim, climb, and elytra available. Pack authors can still add an explicit `[abilities].locked`
   list whenever a movement gate is wanted. Existing files are never rewritten by default generation.
@@ -128,12 +131,19 @@ can follow the [build and test guide](docs/testing/documentation.md).
   example. The layout graph also offers Edit, Connect, Duplicate, and Delete beside a selected node
   or from its right-click menu.
 - **Translation friendly editor.** Browser page translation can translate labels and help text while
-  stage identifiers, registry IDs, commands, TOML, and selector values remain unchanged. The editor
-  does not send source text or session data to a translation service.
+  keeping the editor itself independent of a translation service. External browser providers may
+  process visible page content, so verify IDs, commands, TOML, and selectors after translation.
 - **Structure entry and protection controls.** The Rules tab can edit the protected structure list,
   entry policy, signed priority, entry padding, block breaking, block placement, explosions, and mob
   spawning independently. `entry_allowed = true` keeps a protection stage active after another stage
   opens entry.
+- **A stage-specific player guide.** Pack authors can write unlock steps, next steps, and locations
+  in the editor or `[guide]`. Players see a gold `?` on the selected stage, with a matching
+  `How to unlock <stage name>` tooltip and a separate unbound keybind. A global Settings switch and
+  individual stage switches control visibility.
+- **Clear block override names and selectors.** New rows use `[[blocks.overrides]]` for any block.
+  Exact IDs, lists, tags, and `mod:` selectors are supported; existing `[[ores.overrides]]` rows
+  remain compatible. A mod selector includes every block from that mod, not only ores.
 - **Typed server settings.** The Settings page is generated from the server config spec. Invalid
   types, ranges, enum values, and unknown keys stay in the draft with an inline error. Accepted live
   settings apply with the stage transaction, while world or client restart settings are shown as

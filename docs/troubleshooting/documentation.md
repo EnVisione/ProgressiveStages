@@ -33,6 +33,19 @@ contain the blocks you mean to mask. A `mod:` target includes every block from t
 machines as well as ores. Use an ore tag or a list of exact IDs when you only want ores. A higher
 priority wins when more than one active override matches a block.
 
+Selector examples:
+
+| What to match | Selector |
+|---|---|
+| One block | `id:minecraft:diamond_ore` |
+| A chosen list | `targets = ["id:minecraft:diamond_ore", "id:minecraft:deepslate_diamond_ore"]` |
+| Every block in a pack-defined ore tag | `tag:c:ores` |
+| Every block from Applied Energistics 2 | `mod:ae2` |
+
+Confirm that `c:ores` exists in your modpack before using it. It may include more ores than you
+intend. `mod:ae2` matches machines and other non-ore blocks too. Choose Block overrides for display
+and drop replacement; use a separate Block lock to prevent breaking or placing.
+
 New editor rows use `[[blocks.overrides]]`. Existing `[[ores.overrides]]` rows are still supported
 and remain in their original table when edited. Do not put a block list under `[ores].locked`; that
 is not a block lock or an override. The separate `[display].encrypt_blocks` option is a shortcut
@@ -69,6 +82,16 @@ The guide scrolls only when its text is taller than the open panel. In that case
 over the stage details and use the mouse wheel; a narrow colored bar appears at the right edge of the
 panel to show the scroll position. Short guides have no scrollbar because all of their text is
 already visible.
+
+The player's stage screen remains one advancement-style map, with no separate guide tab. Select the
+stage and click the gold `?` beside its close control. Hover or keyboard-focus it to see
+`How to unlock <stage name>`; the close control's tooltip is `Close`. Selecting another stage or
+changing search or category closes the current help.
+
+Structure entry and protection are separate. A stage can use `entry_allowed = true` so it does not
+block entry while still preventing placement or breaking in that structure. It does not cancel a
+different stage's entry denial. See the [structure rules guide](../structures/rules/documentation.md)
+for a two-stage example, priority behavior, actorless protections, and provider boundaries.
 
 For the complete configuration fields, selectors, limits, and placeholder list, see
 [Configuration and technical documentation](../../DOCUMENTATION.md).

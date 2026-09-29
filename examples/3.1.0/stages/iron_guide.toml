@@ -1,0 +1,28 @@
+[stage]
+id = "example:iron_guide"
+display_name = "Iron Guide"
+description = "A visible example stage with clear unlock instructions."
+icon = "minecraft:iron_pickaxe"
+category = "Example"
+
+[display]
+reveal = "always"
+
+[guide]
+enabled = true
+how_to_unlock = "Complete the listed requirements to unlock {stage_name}."
+next_steps = "Use your new tools to prepare for the next age."
+where_to_find = "Smelt iron in a furnace."
+recommendation = "auto"
+
+[[triggers]]
+type = "advancement"
+advancement = "minecraft:story/smelt_iron"
+description = "Smelt an iron ingot."
+
+[[temporary_locks]]
+id = "retire_wooden_pickaxe"
+stage_state = "owned"
+
+[temporary_locks.targets]
+items = ["minecraft:wooden_pickaxe"]

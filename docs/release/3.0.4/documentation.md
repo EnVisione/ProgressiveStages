@@ -95,4 +95,4 @@ resolves to that same commit.
 
 For setup and examples, see [the complete documentation](../../../DOCUMENTATION.md),
 [inventory insertion rules](../../features/inventory-insertion/documentation.md), and the
-[3.0.4 compatibility evidence](../../verification/3.0.4-phase-004-compatibility.md).
+[testing handbook](../../testing/3.0/documentation.md) for current verification procedures.

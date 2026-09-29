@@ -1,0 +1,9 @@
+[stage]
+id = "example:stronghold_access"
+display_name = "Stronghold Access"
+description = "The stage that controls entry to the Stronghold."
+icon = "minecraft:ender_eye"
+category = "Example"
+
+[structures]
+locked_entry = ["id:minecraft:stronghold"]
