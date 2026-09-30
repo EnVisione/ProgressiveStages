@@ -4,6 +4,9 @@ This guide documents the 3.1.0 changes for Minecraft 1.21.1 and NeoForge 21.1. I
 ProgressiveStages release on the server and every client. The server, editor, and player guide must
 use matching mod versions; mixed-version setups are not supported.
 
+Download the 3.1.0 release from [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages)
+or [Modrinth](https://modrinth.com/mod/progressivestages).
+
 For installation and the complete TOML reference, see the [project README](../../../README.md) and
 [configuration manual](../../../DOCUMENTATION.md). The runnable files linked below are parsed by
 the project test suite.
