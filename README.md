@@ -4,9 +4,9 @@
 
 A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression. Define stages as TOML files; ProgressiveStages locks items, blocks, entities, fluids, dimensions, recipes, enchantments, crops, mob spawns, pets, regions, structures, screens, and player interactions until the player has earned the right stage(s).
 
-**ProgressiveStages 3.0.5** turns that foundation into a fully authorable progression platform: declarative per-stage triggers, graph-based stage scope, scripting and command APIs, broad content enforcement, and a vanilla advancement-style in-game map.
+**ProgressiveStages 3.1.0** adds an in-game stage guide, a fuller web editor, independent structure entry and protection rules, configurable block overrides, and safe movement defaults.
 
-Version 3.0.5 is available from [GitHub Releases](https://github.com/MCEnvision/ProgressiveStages/releases).
+Download 3.1.0 from [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) or [Modrinth](https://modrinth.com/mod/progressivestages). Install the same release on the server and every client.
 See the [configuration and technical documentation](DOCUMENTATION.md) for setup and stage files.
 
 ---
@@ -20,6 +20,24 @@ See the [configuration and technical documentation](DOCUMENTATION.md) for setup 
 Start with [configuration and technical documentation](DOCUMENTATION.md). For common editor
 questions, see [Block overrides and stage guides](docs/troubleshooting/documentation.md). Contributors
 can follow the [build and test guide](docs/testing/documentation.md).
+See the [3.1.0 release guide](docs/release/3.1.0/documentation.md) for the new player guide,
+editor controls, structure rules, and upgrade notes.
+
+---
+
+## What's new in 3.1.0
+
+- **Stage help in the progression map.** Each stage can show pack-authored unlock instructions,
+  next steps, and locations through its gold `?` button. A global setting and per-stage choice
+  control visibility. Longer guides scroll inside the stage panel.
+- **Friendlier web editor.** Plain-language fields, nearby hover help, player UI preview, and
+  main settings editing make configuration easier to inspect before applying it.
+- **Independent structure rules.** `entry_allowed` lets a stage attach placement and other
+  protection rules without blocking entry. Priority and explicit permit rules resolve overlaps.
+- **Block overrides for any block.** Select exact blocks, lists, tags, or whole mods, then choose
+  their locked appearance and drops. Existing ore override tables remain supported.
+- **Safe movement defaults.** Fresh showcase stages leave essential movement available until a
+  pack author explicitly restricts it.
 
 ---
 
@@ -292,8 +310,8 @@ settings, structure rules, block overrides, and upgrade notes.
 
 ## Installation
 
-1. For the 3.1.0 development candidate, install [NeoForge](https://neoforged.net/) 21.1.248 for Minecraft 1.21.1 on both the server and client.
-2. Drop the jar into `mods/`.
+1. Install [NeoForge](https://neoforged.net/) 21.1.248 for Minecraft 1.21.1 on both the server and client.
+2. Download ProgressiveStages 3.1.0 from [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) or [Modrinth](https://modrinth.com/mod/progressivestages), then put the same jar in each side's `mods/` folder.
 3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
 4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and fifty schema 4 showcase packages under `config/progressivestages/stages/` when that folder is empty.
 5. Run `/pstages editor` as a permission level 3 operator to open the local React stage editor.
