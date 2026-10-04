@@ -28,7 +28,7 @@ import java.util.function.Consumer;
 public final class OnlinePermissionGameTests {
     private OnlinePermissionGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_online_stale_queries")
     public static void staleOnlineQueriesCannotPartiallyGrantOrWithdrawStages(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The query fixture requires an isolated server.");
@@ -107,7 +107,7 @@ public final class OnlinePermissionGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_online_commit")
     public static void onlinePermissionCommitPublishesCompleteStateAndPreservesCallbackMutations(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The commit fixture requires an isolated server.");
@@ -175,7 +175,7 @@ public final class OnlinePermissionGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_outbound_changes")
     public static void outboundChangesRejectStaleWritesAndPublication(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The output fixture requires an isolated server.");

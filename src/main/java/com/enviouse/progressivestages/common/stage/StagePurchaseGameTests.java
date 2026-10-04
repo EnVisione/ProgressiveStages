@@ -34,7 +34,7 @@ import java.util.concurrent.CompletableFuture;
 public final class StagePurchaseGameTests {
     private StagePurchaseGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_purchase_revocation")
     @SuppressWarnings("unchecked")
     public static void rewardRevocationUsesTheCommittedPurchaseReceipt(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
@@ -112,17 +112,17 @@ public final class StagePurchaseGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_purchase_offline_refund")
     public static void refundsReturnOnlyToThePayerAcrossOfflineDelivery(GameTestHelper helper) throws Exception {
         verifyRefunds(helper, false);
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_purchase_server_owner")
     public static void serverPurchasesPreservePayersAndPersonalHistory(GameTestHelper helper) throws Exception {
         verifyRefunds(helper, true);
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_purchase_independent_ownership")
     @SuppressWarnings("unchecked")
     public static void purchasesCreateIndependentOwnershipWithoutConsumingTemporaryAccess(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
@@ -228,7 +228,7 @@ public final class StagePurchaseGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_purchase_payment_boundary")
     @SuppressWarnings("unchecked")
     public static void repeatedItemCostsRequireTheFullPaymentBeforeAnyMutation(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();

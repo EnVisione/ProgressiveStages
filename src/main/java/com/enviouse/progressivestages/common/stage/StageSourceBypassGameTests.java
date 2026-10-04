@@ -30,7 +30,7 @@ public final class StageSourceBypassGameTests {
 
     private StageSourceBypassGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_stage_source_bypass")
     @SuppressWarnings("unchecked")
     public static void privilegedSourceBypassChangesOnlyItsTargetAndRetainsAuditContext(GameTestHelper helper)
             throws Exception {

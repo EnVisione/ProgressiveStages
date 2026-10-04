@@ -31,7 +31,7 @@ import static com.enviouse.progressivestages.server.integration.luckperms.LuckPe
 public final class LuckPermsSourceGameTests {
     private LuckPermsSourceGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_source_subjects")
     public static void permissionSourcesPreserveOtherSubjectsAndIndependentEarnings(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The source fixture requires an isolated server.");
@@ -152,7 +152,7 @@ public final class LuckPermsSourceGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_owner_changes")
     public static void permissionOwnerChangesWithdrawStaleContributions(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The owner fixture requires an isolated server.");
@@ -240,7 +240,7 @@ public final class LuckPermsSourceGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_loaded_sources")
     public static void loadedPermissionSourcesRequireAuthoritativeRevalidation(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The load fixture requires an isolated server.");
@@ -307,7 +307,7 @@ public final class LuckPermsSourceGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_pending_sources")
     public static void pendingPermissionStagesDoNotRepeatStarterGrants(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The starter fixture requires an isolated server.");
