@@ -21,7 +21,7 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 - **Need every field, command, integration, and API:** use the
   [Complete Documentation](DOCUMENTATION.md).
 - **Using schema 4 or the localhost editor:** follow the
-  [Schema 4 and Editor Rehaul Guide](REHAUL_GUIDE.md), including all thirty feature groups and
+  [Schema 4 and Editor Rehaul Guide](docs/getting-started/schema4-editor/documentation.md), including all thirty feature groups and
   machine-tested three-file examples. The editor works for permission level 3 operators in
   single-player worlds and on dedicated servers. Its simple stage first editor creates a stage
   from a normal name, searches the live modpack registries by category and mod, builds lock,
@@ -30,7 +30,7 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
   branching builder with all, any, and minimum path policies, ancestry previews, cycle prevention,
   and an upward class-tree layout for independent, evolved, and hybrid paths.
 - **Building location, combat, timer, or priority-based access rules:** copy the
-  [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+  [Temporary and Triggered Locks Guide](docs/configuration/temporary-triggered-locks/documentation.md).
 - **Building or approving a release:** follow the
   [Testing Handbook](docs/testing/documentation.md).
 - **Learning how the files and runtime fit together:** read the
@@ -40,7 +40,7 @@ A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete contr
 - **Want known-good files to copy:** use the tested
   [Beginner Pack](examples/beginner_pack/README.md).
 - **Want to explore the complete first-launch class tree:** use the
-  [Fifty Stage Showcase Pack Guide](SHOWCASE_PACK.md).
+  [Fifty Stage Showcase Pack Guide](docs/pack-building/showcase/documentation.md).
 
 The older [`diamond_stage.toml`](examples/reference/diamond_stage.toml) remains the fully commented
 one-file reference. It is no longer generated into new installations because the fifty stage
@@ -362,9 +362,9 @@ Each category lives in its own TOML section. Lists accept the unified prefix syn
 | `[mobs]` | `locked_spawns` | Cancel only when every relevant player inside server simulation distance is denied. Mixed access preserves the mob for allowed players and conceals it from denied players. |
 | `[[mobs.replacements]]` | `target`, `replace_with` | Substitute one mob type for another at spawn |
 | `[[interactions]]` | `type`, `held_item`, `target_block` / `target_entity`, `description` | Block right-click / item-on-block / item-on-entity combos |
-| `[[interactions]]` | `type = "item_into_inventory"`, `held_item`, `target_kind`, `target`, `effect`, `priority` | Gate player item insertion into block, menu, or registered inventory targets. See [inventory insertion rules](docs/features/inventory-insertion.md). |
+| `[[interactions]]` | `type = "item_into_inventory"`, `held_item`, `target_kind`, `target`, `effect`, `priority` | Gate player item insertion into block, menu, or registered inventory targets. See [inventory insertion rules](docs/features/inventory-insertion/documentation.md). |
 
-For `item_on_block` and `block_right_click`, selectors are checked against the live item and block holders. Use `tag:c:armors`, `id:selling_bin:selling_bin`, or `all:*`; the legacy `#c:armors` form remains valid. A selective item-on-block rule requires a nonempty held stack. A whole block `all:*` item-on-block rule also gates an empty hand menu open. See the [interaction lock troubleshooting guide](docs/troubleshooting/interaction-locks.md).
+For `item_on_block` and `block_right_click`, selectors are checked against the live item and block holders. Use `tag:c:armors`, `id:selling_bin:selling_bin`, or `all:*`; the legacy `#c:armors` form remains valid. A selective item-on-block rule requires a nonempty held stack. A whole block `all:*` item-on-block rule also gates an empty hand menu open. See the [interaction lock troubleshooting guide](docs/troubleshooting/interaction-locks/documentation.md).
 
 Matching clients suppress local item and block prediction for denied direct interactions using synchronized rules and stage ownership. The server still checks the ordinary request and resends authoritative inventory state when it denies the interaction. Selective restrictions inside an open GUI use a separate `item_into_inventory` rule; `block_right_click` controls access independently. The [real Selling Bin transaction tests](docs/testing/selling-bin/documentation.md) cover server insertion and sale paths.
 
@@ -447,7 +447,7 @@ a fresh session before they can read, review, or apply that draft.
 Diagnostic capture status shows the category, remaining limits, and writer completion.
 Capture headers identify the candidate archives and captured effective configuration.
 `/stage debug editor` also records authenticated draft operations and apply outcomes.
-See the [capture procedure](docs/troubleshooting/interaction-locks.md) before collecting support logs.
+See the [capture procedure](docs/troubleshooting/interaction-locks/documentation.md) before collecting support logs.
 
 Use LuckPerms 5.4.150 with Minecraft 1.21.1 and NeoForge 21.1.248. Published stage
 permissions follow the affected player, and native LuckPerms context notifications recheck
@@ -897,7 +897,7 @@ The build updates the editor assets packaged with the mod. See the
 
 - Beginner walkthrough: [guide](docs/getting-started/documentation.md).
 - Complete schema and feature reference: [DOCUMENTATION.md](DOCUMENTATION.md).
-- Temporary, triggered, context, timer, and priority rules: [TEMPORARY_AND_TRIGGERED_LOCKS.md](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+- Temporary, triggered, context, timer, and priority rules: [Temporary and Triggered Locks Guide](docs/configuration/temporary-triggered-locks/documentation.md).
 - Architecture, folder structure, data flow, and extension guide: [guide](docs/architecture/documentation.md).
 - Build, smoke-test, multiplayer, and integration matrix: [testing handbook](docs/testing/documentation.md).
 - Diagnostic capture testing and server benchmark limits: [guide](docs/testing/diagnostics/documentation.md).

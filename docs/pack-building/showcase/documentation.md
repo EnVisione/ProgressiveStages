@@ -278,7 +278,7 @@ To intentionally generate it in a test instance:
 5. Open **Player UI layout** and press **Fit graph**.
 
 The fully commented one-file reference remains at
-[`examples/reference/diamond_stage.toml`](examples/reference/diamond_stage.toml). It is
+[`examples/reference/diamond_stage.toml`](../../../examples/reference/diamond_stage.toml). It is
 documentation, not a generated first-launch stage.
 
 ## Verification checklist

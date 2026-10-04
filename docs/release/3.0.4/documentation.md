@@ -94,4 +94,4 @@ resolves to that same commit.
   from starting an EMI reload after the client level is gone.
 
 For setup and examples, see [the complete documentation](../../../DOCUMENTATION.md),
-[inventory insertion rules](../../features/inventory-insertion.md).
+[inventory insertion rules](../../features/inventory-insertion/documentation.md).

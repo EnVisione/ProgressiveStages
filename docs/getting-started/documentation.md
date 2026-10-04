@@ -10,7 +10,7 @@ verification, use the [testing handbook](../testing/documentation.md).
 For a detailed start-to-release workflow with copy-ready examples for all nineteen phases, use the
 [Phase 1 Through Phase 19 Guide](../pack-building/documentation.md).
 For the new three-file schema 4 packages and `/pstages editor`, follow the
-[Schema 4 and Editor Rehaul Guide](../../REHAUL_GUIDE.md). Its first tutorial requires no file editing.
+[Schema 4 and Editor Rehaul Guide](schema4-editor/documentation.md). Its first tutorial requires no file editing.
 
 ## 1. What this mod does
 
@@ -82,7 +82,7 @@ config/
 ```
 
 The main file controls server-wide defaults. The first empty launch creates the complete
-[fifty stage showcase tree](../../SHOWCASE_PACK.md). Each folder is one schema 4 stage package. Existing
+[fifty stage showcase tree](../pack-building/showcase/documentation.md). Each folder is one schema 4 stage package. Existing
 stage folders are never replaced. Nested folders and legacy one-file stages are also supported, so
 a large pack can use paths such as:
 
@@ -475,7 +475,7 @@ items = ["minecraft:diamond_pickaxe"]
 The rule above is active only while the containing stage is owned and the player is in the End.
 Normal gates have priority zero, this rule defaults to one hundred, the highest priority wins, and
 a lock wins an equal-priority tie. Read the copy-ready
-[Temporary and Triggered Locks Guide](../../TEMPORARY_AND_TRIGGERED_LOCKS.md) before using unlock
+[Temporary and Triggered Locks Guide](../configuration/temporary-triggered-locks/documentation.md) before using unlock
 overrides or combat timers.
 
 ## 15. Safe edit cycle

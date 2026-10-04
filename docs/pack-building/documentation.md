@@ -826,7 +826,7 @@ abilities = ["jump", "elytra"]
 
 `[[triggers]]` permanently grants End Fight. The temporary unlock is a live permission while that
 stage is owned. The End battle rule is live only in the End. See
-[TEMPORARY_AND_TRIGGERED_LOCKS.md](../../TEMPORARY_AND_TRIGGERED_LOCKS.md) for every context, target,
+[Temporary and Triggered Locks Guide](../configuration/temporary-triggered-locks/documentation.md) for every context, target,
 priority rule, structure weapon example, and combat timer.
 
 ### Region behavior

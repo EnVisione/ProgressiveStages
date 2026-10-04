@@ -46,14 +46,14 @@
 > through parsing and validation, into runtime enforcement, networking, UI, and tests.
 > For the schema 4 three-file packages, secure localhost editor, all thirty rehaul feature groups,
 > migration, automatic client snapshots, and copy-ready tested rehaul examples, use the
-> [ProgressiveStages 3.0.1 Schema 4 and Editor Guide](REHAUL_GUIDE.md).
+> [ProgressiveStages 3.0.1 Schema 4 and Editor Guide](docs/getting-started/schema4-editor/documentation.md).
 >
 > **Want one complete file you can read and copy?** Open
 > [`diamond_stage.toml`](examples/reference/diamond_stage.toml). It is the directly browsable,
 > fully commented legacy one-file reference. Start with its numbered
 > safe five minute edit, then use its table of contents to find every lock category and feature.
 > Conditional access authors can also use the focused
-> [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+> [Temporary and Triggered Locks Guide](docs/configuration/temporary-triggered-locks/documentation.md).
 > The equivalent machine-tested three-file schema 4 reference is the
 > [`examples:diamond` package](examples/rehaul/diamond).
 
@@ -277,7 +277,7 @@ They form a complete branching class tree with three limited beginner paths, evo
 classes, stackable specialists, replaceable modes, temporary powers, fifteen item purchases, thirty
 five gameplay or external-event paths, automatic
 grants, rewards, conditions, modifiers, challenges, and an at-least-three finale. See the
-[Showcase Pack Guide](SHOWCASE_PACK.md) for every stage and a
+[Showcase Pack Guide](docs/pack-building/showcase/documentation.md) for every stage and a
 manual verification checklist. Existing stage files are never deleted, replaced, or supplemented
 with the showcase during an update.
 
@@ -1157,7 +1157,7 @@ on a disposable server. Their fixture and coverage limits are separate from clie
 This is a **table-array** rather than a single table, so you can write as many
 entries as you want, each describing one specific interaction to gate.
 
-For denied `item_on_block` and `block_right_click` requests, the server event returns `InteractionResult.FAIL` and sends full inventory and open menu state even when no authoritative stack changed. It also sends the clicked block entity's normal update packet when available. Ordinary change broadcasts alone cannot repair every locally predicted change when the server's cached inventory already equals its current state. The server still checks every request independently; no cooldown converts a later permitted empty hand action into a denial. GUI insertion uses the separate `item_into_inventory` policy described in the [inventory insertion guide](docs/features/inventory-insertion.md).
+For denied `item_on_block` and `block_right_click` requests, the server event returns `InteractionResult.FAIL` and sends full inventory and open menu state even when no authoritative stack changed. It also sends the clicked block entity's normal update packet when available. Ordinary change broadcasts alone cannot repair every locally predicted change when the server's cached inventory already equals its current state. The server still checks every request independently; no cooldown converts a later permitted empty hand action into a denial. GUI insertion uses the separate `item_into_inventory` policy described in the [inventory insertion guide](docs/features/inventory-insertion/documentation.md).
 
 ```toml
 [[interactions]]
@@ -1191,7 +1191,7 @@ The `held_item` / `target_block` / `target_entity` fields accept **single
 prefix entries** (e.g. `tag:minecraft:logs`, `mod:create`). The `description`
 field is free text used in messages and `/stage info`.
 
-Selectors are evaluated against the live registry holders on the server. Modern `tag:c:armors`, exact `id:selling_bin:selling_bin`, and `all:*` selectors work for item-on-block rules, and the legacy `#c:armors` spelling remains supported. Selective item-on-block rules require a nonempty held stack. A whole block `all:*` item-on-block rule also gates an empty hand menu open. A missing stage is denied before the protected interaction continues. The optional bounded support capture is documented in [Interaction locks](docs/troubleshooting/interaction-locks.md).
+Selectors are evaluated against the live registry holders on the server. Modern `tag:c:armors`, exact `id:selling_bin:selling_bin`, and `all:*` selectors work for item-on-block rules, and the legacy `#c:armors` spelling remains supported. Selective item-on-block rules require a nonempty held stack. A whole block `all:*` item-on-block rule also gates an empty hand menu open. A missing stage is denied before the protected interaction continues. The optional bounded support capture is documented in [Interaction locks](docs/troubleshooting/interaction-locks/documentation.md).
 
 The implementation is
 [`InteractionEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/InteractionEnforcer.java).
@@ -1276,7 +1276,7 @@ rule active** to choose the lifetime, duration, activation condition, and
 optional reset condition. The item, block, menu, and inventory-owner pickers
 use the running server catalog. The TOML source tab always shows the
 same six canonical fields. See
-[Inventory insertion rules](docs/features/inventory-insertion.md) for complete
+[Inventory insertion rules](docs/features/inventory-insertion/documentation.md) for complete
 examples and extension guidance.
 
 ### 4.12 `[loot]` — chest / fishing / archeology / mob / block drop filter
@@ -2505,7 +2505,7 @@ for rules such as swords only inside a Stronghold, no elytra during the End figh
 ban after combat starts, or a later stage that overrides an earlier structure gate.
 
 For a single-purpose tutorial with all requested examples, see
-[TEMPORARY_AND_TRIGGERED_LOCKS.md](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+[Temporary and Triggered Locks Guide](docs/configuration/temporary-triggered-locks/documentation.md).
 
 #### Do not confuse stage triggers and triggered locks
 
@@ -2832,7 +2832,7 @@ accept every outcome.
 The complete provider contract, copy-ready Java example, arbitration truth table, stage files,
 lease rules, team behavior, lifecycle semantics, commands, failure handling, and forty-step
 acceptance matrix are in
-[STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md).
+[Structure Session Compatibility Guide](docs/integrations/structure-session/documentation.md).
 
 ### 4.36 `[[drop_modifiers]]` — selector based block output bonuses
 
@@ -2885,7 +2885,7 @@ modifiers. This prevents a hidden real ore from leaking its multiplied real outp
 stage ownership are read at break time, so grants, revokes, temporary stage changes, and reloads
 take effect without a relog.
 
-The first-launch [Showcase Pack](SHOWCASE_PACK.md) contains Diamond Engineer. It requires Iron
+The first-launch [Showcase Pack](docs/pack-building/showcase/documentation.md) contains Diamond Engineer. It requires Iron
 Engineer, costs 32 diamonds, and doubles only diamond item output from diamond or deepslate
 diamond ore when the used pickaxe has at least Fortune I. The easy editor exposes the same system
 under **Targeted mining bonus**.
@@ -2955,7 +2955,7 @@ In `/pstages editor`, select the stage and open **Stage slots and stacking**. Th
 for a group, maximum active count, and full-group policy. It can apply the configuration to every
 existing member in one operation. Advanced authors can edit the three keys in `stage.toml`.
 
-The generated [fifty stage showcase](SHOWCASE_PACK.md) contains all three common patterns:
+The generated [fifty stage showcase](docs/pack-building/showcase/documentation.md) contains all three common patterns:
 
 - `beginner_paths` permits any two of Mage, Warrior, and Ranger, then denies a third.
 - `engineering_tiers` has no limit, so the six engineering bonuses stack.
@@ -4698,7 +4698,7 @@ Event classes:
 Structure integration events are `StructureSessionEnterEvent`,
 `StructureSessionCompletionEvent`, `StructureSessionLeaveEvent`, and
 `StructureAccessDeniedEvent`. They are immutable, post-commit, and noncancellable. See the
-[structure session compatibility guide](STRUCTURE_SESSION_COMPATIBILITY.md#12-events).
+[structure session compatibility guide](docs/integrations/structure-session/documentation.md#12-events).
 
 ---
 
@@ -5179,7 +5179,7 @@ compat/                              ← every soft-dep integration
 The first-launch showcase is generated by
 [`DefaultShowcaseStages`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultShowcaseStages.java).
 It emits fifty schema 4 packages and one hundred fifty files only when no stages already exist. The complete
-tree is documented in [SHOWCASE_PACK.md](SHOWCASE_PACK.md).
+tree is documented in [Fifty Stage Showcase Pack Guide](docs/pack-building/showcase/documentation.md).
 
 [`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java)
 retains the older one-file references for documentation and compatibility tests. Its tracked
@@ -5356,7 +5356,7 @@ The header records loaded mod IDs and versions, bounded artifact hashes, and the
 archive's `Build-Commit` and `Build-Dirty` manifest attributes. A dirty build names its base commit;
 use its artifact hash to distinguish the actual bytes. Header preparation uses the same writer,
 output budget, target and lifecycle as decision records. No artifact paths or configuration values
-are emitted. The [capture guide](docs/troubleshooting/interaction-locks.md) documents limits and
+are emitted. The [capture guide](docs/troubleshooting/interaction-locks/documentation.md) documents limits and
 unavailable development identity. The [dedicated server benchmark](docs/testing/diagnostics/documentation.md)
 measures three 1,000 attempt rounds per recording path with normal writer output and unchanged
 capture limits. It checks enabled CPU and elapsed overhead against disabled calls, requires no
@@ -5387,7 +5387,7 @@ writer completion and errors remain visible. No blocking writer wait occurs on t
 Strings are escaped as JSON, including all control characters, and decoded strings remain within
 256 characters including truncation marks. Stage arrays contain at most 32 values with separate
 total and truncation fields. Owner labels are bounded, capture local labels without UUID hashes.
-The [shared support procedure](docs/troubleshooting/interaction-locks.md) explains collection
+The [shared support procedure](docs/troubleshooting/interaction-locks/documentation.md) explains collection
 and failure handling. See the [diagnostic capture tests](docs/testing/diagnostics/documentation.md) for the
 server side benchmark procedure.
 

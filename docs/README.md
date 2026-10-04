@@ -9,6 +9,14 @@ Use this page to find maintained product documentation and reusable testing guid
 - [Long-form ProgressiveStages pack-building guide](pack-building/documentation.md)
 - [Project wiki](https://github.com/MCEnvision/ProgressiveStages/wiki)
 
+## Authoring and Integration
+
+- [Schema 4 and editor guide](getting-started/schema4-editor/documentation.md)
+- [Architecture and project structure](architecture/documentation.md)
+- [Fifty stage showcase pack](pack-building/showcase/documentation.md)
+- [Temporary and triggered locks](configuration/temporary-triggered-locks/documentation.md)
+- [Structure session compatibility](integrations/structure-session/documentation.md)
+
 ## Testing Guides
 
 - [Selling Bin transaction GameTests](testing/selling-bin/documentation.md)
@@ -24,20 +32,20 @@ Use this page to find maintained product documentation and reusable testing guid
 
 ## Troubleshooting
 
-- [Interaction locks](troubleshooting/interaction-locks.md)
+- [Interaction locks](troubleshooting/interaction-locks/documentation.md)
 - [Progression scopes and ownership](troubleshooting/progression-scopes/documentation.md)
 - [LuckPerms bridge](troubleshooting/luckperms/documentation.md)
 - [Easy Builder](troubleshooting/easy-builder/documentation.md)
 
 ## Features
 
-- [Inventory insertion rules](features/inventory-insertion.md)
+- [Inventory insertion rules](features/inventory-insertion/documentation.md)
 
 ## Release Notes
 
 - [ProgressiveStages 3.0.4 and 3.0.4-fix](release/3.0.4/documentation.md)
 - [ProgressiveStages 3.0.6](release/documentation.md)
-- [ProgressiveStages 3.0.3](release/3.0.3.md)
+- [ProgressiveStages 3.0.3](release/3.0.3/documentation.md)
 
 The tracked repository documentation is the source of truth. Release pages and the project wiki
 should link back to these files rather than maintain conflicting behavior descriptions.

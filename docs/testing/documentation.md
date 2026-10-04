@@ -7,7 +7,7 @@ servers, multiplayer scope, optional integrations, regressions, and a release ev
 Use the [beginner guide](../getting-started/documentation.md) if you are learning stage authoring. Use
 [DOCUMENTATION.md](../../DOCUMENTATION.md) for the full schema and API reference.
 Schema 4 package, editor bridge, migration, client snapshot, persistence, and rehaul release gates
-are documented in [REHAUL_GUIDE.md](../../REHAUL_GUIDE.md).
+are documented in [Schema 4 and Editor Guide](../getting-started/schema4-editor/documentation.md).
 
 ## 1. Testing vocabulary
 
@@ -120,7 +120,7 @@ behavior can be isolated. Manual-only fixes must receive a written reproduction 
 
 The complete exact-structure provider, transition, lease, contextual item-lock, lifecycle, and
 companion-mod acceptance matrix is in
-[STRUCTURE_SESSION_COMPATIBILITY.md](../../STRUCTURE_SESSION_COMPATIBILITY.md#16-acceptance-test-matrix).
+[Structure Session Compatibility Guide](../integrations/structure-session/documentation.md#16-acceptance-test-matrix).
 
 ## 5. Validate a stage pack in game
 
@@ -180,7 +180,7 @@ Use a disposable world and the tested pack in `examples/beginner_pack`.
 17. Enable Video Settings → Menu Background Blur, reopen the map, and confirm only the world is blurred.
 18. Open the survival inventory and use the lock button beside the recipe book to open the map.
 19. Toggle the recipe book, reopen the inventory, and confirm the lock button remains beside it.
-20. Load the Stronghold and End examples from `TEMPORARY_AND_TRIGGERED_LOCKS.md`.
+20. Load the Stronghold and End examples from `docs/configuration/temporary-triggered-locks/documentation.md`.
 21. Confirm the normal Stronghold gate blocks, the priority one hundred End Fight permission allows,
     and the priority two hundred End restriction wins only inside the End.
 22. Start a manual timer with `/pstages rule activate`, inspect it with `/pstages rule list`, wait for

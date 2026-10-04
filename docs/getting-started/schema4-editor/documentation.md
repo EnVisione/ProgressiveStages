@@ -1,12 +1,12 @@
 # ProgressiveStages 3.0.1 Schema 4 and Editor Guide
 
-This is the practical guide for the rehaul described in `ProgressiveStagesREAHUL.md`. It explains
+This guide documents the schema 4 authoring workflow and editor. It explains
 the three file package, localhost editor, selectors, priorities, temporary rules, conditions,
 lifecycle rules, modifiers, challenges, extension APIs, migration, synchronization, persistence,
 security, testing, and recovery.
 
 If you are brand new, use the editor tutorial first. You do not need to edit TOML to make a stage.
-If you prefer files, copy the tested [starter package](examples/rehaul/starter).
+If you prefer files, copy the tested [starter package](../../../examples/rehaul/starter).
 
 ## 1. The simple mental model
 
@@ -197,7 +197,7 @@ slot_policy = "deny"
 
 The server evaluates the group before it spends a purchase or changes ownership. The in-game
 progression details show current usage. See the complete beginner, engineer, and mining-mode
-examples in [SHOWCASE_PACK.md](SHOWCASE_PACK.md).
+examples in [Fifty Stage Showcase Pack Guide](../../pack-building/showcase/documentation.md).
 
 ## 4. Selectors and autocomplete
 
@@ -492,7 +492,7 @@ exclusive = true
 
 The rule defaults to requiring its owning stage. `with_stages`, `without_stages`, and any compiled
 `condition` can narrow it further. Nonexclusive matching rules stack in descending priority order;
-an exclusive match stops lower-priority rules. The [fifty stage showcase](SHOWCASE_PACK.md)
+an exclusive match stops lower-priority rules. The [fifty stage showcase](../../pack-building/showcase/documentation.md)
 generates Diamond Engineer with this rule and a server-authoritative 32-diamond purchase.
 
 Aggregation and stacking are explicit and bounded. Stable modifier IDs prevent duplicate stacking.
@@ -502,7 +502,7 @@ camera position, or recreates the player entity, which prevents the old ground-c
 Profiles add proficiency thresholds so training stages or variables can reduce a penalty. The
 details screen evaluates the item in the player's main hand and reports its effective lock,
 modifier, multiplier, attribute deltas, transforms, affinity level, and required stage. See the
-tested [mage package](examples/rehaul/mage) and [knight package](examples/rehaul/knight).
+tested [mage package](../../../examples/rehaul/mage) and [knight package](../../../examples/rehaul/knight).
 
 ## 11. Generic challenges and budgets
 
@@ -607,7 +607,7 @@ Map<String, Object> expanded = ProgressiveStagesRehaulAPI.expandTemplate(
 
 Registration uses namespaced IDs. Returned maps, lists, snapshots, traces, and pages are immutable.
 Check `hasCapability` before using optional services. The complete typed condition and editor
-metadata example is [ExampleProgressiveStagesPlugin.java](examples/rehaul/java/ExampleProgressiveStagesPlugin.java).
+metadata example is [ExampleProgressiveStagesPlugin.java](../../../examples/rehaul/java/ExampleProgressiveStagesPlugin.java).
 
 ## 15. KubeJS API and editor metadata
 
@@ -615,7 +615,7 @@ KubeJS retains the original grant, revoke, query, counter, GUI, rule, trigger, t
 helpers and adds condition, value, action, selector, and challenge measure registrations with
 metadata. `evaluateFormula(id, values)` and `expandTemplate(id, arguments)` expose the same compiled
 formula and template engines used by Java. The complete tested registration example is
-[progressivestages.js](examples/rehaul/kubejs/server_scripts/progressivestages.js).
+[progressivestages.js](../../../examples/rehaul/kubejs/server_scripts/progressivestages.js).
 
 `ProgressiveStages.info('pack:stage')` includes `slotGroup`, `slotLimit`, and `slotPolicy`.
 `ProgressiveStages.slot(player, 'pack:stage')` returns the live active count, whether a grant is
@@ -764,22 +764,22 @@ silently disabled.
 
 ## 24. Tested examples
 
-- [Starter](examples/rehaul/starter): smallest package.
-- [Diamond](examples/rehaul/diamond): priority, presentation, unlock, temporary rule, modifier,
+- [Starter](../../../examples/rehaul/starter): smallest package.
+- [Diamond](../../../examples/rehaul/diamond): priority, presentation, unlock, temporary rule, modifier,
   grant, revoke, variable, and stage state reference.
-- [Mage](examples/rehaul/mage): cross-equipment penalty and affinity profile.
-- [Knight](examples/rehaul/knight): registered magic-item spell power and cooldown penalties with a
+- [Mage](../../../examples/rehaul/mage): cross-equipment penalty and affinity profile.
+- [Knight](../../../examples/rehaul/knight): registered magic-item spell power and cooldown penalties with a
   proficiency escape hatch.
-- [Structure weapons](examples/rehaul/structure_weapons): session lock, sword exclusion, and bow
+- [Structure weapons](../../../examples/rehaul/structure_weapons): session lock, sword exclusion, and bow
   global allow.
-- [End Fight](examples/rehaul/end_fight): Wither grant, Stronghold allow, and End restrictions.
-- [Wither trial](examples/rehaul/wither_trial): generic hit budget and challenge HUD.
-- [KubeJS](examples/rehaul/kubejs): typed callback metadata, lifecycle callback, temporary allow,
+- [End Fight](../../../examples/rehaul/end_fight): Wither grant, Stronghold allow, and End restrictions.
+- [Wither trial](../../../examples/rehaul/wither_trial): generic hit budget and challenge HUD.
+- [KubeJS](../../../examples/rehaul/kubejs): typed callback metadata, lifecycle callback, temporary allow,
   and script action.
-- [Java extension](examples/rehaul/java/ExampleProgressiveStagesPlugin.java): typed condition
+- [Java extension](../../../examples/rehaul/java/ExampleProgressiveStagesPlugin.java): typed condition
   provider and generated editor metadata.
-- [Migration](examples/migration): machine-compared legacy before and schema 4 after packages.
-- [Legacy Diamond file](examples/reference/diamond_stage.toml): exhaustive old one-file schema.
+- [Migration](../../../examples/migration): machine-compared legacy before and schema 4 after packages.
+- [Legacy Diamond file](../../../examples/reference/diamond_stage.toml): exhaustive old one-file schema.
 
 `RehaulExamplesTest` discovers, parses, compiles, and asserts the engine behavior of every published
 schema 4 package. `LegacyCompatibilityBaselineTest` protects the old examples.

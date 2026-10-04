@@ -4,8 +4,8 @@ This guide explains the conditional lock system in ProgressiveStages 3.0. Use it
 stage gate is not enough and the answer must change because of a location, a fight, a timer, a
 command, or another stage.
 
-The complete schema reference remains in [DOCUMENTATION.md](DOCUMENTATION.md). The fully commented
-stage reference is [examples/reference/diamond_stage.toml](examples/reference/diamond_stage.toml).
+The complete schema reference remains in [DOCUMENTATION.md](../../../DOCUMENTATION.md). The fully commented
+stage reference is [examples/reference/diamond_stage.toml](../../../examples/reference/diamond_stage.toml).
 
 ## The two systems that work together
 

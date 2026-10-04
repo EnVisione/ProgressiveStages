@@ -40,7 +40,7 @@ same server-authoritative decision. The first launch showcase includes fifty sta
 patterns.
 
 Complete schema 4 instructions and tested packages are available in the
-[3.0.1 Schema 4 and Editor Guide](https://github.com/EnVisione/ProgressiveStages/blob/master/REHAUL_GUIDE.md).
+[3.0.1 Schema 4 and Editor Guide](https://github.com/EnVisione/ProgressiveStages/blob/master/docs/getting-started/schema4-editor/documentation.md).
 
 ---
 
@@ -122,7 +122,7 @@ Assignment, dungeon, arena, and quest mods can register a generic exact structur
 - `leave_structure` triggers support structure tags, provider filters, required session stages, and incomplete, completed, death, teleport, dimension change, disconnect, cancelled, or recovery outcomes.
 - `/pstages structure` commands list providers and sessions, reconcile state, and provide an explicit confirmation gated recovery close.
 
-The full provider contract and acceptance matrix are documented at https://github.com/EnVisione/ProgressiveStages/blob/master/STRUCTURE_SESSION_COMPATIBILITY.md.
+The full provider contract and acceptance matrix are documented at https://github.com/EnVisione/ProgressiveStages/blob/master/docs/integrations/structure-session/documentation.md.
 
 ---
 
@@ -332,7 +332,7 @@ Use `/progressivestages validate` before shipping a pack and follow the reposito
 
 - Beginner guide: https://github.com/EnVisione/ProgressiveStages/blob/master/docs/getting-started/documentation.md
 - Complete documentation: https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md
-- Temporary and triggered locks guide: https://github.com/EnVisione/ProgressiveStages/blob/master/TEMPORARY_AND_TRIGGERED_LOCKS.md
+- Temporary and triggered locks guide: https://github.com/EnVisione/ProgressiveStages/blob/master/docs/configuration/temporary-triggered-locks/documentation.md
 - Fully commented Diamond Stage reference: https://github.com/EnVisione/ProgressiveStages/blob/master/examples/reference/diamond_stage.toml
 - Architecture and project structure: https://github.com/EnVisione/ProgressiveStages/blob/master/docs/architecture/documentation.md
 - Testing handbook: https://github.com/EnVisione/ProgressiveStages/blob/master/docs/testing/documentation.md

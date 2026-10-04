@@ -189,7 +189,7 @@ revision conflict, and `applied` with matching apply and definition revisions fo
 transaction. A draft edit uses `draft_changed`; `source_preserved` and equal source digests identify
 an unchanged source observation. Provider state is `not_observed` unless the operation already
 produced an authoritative capability response. Do not interpret that value as provider readiness.
-Use the [capture privacy and lifecycle guide](../interaction-locks.md) when collecting a support report.
+Use the [capture privacy and lifecycle guide](../interaction-locks/documentation.md) when collecting a support report.
 
 ## Rule editing and runtime actions
 

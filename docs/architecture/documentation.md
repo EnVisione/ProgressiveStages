@@ -89,7 +89,7 @@ If no stage files exist, `DefaultShowcaseStages` writes fifty schema 4 stage pac
 files. The dependency graph contains independent class roots, evolutions, mastery stages, hybrid
 stages, and an at-least-three finale. It also provides real runtime examples of purchases,
 automatic grants, rewards, temporary rules, contextual modifiers, drop modifiers, challenges,
-variables, formulas, states, and ability gates. [SHOWCASE_PACK.md](../../SHOWCASE_PACK.md) documents the
+variables, formulas, states, and ability gates. [Fifty Stage Showcase Pack Guide](../pack-building/showcase/documentation.md) documents the
 whole tree. Existing installations are never modified by this generator because any discovered
 stage causes generation to be skipped.
 
@@ -511,11 +511,15 @@ The repository root contains the maintained release surfaces:
 
 | File | Audience |
 |---|---|
-| `README.md` | Fast project overview and changelog. |
+| `README.md` | Project overview and installation. |
 | `docs/getting-started/documentation.md` | First-time pack authors. |
+| `docs/getting-started/schema4-editor/documentation.md` | Schema 4 authoring and editor. |
 | `DOCUMENTATION.md` | Exhaustive user-facing reference. |
-| `TEMPORARY_AND_TRIGGERED_LOCKS.md` | Focused conditional rules tutorial and copy-ready scenarios. |
+| `docs/configuration/temporary-triggered-locks/documentation.md` | Conditional lock tutorial and examples. |
 | `docs/architecture/documentation.md` | Maintainers and integration authors. |
+| `docs/integrations/structure-session/documentation.md` | Structure provider authors. |
+| `docs/pack-building/showcase/documentation.md` | First-launch showcase reference. |
+| `docs/features/inventory-insertion/documentation.md` | Player inventory insertion rules. |
 | `docs/testing/documentation.md` | Testers and release approvers. |
 | `docs/curseforge/documentation.md` | Copy-ready public project description. |
 
@@ -531,7 +535,7 @@ completion, lifecycle outcomes, reconciliation, and team-safe stage leases. `Str
 combines the normal static gate with provider decisions. This is a one-way extension seam:
 companion mods depend on ProgressiveStages and ProgressiveStages never imports the companion API.
 
-See [STRUCTURE_SESSION_COMPATIBILITY.md](../../STRUCTURE_SESSION_COMPATIBILITY.md) for the complete
+See [Structure Session Compatibility Guide](../integrations/structure-session/documentation.md) for the complete
 contract and acceptance matrix.
 
 The built JAR is created under `build/libs/`. Generated metadata under `build/` is disposable output and should never be treated as the source of truth.

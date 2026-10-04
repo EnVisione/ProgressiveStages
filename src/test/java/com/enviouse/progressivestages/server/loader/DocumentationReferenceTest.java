@@ -42,11 +42,11 @@ class DocumentationReferenceTest {
         assertTrue(documentation.contains("[`diamond_stage.toml`](examples/reference/diamond_stage.toml)"));
         assertTrue(documentation.contains("[Architecture and Project Structure Guide](docs/architecture/documentation.md)"));
         assertTrue(documentation.contains("[Phase 1 Through Phase 19 Guide](docs/pack-building/documentation.md)"));
-        assertTrue(documentation.contains("[Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md)"));
+        assertTrue(documentation.contains("[Temporary and Triggered Locks Guide](docs/configuration/temporary-triggered-locks/documentation.md)"));
         assertTrue(documentation.contains("### 4.34 Temporary, triggered, and priority-based lock rules"));
         assertTrue(documentation.contains("### 4.35 Structure session providers, leased stages, and active locks"));
-        assertTrue(documentation.contains("[STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md)"));
-        assertTrue(Files.readString(PROJECT.resolve("STRUCTURE_SESSION_COMPATIBILITY.md"))
+        assertTrue(documentation.contains("[Structure Session Compatibility Guide](docs/integrations/structure-session/documentation.md)"));
+        assertTrue(Files.readString(PROJECT.resolve("docs/integrations/structure-session/documentation.md"))
             .contains("## 16. Acceptance test matrix"));
     }
 
