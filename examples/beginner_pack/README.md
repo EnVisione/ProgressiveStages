@@ -37,5 +37,5 @@ Use the exact before and after pattern:
 7. Confirm the diamond pickaxe works.
 8. Revoke Diamond Age and confirm the diamond pickaxe is blocked again.
 
-See [the beginner guide](../../GETTING_STARTED.md) for explanations and
-[the testing handbook](../../TESTING.md) for the complete release matrix.
+See [the beginner guide](../../docs/getting-started/documentation.md) for explanations and
+[the testing handbook](../../docs/testing/documentation.md) for the complete release matrix.

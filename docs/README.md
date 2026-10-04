@@ -1,53 +1,33 @@
 # ProgressiveStages Documentation
 
-Use this page to find the maintained project documentation.
+Use this page to find maintained product documentation and reusable testing guides.
 
 ## Start Here
 
 - [Project overview and installation](../README.md)
 - [Complete configuration and technical documentation](../DOCUMENTATION.md)
+- [Long-form ProgressiveStages pack-building guide](pack-building/documentation.md)
 - [Project wiki](https://github.com/MCEnvision/ProgressiveStages/wiki)
-- [Active implementation plan](../plan.md)
 
-## Verification
+## Testing Guides
 
-- [Selling Bin interaction repair](verification/selling-bin-interaction-repair.md)
-- [Selling Bin transaction GameTests](test/selling-bin.md)
-- [KubeJS ownership regression](test/kubejs.md)
-- [Diagnostic capture performance](test/diagnostics.md)
-- [Authenticated diagnostic capture lifecycle](verification/capture-client/README.md)
-- [Editor session authorization](test/editor-authorization.md)
-- [Editor package import](test/editor-import.md)
-- [Editor rule actions and source preservation](test/editor-rule-runtime.md)
-- [Editor and permission repair observations](verification/editor-repair/README.md)
-- [Editor external file changes](test/editor-external-changes.md)
-- [Snapshot acknowledgement and recovery handlers](test/snapshot-acknowledgements.md)
-- [GUI response budget, command and script opening, and laptop verification](test/gui-responses.md)
-- [Purchase accounting, independent ownership and refunds](test/purchase-accounting.md)
-- [Purchase and lease laptop observations](verification/purchase-lease-client/README.md)
-- [Live map synchronization, source changes and reconnect verification](verification/map-synchronization-client/README.md)
-- [Selling Bin artifact manifest](verification/selling-bin-artifacts.json)
-- [Selling Bin client observations and image hashes](verification/selling-bin-client/observations.json)
-- [Progression ownership](verification/progression-ownership.md)
-- [Authenticated FTB Quests profession rewards and restart](verification/ftb-quest-client/README.md)
-- [LuckPerms bridge](verification/luckperms-bridge.md)
-- [LuckPerms 21.1.248 login observations](verification/luckperms-login/observations.json)
-- [3.0.5 acceptance](verification/3.0.5-acceptance.md)
-- [3.0.5 security review](verification/3.0.5-security-review.md)
-- [3.0.5 dependency review](verification/3.0.5-dependency-review.md)
+- [Selling Bin transaction GameTests](testing/selling-bin/documentation.md)
+- [KubeJS ownership regression](testing/kubejs/documentation.md)
+- [Diagnostic capture performance](testing/diagnostics/documentation.md)
+- [Editor session authorization](testing/editor-authorization/documentation.md)
+- [Editor package import](testing/editor-import/documentation.md)
+- [Editor rule actions and source preservation](testing/editor-rule-runtime/documentation.md)
+- [Editor external file changes](testing/editor-external-changes/documentation.md)
+- [Snapshot acknowledgement and recovery handlers](testing/snapshot-acknowledgements/documentation.md)
+- [GUI response budget and opening behavior](testing/gui-responses/documentation.md)
+- [Purchase accounting, independent ownership, and refunds](testing/purchase-accounting/documentation.md)
 
 ## Troubleshooting
 
 - [Interaction locks](troubleshooting/interaction-locks.md)
-- [Progression scopes and ownership](troubleshooting/progression-scopes.md)
-- [LuckPerms bridge](troubleshooting/luckperms.md)
-- [Easy Builder](troubleshooting/easy-builder.md)
-
-- [3.0.4 entity presence fixture](verification/3.0.4-entity-presence-fixture.md)
-- [3.0.4 optional integration artifact and runtime evidence](verification/3.0.4-optional-integration-artifacts.md)
-- [3.0.4 phase 004 compatibility candidate](verification/3.0.4-phase-004-compatibility.md)
-- [Editor rehaul phase 1](verification/REHAUL_PHASE_1.md)
-- [Editor rehaul phases 2 through 22](verification/REHAUL_PHASES_2_TO_22.md)
+- [Progression scopes and ownership](troubleshooting/progression-scopes/documentation.md)
+- [LuckPerms bridge](troubleshooting/luckperms/documentation.md)
+- [Easy Builder](troubleshooting/easy-builder/documentation.md)
 
 ## Features
 
@@ -55,7 +35,8 @@ Use this page to find the maintained project documentation.
 
 ## Release Notes
 
-- [ProgressiveStages 3.0.4 and 3.0.4-fix](release/3.0.4.md)
+- [ProgressiveStages 3.0.4 and 3.0.4-fix](release/3.0.4/documentation.md)
+- [ProgressiveStages 3.0.6](release/documentation.md)
 - [ProgressiveStages 3.0.3](release/3.0.3.md)
 
 The tracked repository documentation is the source of truth. Release pages and the project wiki

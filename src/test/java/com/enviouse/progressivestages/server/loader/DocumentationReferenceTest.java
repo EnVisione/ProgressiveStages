@@ -40,8 +40,8 @@ class DocumentationReferenceTest {
         String documentation = Files.readString(PROJECT.resolve("DOCUMENTATION.md"));
 
         assertTrue(documentation.contains("[`diamond_stage.toml`](examples/reference/diamond_stage.toml)"));
-        assertTrue(documentation.contains("[Architecture and Project Structure Guide](ARCHITECTURE.md)"));
-        assertTrue(documentation.contains("[Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md)"));
+        assertTrue(documentation.contains("[Architecture and Project Structure Guide](docs/architecture/documentation.md)"));
+        assertTrue(documentation.contains("[Phase 1 Through Phase 19 Guide](docs/pack-building/documentation.md)"));
         assertTrue(documentation.contains("[Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md)"));
         assertTrue(documentation.contains("### 4.34 Temporary, triggered, and priority-based lock rules"));
         assertTrue(documentation.contains("### 4.35 Structure session providers, leased stages, and active locks"));
@@ -52,7 +52,7 @@ class DocumentationReferenceTest {
 
     @Test
     void phaseGuideDocumentsEveryPhaseWithExamplesAndVerification() throws IOException {
-        String guide = Files.readString(PROJECT.resolve("PHASES_1_TO_19.md"));
+        String guide = Files.readString(PROJECT.resolve("docs/pack-building/documentation.md"));
 
         for (int phase = 1; phase <= 19; phase++) {
             String heading = "## Phase " + phase + ".";
@@ -81,13 +81,13 @@ class DocumentationReferenceTest {
     @Test
     void releasePresentationFilesAreConnected() throws IOException {
         String readme = Files.readString(PROJECT.resolve("README.md"));
-        String curseForge = Files.readString(PROJECT.resolve("CURSEFORGE.md"));
+        String curseForge = Files.readString(PROJECT.resolve("docs/curseforge/documentation.md"));
         String metadata = Files.readString(PROJECT.resolve("src/main/templates/META-INF/neoforge.mods.toml"));
 
         assertTrue(Files.size(PROJECT.resolve("src/main/resources/progressivestages.png")) > 0);
         assertTrue(metadata.contains("logoFile=\"progressivestages.png\""));
         assertTrue(metadata.contains("displayURL=\"https://www.curseforge.com/minecraft/mc-mods/progressivestages\""));
-        assertTrue(readme.contains("[CurseForge 3.0 Description](CURSEFORGE.md)"));
+        assertTrue(readme.contains("[CurseForge 3.0 Description](docs/curseforge/documentation.md)"));
         assertTrue(curseForge.contains("# ProgressiveStages 3.0"));
         assertTrue(curseForge.contains("config/progressivestages/stages/"));
     }

@@ -280,6 +280,27 @@ public final class ProgressiveStagesAPI {
     }
 
     /**
+     * Grant exactly one stage attributed to a source while bypassing its prerequisites. Call on the server
+     * thread. The source identity must be unpadded. The actor must be an online operator with permission level 3.
+     * Stage slot, purchase, ownership, and source policy checks still apply. Source and audit reason must be
+     * printable values of at most 256 characters. A
+     * successful mutation records the actor, source, and required audit reason.
+     *
+     * @param player the acting player and stage owner context
+     * @param stageId the single stage to grant
+     * @param source the unpadded source identity retained for reconciliation, limited to 256 printable characters
+     * @param auditReason the nonempty operator supplied reason, limited to 256 printable characters
+     * @param cause the gameplay cause reported to stage listeners
+     * @return true when this source was newly committed
+     */
+    public static boolean grantStageFromSourceWithDependencyBypass(ServerPlayer player, StageId stageId,
+                                                                    String source, String auditReason,
+                                                                    StageCause cause) {
+        return StageManager.getInstance().grantStageFromSourceWithDependencyBypass(
+            player, stageId, source, auditReason, cause);
+    }
+
+    /**
      * Revoke a stage from a player.
      * This will also sync to team members if team mode is enabled.
      *

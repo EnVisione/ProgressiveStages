@@ -148,7 +148,7 @@ public final class DefaultStageTemplates {
             # ============================================================================
             #
             # BEGINNER GUIDE
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/GETTING_STARTED.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/getting-started/documentation.md
             #
             # COMPLETE DOCUMENTATION
             # https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md
@@ -162,7 +162,7 @@ public final class DefaultStageTemplates {
             # https://github.com/EnVisione/ProgressiveStages/blob/master/STRUCTURE_SESSION_COMPATIBILITY.md
             #
             # BUILD AND RELEASE TESTING GUIDE
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/TESTING.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/testing/documentation.md
             #
             # This generated reference file is named diamond_age.toml. The [stage].id below
             # is the authoritative stage identifier used by dependencies and commands.
