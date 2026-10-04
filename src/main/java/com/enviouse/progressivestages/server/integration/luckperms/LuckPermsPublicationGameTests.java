@@ -29,7 +29,7 @@ import java.util.function.Consumer;
 public final class LuckPermsPublicationGameTests {
     private LuckPermsPublicationGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_publication")
     public static void unrelatedSubjectChangesPreservePublishedPermissions(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The publication fixture requires an isolated server.");

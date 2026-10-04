@@ -25,7 +25,7 @@ import static com.enviouse.progressivestages.server.integration.luckperms.LuckPe
 public final class LuckPermsQueryGameTests {
     private LuckPermsQueryGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_queries")
     public static void permissionQueriesWithdrawDeniedAndUnavailableOutput(GameTestHelper helper) {
         var server = helper.getLevel().getServer();
         var profile = new GameProfile(UUID.fromString("2ee3a78a-4f09-46a6-b869-5e1b114bba77"), "permission-test");
@@ -132,7 +132,7 @@ public final class LuckPermsQueryGameTests {
         @Override public boolean cleanupTransientNodes() { return delegate.cleanupTransientNodes(); }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_projection_contexts")
     public static void projectionContextsFollowConfirmedOutputAndLifecycle(GameTestHelper helper) throws Exception {
         var server = helper.getLevel().getServer();
         helper.assertTrue(server.getPlayerList().getPlayers().isEmpty(), "The projection fixture requires an isolated server.");

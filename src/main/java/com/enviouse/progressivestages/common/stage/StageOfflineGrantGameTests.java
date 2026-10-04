@@ -39,22 +39,22 @@ import java.util.function.Consumer;
 public final class StageOfflineGrantGameTests {
     private StageOfflineGrantGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_offline_personal_grants")
     public static void offlinePersonalAcquisitionsDeliverOriginalRewardsOnce(GameTestHelper helper) throws Exception {
         verifyGrant(helper, OwnerKind.PERSONAL, false);
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_offline_team_grants")
     public static void offlineTeamAcquisitionsPreserveTheRewardActor(GameTestHelper helper) throws Exception {
         verifyGrant(helper, OwnerKind.TEAM, false);
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_offline_server_grants")
     public static void offlineServerAcquisitionsPreserveTheRewardActor(GameTestHelper helper) throws Exception {
         verifyGrant(helper, OwnerKind.SERVER, false);
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_offline_prerequisites")
     public static void offlinePrerequisitesResolveTheirOwnOwners(GameTestHelper helper) throws Exception {
         verifyGrant(helper, OwnerKind.TEAM, true);
     }

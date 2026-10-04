@@ -148,21 +148,21 @@ public final class DefaultStageTemplates {
             # ============================================================================
             #
             # BEGINNER GUIDE
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/GETTING_STARTED.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/getting-started/documentation.md
             #
             # COMPLETE DOCUMENTATION
             # https://github.com/EnVisione/ProgressiveStages/blob/master/DOCUMENTATION.md
             # SCHEMA 4 AND LOCALHOST EDITOR GUIDE
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/REHAUL_GUIDE.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/getting-started/schema4-editor/documentation.md
             #
             # TEMPORARY AND TRIGGERED LOCKS GUIDE
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/TEMPORARY_AND_TRIGGERED_LOCKS.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/configuration/temporary-triggered-locks/documentation.md
             #
             # STRUCTURE SESSION COMPATIBILITY GUIDE
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/STRUCTURE_SESSION_COMPATIBILITY.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/integrations/structure-session/documentation.md
             #
             # BUILD AND RELEASE TESTING GUIDE
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/TESTING.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/testing/documentation.md
             #
             # This generated reference file is named diamond_age.toml. The [stage].id below
             # is the authoritative stage identifier used by dependencies and commands.
@@ -1654,7 +1654,7 @@ public final class DefaultStageTemplates {
             # optional in-progress stage, completion, cleanup, and availability.
             #
             # Full provider code, lifecycle rules, commands, and acceptance tests.
-            # https://github.com/EnVisione/ProgressiveStages/blob/master/STRUCTURE_SESSION_COMPATIBILITY.md
+            # https://github.com/EnVisione/ProgressiveStages/blob/master/docs/integrations/structure-session/documentation.md
             #
             # Put active locks in the dedicated in-progress stage file, not necessarily in
             # this permanent Diamond Age stage. They block because the stage is present

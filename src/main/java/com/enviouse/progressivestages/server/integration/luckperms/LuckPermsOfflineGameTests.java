@@ -42,7 +42,7 @@ public final class LuckPermsOfflineGameTests {
 
     private LuckPermsOfflineGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_offline_sources")
     public static void offlineSourcesRevalidateWithoutAPlayerAndPreserveOtherOwners(GameTestHelper helper) throws Exception {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.order.registerStage(definition(CHEF, false, Map.of("server", List.of("professions"))));
@@ -84,7 +84,7 @@ public final class LuckPermsOfflineGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_offline_results")
     public static void offlineResultsRejectStaleDefinitionsAndUnqualifiedGrants(GameTestHelper helper) throws Exception {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.order.registerStage(definition(CHEF, false, Map.of()));
@@ -121,7 +121,7 @@ public final class LuckPermsOfflineGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_offline_membership")
     public static void offlineMembershipChangesRejectDelayedInputWithUnchangedOwners(GameTestHelper helper) throws Exception {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.order.registerStage(definition(CHEF, false, Map.of()));
@@ -146,7 +146,7 @@ public final class LuckPermsOfflineGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_offline_rescan")
     public static void offlineRescanConvergesWhileContributorsAreRemoved(GameTestHelper helper) throws Exception {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.order.registerStage(definition(CHEF, false, Map.of()));
@@ -169,7 +169,7 @@ public final class LuckPermsOfflineGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_offline_draft")
     public static void offlineDraftRejectionPreservesLiveStateAndCommitsOnceWhenCurrent(GameTestHelper helper) throws Exception {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.order.registerStage(definition(CHEF, false, Map.of()));
@@ -230,7 +230,7 @@ public final class LuckPermsOfflineGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_offline_draft_concurrent")
     public static void offlineDraftRejectsAConcurrentStageMutationWithoutUndoingIt(GameTestHelper helper) throws Exception {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.order.registerStage(definition(RETAINED, true, Map.of()));

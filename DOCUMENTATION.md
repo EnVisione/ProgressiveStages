@@ -1,6 +1,6 @@
-# ProgressiveStages 3.0.5 — Complete Documentation
+# ProgressiveStages 3.0.6 Complete Documentation
 
-> ProgressiveStages **3.0.5** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
+> ProgressiveStages **3.0.6** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -9,11 +9,9 @@
 >
 > **Project, support, and community:** [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) · [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires in the CurseForge project and GitHub issue tracker through `displayURL` and `issueTrackerURL`.
 
-> **3.0.5 development candidate:** The authenticated editor now has an Access tab for per stage
-> ownership, optional LuckPerms mappings, command gates, and direct interaction definitions. This
-> candidate uses NeoForge 21.1.248 for the build, dedicated server and client. The loader update
-> and interaction followups require renewed acceptance before integration. No CurseForge,
-> Modrinth, or GitHub release is published by this work.
+> **3.0.6:** Adds an audited source scoped stage grant for optional
+> integrations. A permission level 3 online operator can grant one source to one stage without
+> granting prerequisites. The operation retains source attribution and other stage policy checks.
 
 > **3.0.2 maintenance release:** The authenticated localhost editor now works for permission level
 > 3 operators in integrated single-player worlds as well as dedicated servers. The editor has a
@@ -35,27 +33,27 @@
 > matching `item_into_inventory` rule applies. Menus without a registered menu type no longer
 > reject normal armor placement, while configured inventory insertion rules remain enforced.
 
-> **New to stage mods?** Start with [GETTING_STARTED.md](GETTING_STARTED.md), copy the tested
+> **New to stage mods?** Start with the [beginner guide](docs/getting-started/documentation.md), copy the tested
 > [beginner pack](examples/beginner_pack/README.md), and return here when the beginner guide links
 > to a specific advanced feature. Release maintainers should also follow
-> [TESTING.md](TESTING.md). This file is the exhaustive reference, not the shortest learning path.
+> [testing handbook](docs/testing/documentation.md). This file is the exhaustive reference, not the shortest learning path.
 > For a complete pack-building course, follow the
-> [Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md). It starts with an empty installation and
+> [Phase 1 Through Phase 19 Guide](docs/pack-building/documentation.md). It starts with an empty installation and
 > ends with migration, dedicated-server testing, artifact inspection, and release evidence. Every
 > phase includes copy-ready configuration, expected behavior, verification, and common mistakes.
 > Maintainers and integration authors should also read the
-> [Architecture and Project Structure Guide](ARCHITECTURE.md), which follows each file from disk,
+> [Architecture and Project Structure Guide](docs/architecture/documentation.md), which follows each file from disk,
 > through parsing and validation, into runtime enforcement, networking, UI, and tests.
 > For the schema 4 three-file packages, secure localhost editor, all thirty rehaul feature groups,
 > migration, automatic client snapshots, and copy-ready tested rehaul examples, use the
-> [ProgressiveStages 3.0.1 Schema 4 and Editor Guide](REHAUL_GUIDE.md).
+> [ProgressiveStages 3.0.1 Schema 4 and Editor Guide](docs/getting-started/schema4-editor/documentation.md).
 >
 > **Want one complete file you can read and copy?** Open
 > [`diamond_stage.toml`](examples/reference/diamond_stage.toml). It is the directly browsable,
 > fully commented legacy one-file reference. Start with its numbered
 > safe five minute edit, then use its table of contents to find every lock category and feature.
 > Conditional access authors can also use the focused
-> [Temporary and Triggered Locks Guide](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+> [Temporary and Triggered Locks Guide](docs/configuration/temporary-triggered-locks/documentation.md).
 > The equivalent machine-tested three-file schema 4 reference is the
 > [`examples:diamond` package](examples/rehaul/diamond).
 
@@ -130,7 +128,7 @@
 16. [Networking & Client Caches](#16-networking--client-caches)
 17. [Troubleshooting](#17-troubleshooting)
 18. [File, Package, and Runtime Structure](#18-file-package-and-runtime-structure)
-19. [Phase 1 Through Phase 19 Guide](#19-phase-1-through-phase-19-guide)
+19. [Editor and diagnostic operations](#19-editor-and-diagnostic-operations)
 
 ---
 
@@ -279,7 +277,7 @@ They form a complete branching class tree with three limited beginner paths, evo
 classes, stackable specialists, replaceable modes, temporary powers, fifteen item purchases, thirty
 five gameplay or external-event paths, automatic
 grants, rewards, conditions, modifiers, challenges, and an at-least-three finale. See the
-[Showcase Pack Guide](SHOWCASE_PACK.md) for every stage and a
+[Showcase Pack Guide](docs/pack-building/showcase/documentation.md) for every stage and a
 manual verification checklist. Existing stage files are never deleted, replaced, or supplemented
 with the showcase during an update.
 
@@ -1137,9 +1135,8 @@ metrics or combat sessions change, a structure session changes, the player chang
 player disconnects. Server scoreboard updates invalidate the affected player before the next
 decision. The cache also compares the current team, online team size, health, food, position,
 dimension, and experience before reuse. This means a same tick stage, team, scoreboard, or metric
-change cannot keep using a stale allow or deny decision. See
-[`3.0.4-entity-presence-fixture.md`](docs/verification/3.0.4-entity-presence-fixture.md) for the
-repeatable mixed player and performance verification procedure.
+change cannot keep using a stale allow or deny decision. See the [editor rule testing guide](docs/testing/editor-rule-runtime/documentation.md)
+for entity rule behavior.
 
 The implementations are
 [`EntityPresenceEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/EntityPresenceEnforcer.java),
@@ -1149,19 +1146,18 @@ and [`EntityRenderDispatcherMixin`](src/main/java/com/enviouse/progressivestages
 For a controlled operator performance capture only, start a dedicated server with
 `-Dprogressivestages.entityPresenceFixture=true`. The bounded diagnostic writes raw per-tick CSV
 samples on normal server shutdown and is disabled by default. It does not change stage rules,
-saved data, packets, or client behavior. See
-[`3.0.4-entity-presence-fixture.md`](docs/verification/3.0.4-entity-presence-fixture.md) for the
-fixture, command, sample-capacity property, calculation, and interpretation rules.
+saved data, packets, or client behavior. Use the dedicated server test suite to measure the
+entity presence behavior described above.
 
 ### 4.11 `[[interactions]]` — fine-grained "X-on-Y" rules
 
-The [Selling Bin transaction GameTests](docs/test/selling-bin.md) exercise the real optional mod
+The [Selling Bin transaction GameTests](docs/testing/selling-bin/documentation.md) exercise the real optional mod
 on a disposable server. Their fixture and coverage limits are separate from client acceptance.
 
 This is a **table-array** rather than a single table, so you can write as many
 entries as you want, each describing one specific interaction to gate.
 
-For denied `item_on_block` and `block_right_click` requests, the server event returns `InteractionResult.FAIL` and sends full inventory and open menu state even when no authoritative stack changed. It also sends the clicked block entity's normal update packet when available. Ordinary change broadcasts alone cannot repair every locally predicted change when the server's cached inventory already equals its current state. The server still checks every request independently; no cooldown converts a later permitted empty hand action into a denial. GUI insertion uses the separate `item_into_inventory` policy described in the [inventory insertion guide](docs/features/inventory-insertion.md).
+For denied `item_on_block` and `block_right_click` requests, the server event returns `InteractionResult.FAIL` and sends full inventory and open menu state even when no authoritative stack changed. It also sends the clicked block entity's normal update packet when available. Ordinary change broadcasts alone cannot repair every locally predicted change when the server's cached inventory already equals its current state. The server still checks every request independently; no cooldown converts a later permitted empty hand action into a denial. GUI insertion uses the separate `item_into_inventory` policy described in the [inventory insertion guide](docs/features/inventory-insertion/documentation.md).
 
 ```toml
 [[interactions]]
@@ -1195,7 +1191,7 @@ The `held_item` / `target_block` / `target_entity` fields accept **single
 prefix entries** (e.g. `tag:minecraft:logs`, `mod:create`). The `description`
 field is free text used in messages and `/stage info`.
 
-Selectors are evaluated against the live registry holders on the server. Modern `tag:c:armors`, exact `id:selling_bin:selling_bin`, and `all:*` selectors work for item-on-block rules, and the legacy `#c:armors` spelling remains supported. Selective item-on-block rules require a nonempty held stack. A whole block `all:*` item-on-block rule also gates an empty hand menu open. A missing stage is denied before the protected interaction continues. The optional bounded support capture is documented in [Interaction locks](docs/troubleshooting/interaction-locks.md).
+Selectors are evaluated against the live registry holders on the server. Modern `tag:c:armors`, exact `id:selling_bin:selling_bin`, and `all:*` selectors work for item-on-block rules, and the legacy `#c:armors` spelling remains supported. Selective item-on-block rules require a nonempty held stack. A whole block `all:*` item-on-block rule also gates an empty hand menu open. A missing stage is denied before the protected interaction continues. The optional bounded support capture is documented in [Interaction locks](docs/troubleshooting/interaction-locks/documentation.md).
 
 The implementation is
 [`InteractionEnforcer`](src/main/java/com/enviouse/progressivestages/server/enforcement/InteractionEnforcer.java).
@@ -1280,7 +1276,7 @@ rule active** to choose the lifetime, duration, activation condition, and
 optional reset condition. The item, block, menu, and inventory-owner pickers
 use the running server catalog. The TOML source tab always shows the
 same six canonical fields. See
-[Inventory insertion rules](docs/features/inventory-insertion.md) for complete
+[Inventory insertion rules](docs/features/inventory-insertion/documentation.md) for complete
 examples and extension guidance.
 
 ### 4.12 `[loot]` — chest / fishing / archeology / mob / block drop filter
@@ -2049,8 +2045,6 @@ and malformed clock maps or timestamps are rejected without changing the supplie
 existing regression save cannot fall through to an empty replacement; loading reports an error
 and leaves the file available for recovery.
 
-This owner separation does not complete the LuckPerms expiry episode and manual suppression
-contract. Those lifecycle gates remain tracked in the [bridge verification record](docs/verification/luckperms-bridge.md).
 
 ### 4.26 `[cost]` — skill-tree purchasable stages
 
@@ -2080,7 +2074,7 @@ Repeated item rows are cumulative. For example,
 The server checks each row against the quantity remaining after earlier rows before changing
 inventory, experience, stage ownership or purchase receipts. Insufficient payment rejects the
 whole purchase. Cost rows remain unchanged in the definition and receipt, preserving existing
-refund calculation and rounding. See the [purchase accounting regression](docs/test/purchase-accounting.md).
+refund calculation and rounding. See the [purchase accounting regression](docs/testing/purchase-accounting/documentation.md).
 
 A purchase earns independent ownership at the stage's resolved personal, team or server owner.
 Temporary access does not count as an existing purchase or independent grant. The stage map
@@ -2511,7 +2505,7 @@ for rules such as swords only inside a Stronghold, no elytra during the End figh
 ban after combat starts, or a later stage that overrides an earlier structure gate.
 
 For a single-purpose tutorial with all requested examples, see
-[TEMPORARY_AND_TRIGGERED_LOCKS.md](TEMPORARY_AND_TRIGGERED_LOCKS.md).
+[Temporary and Triggered Locks Guide](docs/configuration/temporary-triggered-locks/documentation.md).
 
 #### Do not confuse stage triggers and triggered locks
 
@@ -2838,7 +2832,7 @@ accept every outcome.
 The complete provider contract, copy-ready Java example, arbitration truth table, stage files,
 lease rules, team behavior, lifecycle semantics, commands, failure handling, and forty-step
 acceptance matrix are in
-[STRUCTURE_SESSION_COMPATIBILITY.md](STRUCTURE_SESSION_COMPATIBILITY.md).
+[Structure Session Compatibility Guide](docs/integrations/structure-session/documentation.md).
 
 ### 4.36 `[[drop_modifiers]]` — selector based block output bonuses
 
@@ -2891,7 +2885,7 @@ modifiers. This prevents a hidden real ore from leaking its multiplied real outp
 stage ownership are read at break time, so grants, revokes, temporary stage changes, and reloads
 take effect without a relog.
 
-The first-launch [Showcase Pack](SHOWCASE_PACK.md) contains Diamond Engineer. It requires Iron
+The first-launch [Showcase Pack](docs/pack-building/showcase/documentation.md) contains Diamond Engineer. It requires Iron
 Engineer, costs 32 diamonds, and doubles only diamond item output from diamond or deepslate
 diamond ore when the used pickaxe has at least Fortune I. The easy editor exposes the same system
 under **Targeted mining bonus**.
@@ -2961,7 +2955,7 @@ In `/pstages editor`, select the stage and open **Stage slots and stacking**. Th
 for a group, maximum active count, and full-group policy. It can apply the configuration to every
 existing member in one operation. Advanced authors can edit the three keys in `stage.toml`.
 
-The generated [fifty stage showcase](SHOWCASE_PACK.md) contains all three common patterns:
+The generated [fifty stage showcase](docs/pack-building/showcase/documentation.md) contains all three common patterns:
 
 - `beginner_paths` permits any two of Mage, Warrior, and Ranger, then denies a third.
 - `engineering_tiers` has no limit, so the six engineering bonuses stack.
@@ -2969,11 +2963,8 @@ The generated [fifty stage showcase](SHOWCASE_PACK.md) contains all three common
 
 ### 4.38 LuckPerms bridge and command gates
 
-LuckPerms 5.4.150 passes authenticated player login with the current Minecraft 1.21.1 and NeoForge
-21.1.248 candidate. The [historical dependency verification](docs/verification/luckperms-bridge.md#neoforge-211248-dependency-only-login-failure)
-records a login failure in 5.4.140, including without ProgressiveStages. The
-[regression guide](docs/test/editor-rule-runtime.md) distinguishes current transaction coverage from
-the remaining authenticated multiplayer and complete provider lifecycle acceptance.
+For Minecraft 1.21.1 and NeoForge 21.1.248, use LuckPerms 5.4.150. See the [LuckPerms troubleshooting guide](docs/troubleshooting/luckperms/documentation.md)
+for configuration and provider behavior.
 
 LuckPerms is an optional server integration. A stage may read inherited groups or true Boolean
 permissions through `[[luckperms.inbound]]` rows and may contribute an existing group or positive
@@ -3007,7 +2998,7 @@ descendants = true
 Rows support `all` and `any` matching, bounded context maps, and stable IDs. Only a Boolean true
 qualifies a permission. The required reconciliation contract forbids acquisition effects,
 including costs, rewards, prerequisite grants, expiry refreshes and counter scope changes.
-The complete lifecycle and source preservation matrix remains open.
+When checking these rules, include stage revocation, pending sources, and ownership changes in test scenarios.
 
 Inbound source labels now include the contributing player UUID, stable row ID and retention mode
 inside the resolved personal, team or server owner namespace. A first derived grant creates only
@@ -3046,7 +3037,7 @@ records; its effective getters filter pending sources. `StageManager.hasStoredSt
 `getStoredStages` support explicit revocation. API revoke, command revoke-all and KubeJS revoke-all
 remove pending stored entitlements as well as active ones. Starter-stage eligibility also uses stored
 progression so pending access does not turn a returning player into a new-player grant. Offline loading
-and eligibility history are described below. The complete real provider convergence matrix remains open.
+and eligibility history are described below. Test both with real provider observations before relying on them in a pack.
 
 Permission eligibility history is stored in the level attachment as `permission_episode_schema = 1`
 and `permission_episodes`, separately from `stage_sources` and its runtime activation state. Each
@@ -3083,9 +3074,8 @@ slot and acquisition path once. Normal and bypass grant APIs report that indepen
 even if effective access was already present. Administrative single, bulk, tag and category grants
 use the same distinction. Committed mutation listeners observe these source changes even when the
 effective stage set stays unchanged. There is no additional public configuration setting for suppression.
-The [episode regression](docs/verification/luckperms-bridge.md#permission-episode-regression) records the
-bounded checks; actual provider login, cache invalidation, membership revisions and client acceptance
-remain separate gates.
+See the [LuckPerms troubleshooting guide](docs/troubleshooting/luckperms/documentation.md) for source
+retention and provider behavior.
 
 Outbound output must use attributable transient contributions and preserve administrative nodes,
 independent membership and explicit negative permissions. The adapter now delegates mutations to
@@ -3101,7 +3091,7 @@ before dropping provider access. Incomplete cleanup reports a warning and retain
 references; a later bind cannot silently replace them. Mutation diagnostics distinguish applied,
 unavailable, conflict and failed outcomes. These paths have isolated API and core regression
 coverage. Actual provider node behavior, marker invalidation, explicit negative precedence,
-offline reconciliation and the complete lifecycle matrix remain unverified.
+Test offline reconciliation and the full lifecycle with actual provider state.
 
 `LuckPermsProjectionContexts` registers the reserved context calculator through API 5.4. The
 calculator reads only concurrent projection state for the exact platform player object; it does
@@ -3113,8 +3103,8 @@ Failed publication leaves the marker inactive and schedules a retry. Shutdown in
 marker before signaling context updates, removes exact nodes, and unregisters the calculator.
 An incomplete context notification or calculator shutdown preserves the adapter for cleanup retry.
 The adapter reports shutdown completion explicitly, so successful node removal alone cannot discard
-a failed calculator teardown. Core and isolated API verification remain distinct from actual
-provider cache, event, inherited graph and native command behavior.
+a failed calculator teardown. Test provider cache, events, inherited groups, and native command
+behavior with the actual provider.
 
 `LuckPermsEventSubscriptions` subscribes through API 5.4 to user load and unload, node mutation,
 group load, creation, deletion and full load, post synchronization and configuration reload events.
@@ -3126,8 +3116,8 @@ User events copy the subject UUID; group and global events request a resumable r
 callbacks only invalidate projection state and enqueue work. They do not call StageManager,
 query user data, perform storage operations or notify the provider context manager. A global
 generation invalidates all calculator projections without scanning players on the callback thread.
-Provider context cache notifications occur during server reconciliation. Previously cached provider
-answers and full offline contributor recovery still require the real provider acceptance matrix.
+Provider context cache notifications occur during server reconciliation. Test previously cached
+provider answers and offline contributor recovery with the actual provider.
 
 Global mutation and input revisions guard reconciliation while it collects and commits a subject's
 state. They do not remain attached to published output. The published projection follows the
@@ -3197,20 +3187,19 @@ reserved marker aliases and duplicate keys differing only in case are rejected.
 Permission results distinguish unavailable data from authoritative TRUE, FALSE and UNDEFINED.
 Only ready TRUE results qualify inbound. An independent FALSE result or unavailable query prevents
 positive outbound publication and withdraws an existing contribution through the owned tracker.
-A ready UNDEFINED result permits the configured positive contribution. Core server fixtures verify
-these decisions and recovery with a controlled adapter. They do not prove actual LuckPerms negative
-precedence, inherited exclusion or marker activation. The real provider prerequisite remains open.
+A ready UNDEFINED result permits the configured positive contribution. Test negative precedence,
+inherited exclusion, and marker activation with the actual LuckPerms provider.
 
 The online reconciliation queue coalesces repeated subject updates and retains at most 256 pending
 subjects. Overflow requests a resumable scan rather than clearing pending updates or filling the
 queue from the entire online population. Dirty work and scan work alternate within the bridge's
 limit of sixteen reconciliations per tick. Further overflow requests another complete pass without
 resetting an active cursor. Disconnect requests a followup pass to cover changes in player list
-indices, and shutdown clears both pending work and scan state. This repair covers online event
-overflow and reload. Reload invalidates outbound projections immediately and requests the same
-resumable online scan, without querying the full population in the reload call. Bounded offline
-loads, persisted contributor rescans, complete provider event invalidation and asynchronous load
-completion guards remain open.
+indices, and shutdown clears both pending work and scan state. Overflow retains pending work and
+schedules a resumable scan. Reload invalidates outbound projections immediately and requests the
+same scan without querying the full population in the reload call. Test offline loads, persisted
+contributor rescans, provider event invalidation, and asynchronous load completion with the selected
+provider.
 
 `command_permissions` is evaluated inside Minecraft's command execution tasks after redirects.
 `ExecuteCommandMixin` checks ordinary execution immediately before `ContextChain.runExecutable`;
@@ -3224,8 +3213,7 @@ definition and cleared on server shutdown. Missing paths warn and remain inactiv
 cover a literal subtree. Non descendant rules cover the configured deepest literal and its argument
 values. Aliases and namespaced literals use their actual dispatcher binding. Native permission
 predicates remain required, so a stage gate cannot elevate a player. See
-[`docs/troubleshooting/luckperms.md`](docs/troubleshooting/luckperms.md) and
-[`docs/verification/luckperms-bridge.md`](docs/verification/luckperms-bridge.md).
+[`docs/troubleshooting/luckperms.md`](docs/troubleshooting/luckperms/documentation.md).
 
 ## 5. Triggers — The Per-Stage `[[triggers]]` System
 
@@ -4170,21 +4158,13 @@ run. Unsupported receipt versions and malformed owners fail loading through the 
 ownership data protection. Undefined external stage IDs are excluded, and later helper changes
 are not an ongoing progression source. Use ProgressiveStages grants or native quest rewards for
 new progression after import. The existing membership polling remains responsible for membership
-synchronization. The exact native reward and task coverage, including remaining
-client acceptance boundaries, is recorded in the
-[ownership verification](docs/verification/progression-ownership.md).
+synchronization.
 
 ### 9.2 As a stage-reward backend
 
 FTB Quests can grant ProgressiveStages stages as quest rewards. Stage IDs are
 normalized automatically — both `iron_age` and `progressivestages:iron_age`
 work in the FTB Quests reward editor.
-
-The [authenticated quest fixture](docs/verification/ftb-quest-client/README.md) records native
-checkmark completion, a manually claimed personal profession grant, stage task qualification,
-removal and repeated claims after restart on NeoForge 21.1.248. It includes source fixtures,
-sanitized quest ledgers and laptop images. That run used one player; its scope does not establish
-two player team reward distribution or the combined permissions workflow.
 
 ### 9.3 Native "Stage Required" property on quests and chapters
 
@@ -4283,7 +4263,7 @@ PlayerEvents.tick(event => {
 Server script callbacks and extension metadata reset immediately before an actual server script
 load. Creating another KubeJS execution context does not clear them. This preserves startup
 registrations when execution moves from the loading thread to the server thread, while reload
-replaces the old callbacks. See [the actual script regression procedure](docs/test/kubejs.md).
+replaces the old callbacks. See [the actual script regression procedure](docs/testing/kubejs/documentation.md).
 
 A dedicated KubeJS plugin
 ([`ProgressiveStagesKubeJSPlugin`](src/main/java/com/enviouse/progressivestages/compat/kubejs/ProgressiveStagesKubeJSPlugin.java),
@@ -4592,6 +4572,16 @@ optional FTB integration and detached at server shutdown. Existing team polling 
 for its other synchronization work; this context guard does not establish complete membership or
 permission callback acceptance.
 
+In 3.0.6, `grantStageFromSourceWithDependencyBypass` is the privileged path for one derived source
+to grant one stage despite missing prerequisites. Call it on the server thread. It requires an online player
+with operator permission level 3, an unpadded printable source identity, and a nonempty printable audit reason.
+Both values are limited to 256 characters. Control characters, line and paragraph separators, and Unicode format
+characters are rejected so the audit display cannot be split or visually reordered. A successful change keeps
+the exact supplied source attribution and emits a committed mutation tagged
+`source_added_dependency_bypass`. The audit records actor, owner, stage, source, reason, and revision. The method
+does not grant prerequisites or bypass slot, purchase, ownership, or source policy checks. Use
+`grantStageFromSource` when dependencies must still be required.
+
 Pending offline permission observations carry the same membership revision. Both the initial
 validation and the final commit check reject a changed generation, even if all resolved owner
 UUIDs and definitions still match. Stale results request fresh provider input; they cannot create
@@ -4612,6 +4602,9 @@ EffectiveStageSnapshot actorSnapshot = ProgressiveStagesAPI.getActorSnapshot(act
 StageActorContext actorContext = ProgressiveStagesAPI.resolveActorOwner(actorId, StageId.parse("profession:chef"));
 ProgressiveStagesAPI.grantStageFromSource(player, StageId.parse("profession:chef"),
     "luckperms_synchronized", StageCause.PERMISSION);
+ProgressiveStagesAPI.grantStageFromSourceWithDependencyBypass(player,
+    StageId.parse("profession:chef"), "progressivequests:chapter_reward",
+    "Approved quest reward override", StageCause.QUEST_REWARD);
 List<StageId> available = ProgressiveStagesAPI.getAvailableStages(player);
 StageSlotResolver.Decision slot = ProgressiveStagesAPI.getSlotDecision(player,
     StageId.parse("diamond_engineer"));
@@ -4705,7 +4698,7 @@ Event classes:
 Structure integration events are `StructureSessionEnterEvent`,
 `StructureSessionCompletionEvent`, `StructureSessionLeaveEvent`, and
 `StructureAccessDeniedEvent`. They are immutable, post-commit, and noncancellable. See the
-[structure session compatibility guide](STRUCTURE_SESSION_COMPATIBILITY.md#12-events).
+[structure session compatibility guide](docs/integrations/structure-session/documentation.md#12-events).
 
 ---
 
@@ -4768,7 +4761,7 @@ Each player has independent state. Logout and server shutdown cancel pending wor
 expire, and ordinary server initiated synchronization bypasses this request cooldown. These
 internal bounds add no configuration field or protocol change. They bound resend work, not the
 transport's packet admission or unrelated GUI requests.
-The [snapshot acknowledgement tests](docs/test/snapshot-acknowledgements.md) exercise the actual
+The [snapshot acknowledgement tests](docs/testing/snapshot-acknowledgements/documentation.md) exercise the actual
 server handler; their evidence does not replace laptop reconnect acceptance.
 
 The cache clears on disconnect. Definition reloads replace the rules, while ordinary effective
@@ -4806,7 +4799,7 @@ effective unlocked status to decide whether to show a purchase control. Its stag
 reflects effective access. The payload fields and codec remain unchanged; matching builds are
 required for the updated purchase presentation.
 
-The [GUI response tests](docs/test/gui-responses.md) cover server response budgeting, optional
+The [GUI response tests](docs/testing/gui-responses/documentation.md) cover server response budgeting, optional
 opening negotiation and the separate laptop presentation regression.
 
 The client `RightClickBlock` handler returns `FAIL` for a missing stage before local block or item
@@ -4814,9 +4807,7 @@ prediction. The normal server use packet still runs the authoritative checks and
 also ends the current click before item use or another hand can continue locally. Tag selectors
 use current client registry holders. Empty hands do not match item rules, unrelated items and
 blocks remain available, and independent `block_right_click` rules control whole block access.
-GUI insertion remains a separate server enforced `item_into_inventory` policy. See the
-[interaction verification record](docs/verification/selling-bin-interaction-repair.md) for the
-remaining physical client acceptance gates.
+GUI insertion remains a separate server enforced `item_into_inventory` policy.
 
 ## 17. Troubleshooting
 
@@ -4990,7 +4981,7 @@ viewer is enabled.
 ## 18. File, Package, and Runtime Structure
 
 This section is the compact map. The dedicated
-[Architecture and Project Structure Guide](ARCHITECTURE.md) expands it into the
+[Architecture and Project Structure Guide](docs/architecture/documentation.md) expands it into the
 runtime config tree, datapack layout, stage-file anatomy, Minecraft structure
 gating flow, startup and transactional reload sequence, ownership storage,
 network payload boundaries, trigger indexing, optional integration rules, test
@@ -5188,7 +5179,7 @@ compat/                              ← every soft-dep integration
 The first-launch showcase is generated by
 [`DefaultShowcaseStages`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultShowcaseStages.java).
 It emits fifty schema 4 packages and one hundred fifty files only when no stages already exist. The complete
-tree is documented in [SHOWCASE_PACK.md](SHOWCASE_PACK.md).
+tree is documented in [Fifty Stage Showcase Pack Guide](docs/pack-building/showcase/documentation.md).
 
 [`DefaultStageTemplates`](src/main/java/com/enviouse/progressivestages/server/loader/DefaultStageTemplates.java)
 retains the older one-file references for documentation and compatibility tests. Its tracked
@@ -5197,22 +5188,7 @@ legacy schema reference, but it is no longer generated during first launch.
 
 ---
 
-## 19. Phase 1 Through Phase 19 Guide
-
-The standalone [Phase 1 Through Phase 19 Guide](PHASES_1_TO_19.md) reorganizes this exhaustive
-reference into a practical sequence. It does not replace the schema reference above. It tells a
-pack author what to build first, what file to edit, what to copy, what should happen in game, how to
-verify it, and which mistake usually explains a failure.
-
-The nineteen phases cover installation and generated folders, stage identity, dependency graphs,
-the prefix language, every lock family, ore disguises, every trigger condition, counters and script
-providers, the advancement-style map, costs and rewards, attributes and abilities, regression and
-scope, commands, KubeJS and Java APIs, every optional integration, datapack stages, migration,
-transactional reload, automated tests, multiplayer matrices, JAR inspection, and release evidence.
-
-Start at [Phase 1](PHASES_1_TO_19.md#phase-1-install-the-mod-and-generate-the-correct-folders) even
-if the mod is already installed. The early phases establish paths and ownership rules that every
-later example assumes.
+## 19. Editor and diagnostic operations
 
 ### Editor apply revision boundary
 
@@ -5230,7 +5206,7 @@ lock out another process writing files during the transaction.
 On a conflict, the Easy Builder clears the rejected review and refreshes the server draft. It
 requires a fresh review before another apply attempt. An older cached editor that omits the
 revision fails safely and must reload the current packaged assets. This does not change stage
-schema or the transport protocol. See the [editor recovery guide](docs/troubleshooting/easy-builder.md).
+schema or the transport protocol. See the [editor recovery guide](docs/troubleshooting/easy-builder/documentation.md).
 
 ### Editor session authorization
 
@@ -5240,7 +5216,7 @@ invalidates all of that operator's sessions for the draft, without revoking the 
 or sessions for unrelated drafts. Adding the collaborator again does not reactivate revoked
 sessions. They must resume the draft with a fresh session. This authorization applies before
 read, validation, export, apply and rollback dispatch, as well as before ordinary edits.
-The [server authorization regression](docs/test/editor-authorization.md) covers this boundary;
+The [server authorization regression](docs/testing/editor-authorization/documentation.md) covers this boundary;
 browser error presentation and authenticated client transport remain separate acceptance work.
 
 ### Editor package import
@@ -5254,7 +5230,7 @@ The import holds the draft monitor through its mutations and persistence. Stale 
 invalid package paths leave the draft unchanged. Successful imports retain the existing per file
 undo and redo behavior. Existing destination files are updated by path and unrelated files remain
 in the draft. Import does not apply live configuration; validation, review and apply remain separate
-actions. See the [package import regressions](docs/test/editor-import.md).
+actions. See the [package import regressions](docs/testing/editor-import/documentation.md).
 
 ### Editor field diagnostics
 
@@ -5363,8 +5339,8 @@ prove absence, as specified by the [LuckPerms GroupManager API](https://www.java
 Warnings identify disabled stage mappings, unavailable providers, unknown or missing groups,
 unresolved or ambiguous commands, and team fallback under current server settings. They preserve
 source and do not block an otherwise valid apply. Ownership feedback describes the current server's
-global sharing mode, not an unapplied global configuration edit. Actual browser acceptance and the
-real LuckPerms runtime matrix remain separate gates.
+global sharing mode, not an unapplied global configuration edit. Use browser and real LuckPerms
+runs to check editor presentation and provider behavior.
 
 ### Diagnostic candidate identity
 
@@ -5380,8 +5356,8 @@ The header records loaded mod IDs and versions, bounded artifact hashes, and the
 archive's `Build-Commit` and `Build-Dirty` manifest attributes. A dirty build names its base commit;
 use its artifact hash to distinguish the actual bytes. Header preparation uses the same writer,
 output budget, target and lifecycle as decision records. No artifact paths or configuration values
-are emitted. The [capture guide](docs/troubleshooting/interaction-locks.md) documents limits and
-unavailable development identity. The [dedicated server benchmark](docs/test/diagnostics.md)
+are emitted. The [capture guide](docs/troubleshooting/interaction-locks/documentation.md) documents limits and
+unavailable development identity. The [dedicated server benchmark](docs/testing/diagnostics/documentation.md)
 measures three 1,000 attempt rounds per recording path with normal writer output and unchanged
 capture limits. It checks enabled CPU and elapsed overhead against disabled calls, requires no
 disabled diagnostic allocation, and validates every accepted output record. Capture startup and
@@ -5390,11 +5366,9 @@ provider and client acceptance remain separate gates.
 
 ### Diagnostic capture output lifecycle
 
-The [authenticated lifecycle verification](docs/verification/capture-client/README.md) records
-actual operator input, nonoperator rejection, manual stop, definition reload, idle timeout,
-connection loss and process restart on the pinned production client and dedicated server.
-These observations complement the recording benchmark and do not replace provider or browser
-acceptance, every limit, or output failure testing.
+For a desktop run, check authorized controls, rejection for players without permission, manual
+stop, reload, idle timeout, disconnect, and restart. Run these checks alongside the server
+benchmark and other provider or browser tests.
 
 The interaction, progression, and permission capture commands share the `/stage debug` parent.
 The shared capture manager accepts only its selected category and online target. Record timestamps,
@@ -5413,9 +5387,9 @@ writer completion and errors remain visible. No blocking writer wait occurs on t
 Strings are escaped as JSON, including all control characters, and decoded strings remain within
 256 characters including truncation marks. Stage arrays contain at most 32 values with separate
 total and truncation fields. Owner labels are bounded, capture local labels without UUID hashes.
-The [shared support procedure](docs/troubleshooting/interaction-locks.md) explains collection and
-failure handling. Full category, packaged workflow, and runtime overhead acceptance remains tracked
-in the [3.0.5 verification record](docs/verification/3.0.5-acceptance.md).
+The [shared support procedure](docs/troubleshooting/interaction-locks/documentation.md) explains collection
+and failure handling. See the [diagnostic capture tests](docs/testing/diagnostics/documentation.md) for the
+server side benchmark procedure.
 
 ---
 
@@ -5446,7 +5420,7 @@ when present. The first error takes precedence over warnings. `file_role`, `fiel
 response retains its complete list. Only bounded roles, field keys, row IDs and codes are written,
 without source paths or message text. Operations without diagnostics keep the draft field and
 NONE severity. Full capability detail, positive joined player controls and packaged browser
-acceptance remain separate gates. See the [editor capture procedure](docs/troubleshooting/easy-builder.md).
+acceptance remain separate gates. See the [editor capture procedure](docs/troubleshooting/easy-builder/documentation.md).
 
 
 ### Online permission observation consistency
@@ -5530,7 +5504,5 @@ TypeScript and styles, then rebuild through this pipeline instead of modifying b
 directly. A Vite build alone does not replace the TypeScript check. No dependency version or
 lockfile update is needed to use the additional command name.
 
-Frontend checks do not prove actual browser behavior or close dependency advisories. See the
-[3.0.5 acceptance record](docs/verification/3.0.5-acceptance.md#frontend-type-checking-in-ci)
-and [dependency assessment](docs/verification/3.0.5-dependency-review.md) for their separate
-evidence and remaining limits.
+Frontend checks do not prove actual browser behavior or resolve dependency advisories. Verify
+those separately when preparing a release.

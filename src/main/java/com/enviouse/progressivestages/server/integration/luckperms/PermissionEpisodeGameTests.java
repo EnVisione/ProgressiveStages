@@ -34,7 +34,7 @@ import static com.enviouse.progressivestages.server.integration.luckperms.LuckPe
 public final class PermissionEpisodeGameTests {
     private PermissionEpisodeGameTests() {}
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_permission_revocation")
     public static void permissionRevocationSurvivesReloadAndOnlyIndependentLossRearms(GameTestHelper helper) {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.define(false, -1, Map.of("world", List.of("overworld")));
@@ -79,7 +79,7 @@ public final class PermissionEpisodeGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_permission_expiry")
     public static void permissionExpirySurvivesContextLossAndOfflineReconciliation(GameTestHelper helper) {
         for (boolean permanent : new boolean[] {false, true}) {
             try (Fixture fixture = new Fixture(helper)) {
@@ -144,7 +144,7 @@ public final class PermissionEpisodeGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_independent_earning")
     public static void independentEarningAfterPermissionAccessEmitsOneAcquisition(GameTestHelper helper) {
         try (Fixture fixture = new Fixture(helper)) {
             fixture.define(false, -1);
@@ -177,7 +177,7 @@ public final class PermissionEpisodeGameTests {
         }
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_administrative_revocation")
     public static void administrativeRevokesSuppressUnavailableAndUnqualifiedEpisodes(GameTestHelper helper) throws Exception {
         for (String route : List.of("api", "bulk", "tag", "category", "script")) {
             for (boolean permanent : new boolean[] {false, true}) {
@@ -232,7 +232,7 @@ public final class PermissionEpisodeGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_administrative_grant")
     public static void administrativeGrantsRecordIndependentOwnershipAfterDerivedAccess(GameTestHelper helper) throws Exception {
         for (String route : List.of("api", "bypass", "bulk", "tag", "category", "direct", "script")) {
             try (Fixture fixture = new Fixture(helper)) {
@@ -261,7 +261,7 @@ public final class PermissionEpisodeGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "igloo/top", templateNamespace = "minecraft")
+    @GameTest(template = "igloo/top", templateNamespace = "minecraft", batch = "progressivestages_isolated_luckperms_attachment_persistence")
     public static void unreadableEpisodeAttachmentsRemainIntactAfterSave(GameTestHelper helper) {
         var provider = helper.getLevel().registryAccess();
         var payload = new net.minecraft.nbt.CompoundTag();
