@@ -9,7 +9,7 @@
 >
 > **Project, support, and community:** [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) · [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires in the CurseForge project and GitHub issue tracker through `displayURL` and `issueTrackerURL`.
 
-> **3.0.6 development candidate:** Adds an audited source scoped stage grant for optional
+> **3.0.6:** Adds an audited source scoped stage grant for optional
 > integrations. A permission level 3 online operator can grant one source to one stage without
 > granting prerequisites. The operation retains source attribution and other stage policy checks.
 
