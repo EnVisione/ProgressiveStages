@@ -4,9 +4,8 @@
 
 A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression. Define stages as TOML files; ProgressiveStages locks items, blocks, entities, fluids, dimensions, recipes, enchantments, crops, mob spawns, pets, regions, structures, screens, and player interactions until the player has earned the right stage(s).
 
-**ProgressiveStages 3.0.5** turns that foundation into a fully authorable progression platform: declarative per-stage triggers, graph-based stage scope, scripting and command APIs, broad content enforcement, and a vanilla advancement-style in-game map.
+**ProgressiveStages 3.1.1** includes the 3.1.0 player guide and editor improvements, plus the audited source-scoped stage grant API introduced on the 3.0.6 maintenance line.
 
-Version 3.0.5 is available from [GitHub Releases](https://github.com/MCEnvision/ProgressiveStages/releases).
 See the [configuration and technical documentation](DOCUMENTATION.md) for setup and stage files.
 
 ---
@@ -20,6 +19,16 @@ See the [configuration and technical documentation](DOCUMENTATION.md) for setup 
 Start with [configuration and technical documentation](DOCUMENTATION.md). For common editor
 questions, see [Block overrides and stage guides](docs/troubleshooting/documentation.md). Contributors
 can follow the [build and test guide](docs/testing/documentation.md).
+
+---
+
+## What's new in 3.1.1
+
+Trusted integrations can grant one source-attributed stage despite missing prerequisites through
+`ProgressiveStagesAPI.grantStageFromSourceWithDependencyBypass`. It requires an online level-3
+operator on the server thread and records an audit reason. Other stage policies still apply.
+See the [3.1.1 release guide](docs/release/3.1.1/documentation.md) for the API contract and upgrade
+details. Install 3.1.1 on the server and every client.
 
 ---
 
@@ -292,7 +301,7 @@ settings, structure rules, block overrides, and upgrade notes.
 
 ## Installation
 
-1. For the 3.1.0 development candidate, install [NeoForge](https://neoforged.net/) 21.1.248 for Minecraft 1.21.1 on both the server and client.
+1. For 3.1.1, install [NeoForge](https://neoforged.net/) 21.1.248 for Minecraft 1.21.1 on both the server and client.
 2. Drop the jar into `mods/`.
 3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
 4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and fifty schema 4 showcase packages under `config/progressivestages/stages/` when that folder is empty.

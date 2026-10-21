@@ -421,12 +421,29 @@ public class StageManager {
     /** grant a stage from a named derived source without conflating it with independent access. */
     public boolean grantStageFromSource(ServerPlayer player, StageId stageId, String source,
                                         StageCause cause) {
+        return grantStageFromSource(player, stageId, source, cause, false, null);
+    }
+
+    /** Grant one derived source while bypassing prerequisites only, with an operator audit record. */
+    public boolean grantStageFromSourceWithDependencyBypass(ServerPlayer player, StageId stageId,
+                                                             String source, String auditReason,
+                                                             StageCause cause) {
+        if (player == null || stageId == null || cause == null || server == null || !server.isSameThread()
+                || server.getPlayerList().getPlayer(player.getUUID()) != player
+                || server.getProfilePermissions(player.getGameProfile()) < 3
+                || !isValidAuditField(source) || !source.equals(source.trim())
+                || !isValidAuditField(auditReason)) return false;
+        return grantStageFromSource(player, stageId, source, cause, true, auditReason);
+    }
+
+    private boolean grantStageFromSource(ServerPlayer player, StageId stageId, String source,
+                                         StageCause cause, boolean bypassDependencies, String auditReason) {
         if (player == null || stageId == null || source == null || source.isBlank()
                 || !StageOrder.getInstance().stageExists(stageId)) return false;
         OwnerRef stageOwner = owner(player, stageId);
         TeamStageData data = getTeamStageData();
         Set<StageId> before = getStages(player);
-        if (!canGrantStageFromSource(player, stageId)) return false;
+        if (!canGrantStageFromSource(player, stageId, bypassDependencies)) return false;
         if (!preparePermissionGrant(stageOwner, stageId, source)) return false;
         boolean alreadyOwned = hasOwned(data, stageOwner, stageId);
         Set<String> previousSources = data.getSources(stageOwner, stageId);
@@ -436,6 +453,10 @@ public class StageManager {
             || !previousEffectiveSources.equals(data.getEffectiveSources(stageOwner, stageId));
         if (!added) return false;
         markMutation(true);
+        if (bypassDependencies) {
+            LOGGER.info("AUDIT stage source dependency bypass actor={} owner={} stage={} source={} reason={} revision={}",
+                player.getUUID(), stageOwner, stageId, quoteAuditField(source), quoteAuditField(auditReason), mutationRevision);
+        }
         boolean permissionSource = PermissionStageSource.parse(source).isPresent();
         if (!alreadyOwned && !permissionSource) {
             fireStageChangeEvent(player, stageOwner.id(), stageId, StageChangeType.GRANTED, cause);
@@ -448,9 +469,23 @@ public class StageManager {
                 if (online != null) fireBulkChangedEvent(online, StagesBulkChangedEvent.Reason.OTHER);
             }
         }
-        publishMutation(player, stageId, true, "source_added", Set.of(stageOwner));
-        captureProgression(player, stageId, before, getStages(player), cause, "source_added");
+        String mutationReason = bypassDependencies ? "source_added_dependency_bypass" : "source_added";
+        publishMutation(player, stageId, true, mutationReason, Set.of(stageOwner));
+        captureProgression(player, stageId, before, getStages(player), cause, mutationReason);
         return true;
+    }
+
+    private static boolean isValidAuditField(String value) {
+        if (value == null || value.isBlank() || value.length() > 256) return false;
+        return value.codePoints().noneMatch(codePoint -> {
+            int type = Character.getType(codePoint);
+            return Character.isISOControl(codePoint) || type == Character.FORMAT
+                || type == Character.LINE_SEPARATOR || type == Character.PARAGRAPH_SEPARATOR;
+        });
+    }
+
+    private static String quoteAuditField(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     public record PermissionObservation(String fingerprint, boolean eligible) {}
@@ -560,11 +595,15 @@ public class StageManager {
     }
 
     public boolean canGrantStageFromSource(ServerPlayer player, StageId stageId) {
+        return canGrantStageFromSource(player, stageId, false);
+    }
+
+    private boolean canGrantStageFromSource(ServerPlayer player, StageId stageId, boolean bypassDependencies) {
         if (player == null || stageId == null) return false;
         StageDefinition definition = StageOrder.getInstance().getStageDefinition(stageId).orElse(null);
         if (definition == null) return false;
         Set<StageId> effective = getStages(player);
-        if (!StageOrder.getInstance().getMissingDependencies(effective, stageId).isEmpty()) return false;
+        if (!bypassDependencies && !StageOrder.getInstance().getMissingDependencies(effective, stageId).isEmpty()) return false;
         StageSlotResolver.Decision slot = slotDecision(player, definition, effective);
         return slot.allowed() && slot.replacements().isEmpty()
             && (!definition.isPurchasable() || hasOwned(getTeamStageData(), owner(player, stageId), stageId));
