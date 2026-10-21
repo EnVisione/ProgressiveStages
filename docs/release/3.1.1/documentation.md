@@ -1,5 +1,13 @@
 # ProgressiveStages 3.1.1 release guide
 
+- 🎯 Quest integrations can grant one stage without granting its prerequisites while keeping the
+  source that earned it.
+
+- 🔐 Those grants require an online level-3 operator and leave an audit record. Other stage rules
+  still apply.
+
+- 📦 Upgrade the server and every client to 3.1.1. No stage-file migration is needed.
+
 ProgressiveStages 3.1.1 combines the 3.1.0 player guide, editor, structure rules, and block
 overrides with the audited source-scoped grant API from the 3.0.6 maintenance line. Install the
 same 3.1.1 version on the server and every client. No stage-file migration is required.

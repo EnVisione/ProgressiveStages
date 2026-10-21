@@ -45,9 +45,9 @@ jobs:
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then test "$GITHUB_REF_NAME" = "v$version"; fi
           artifact="build/libs/progressivestages-$version.jar"
           test -s "$artifact"
-          jar tf "$artifact" | rg '^assets/progressivestages/editor/index.html$'
+          jar tf "$artifact" | grep -E '^assets/progressivestages/editor/index.html$'
           javap -classpath "$artifact" com.enviouse.progressivestages.common.api.ProgressiveStagesAPI |
-            rg 'grantStageFromSourceWithDependencyBypass'
+            grep -E 'grantStageFromSourceWithDependencyBypass'
           mkdir -p release-validation
           sha256sum "$artifact" > release-validation/SHA256SUMS
       - name: verify signed annotated tag
