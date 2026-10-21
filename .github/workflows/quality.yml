@@ -3,53 +3,163 @@ name: quality
 on:
   pull_request:
   push:
-    branches:
-      - "master"
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
-  # pinned shared quality validates gradle wrapper jars by default.
-  quality:
-    permissions:
-      actions: read
-      contents: read
-    uses: MCEnvision/.github/.github/workflows/quality.yml@d731214d860ad2422ab8956a5d337dfaec51f64a
-    with:
-      shared-ref: "d731214d860ad2422ab8956a5d337dfaec51f64a"
-      gradle-enabled: true
-      node-enabled: true
-      node-working-directory: "editor-ui"
-      native-security: true
-      enforce-docs-layout: false
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: validate documentation
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+        run: |
+          test -s README.md
+          test -s DOCUMENTATION.md
+          python3 - <<'PY'
+          import os
+          import subprocess
+
+          base = os.environ['BASE_SHA']
+          if base:
+              added = subprocess.check_output(
+                  ['git', 'diff', '--diff-filter=A', '--name-only', f'{base}...HEAD', '--', '*.md'],
+                  text=True,
+              ).splitlines()
+              invalid = [name for name in added if name.rsplit('/', 1)[-1].lower() not in {'readme.md', 'documentation.md'}]
+              if invalid:
+                  raise SystemExit('new markdown must be readme.md or documentation.md: ' + ', '.join(invalid))
+          PY
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11 # v3.96.0
+        with:
+          path: ./
+          version: 3.96.0
+          extra_args: --results=verified,unknown
+
+  gradle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+      - name: test and build
+        run: ./gradlew test build --no-daemon --console=plain
+      - name: run dedicated server gametests
+        run: |
+          mkdir -p run
+          printf 'eula=true\n' > run/eula.txt
+          ./gradlew runGameTestServer --no-daemon --console=plain
+          grep -E 'All [0-9]+ required tests passed' run/logs/latest.log
+      - name: retain test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gradle-test-reports
+          path: |
+            build/reports/**
+            build/test-results/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: check editor
+        run: |
+          npm --prefix editor-ui ci --ignore-scripts --no-audit --no-fund
+          npm --prefix editor-ui run check
+          npm --prefix editor-ui test
+          npm --prefix editor-ui run build
+          git diff --exit-code -- src/main/resources/assets/progressivestages/editor
 
   codeql:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [java-kotlin, javascript-typescript]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       actions: read
       contents: read
       security-events: write
-    uses: MCEnvision/.github/.github/workflows/codeql.yml@d731214d860ad2422ab8956a5d337dfaec51f64a
-    with:
-      shared-ref: "d731214d860ad2422ab8956a5d337dfaec51f64a"
-      languages: '["java-kotlin","javascript-typescript"]'
-      gradle-enabled: true
-      neoforge-enabled: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        if: ${{ matrix.language == 'java-kotlin' }}
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        if: ${{ matrix.language == 'java-kotlin' }}
+      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'java-kotlin' && 'manual' || 'none' }}
+          queries: ${{ matrix.language == 'java-kotlin' && 'security-extended,./.github/codeql/neoforge/neoforge-security.qls' || 'security-extended' }}
+      - name: build java for codeql
+        if: ${{ matrix.language == 'java-kotlin' }}
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dkotlin.compiler.execution.strategy=in-process
+        run: ./gradlew check build --no-daemon --console=plain --rerun-tasks
+      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+
+  dependency-review:
+    if: ${{ github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 180
 
   dependency-submission:
     if: >-
-      ${{
-        github.actor != 'dependabot[bot]' &&
-        (
-          github.event_name == 'workflow_dispatch' ||
-          (
-            github.event_name == 'push' &&
-            github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-          )
-        )
-      }}
+      ${{ github.actor != 'dependabot[bot]' &&
+          (github.event_name == 'workflow_dispatch' ||
+           (github.event_name == 'push' &&
+            github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
-    uses: MCEnvision/.github/.github/workflows/dependency-submission.yml@d731214d860ad2422ab8956a5d337dfaec51f64a
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/dependency-submission@3f131e8634966bd73d06cc69884922b02e6faf92 # v6

@@ -1,6 +1,6 @@
-# ProgressiveStages 3.1.0 — Complete Documentation
+# ProgressiveStages 3.1.1 — Complete Documentation
 
-> ProgressiveStages **3.1.0** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
+> ProgressiveStages **3.1.1** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -9,9 +9,10 @@
 >
 > **Project, support, and community:** [CurseForge](https://www.curseforge.com/minecraft/mc-mods/progressivestages) · [Discord](https://discord.com/invite/9v4gaRSfdJ) · [Issues](https://github.com/EnVisione/ProgressiveStages/issues). The mod metadata wires in the CurseForge project and GitHub issue tracker through `displayURL` and `issueTrackerURL`.
 
-> **3.1.0 release guide:** Read the [release guide](docs/release/3.1.0/documentation.md) for the
-> player-facing “What to do next” help, editor settings and preview, structure entry and protection,
-> block overrides, safe movement defaults, and bounded support diagnostics.
+> **3.1.1 release guide:** Read the [release guide](docs/release/3.1.1/documentation.md) for the
+> audited source grant API and upgrade details. The [3.1.0 release guide](docs/release/3.1.0/documentation.md)
+> covers the player-facing guide, editor settings and preview, structure rules, block overrides,
+> safe movement defaults, and bounded support diagnostics retained in 3.1.1.
 
 > **3.0.2 maintenance release:** The authenticated localhost editor now works for permission level
 > 3 operators in integrated single-player worlds as well as dedicated servers. The editor has a
@@ -4725,6 +4726,15 @@ Pending offline permission observations carry the same membership revision. Both
 validation and the final commit check reject a changed generation, even if all resolved owner
 UUIDs and definitions still match. Stale results request fresh provider input; they cannot create
 a retained entitlement or eligibility episode from the old observation.
+
+In 3.1.1, `grantStageFromSourceWithDependencyBypass` carries forward the audited source grant
+introduced in 3.0.6. It grants one derived source despite missing prerequisites, without granting
+those prerequisites or independent ownership. Call it on the server thread with an online level-3
+operator. Supply an unpadded source identity and a nonempty audit reason, each at most 256 printable
+characters. Stage existence, slot, purchase, ownership, and source policy checks still apply. A
+successful mutation logs the actor, owner, stage, source, reason, and revision. Use
+`grantStageFromSource` when dependencies must be met, and `revokeStageFromSource` to remove only
+the integration's source later.
 
 ```java
 // Existence checks

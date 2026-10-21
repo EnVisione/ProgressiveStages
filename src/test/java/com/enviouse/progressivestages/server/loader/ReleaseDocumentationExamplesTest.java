@@ -23,13 +23,13 @@ class ReleaseDocumentationExamplesTest {
     @Test
     void everyReleaseStageExampleParsesAndShowsItsDocumentedBehavior() throws IOException {
         String gradleProperties = Files.readString(PROJECT.resolve("gradle.properties"));
-        assertTrue(gradleProperties.contains("mod_version=3.1.0"));
+        assertTrue(gradleProperties.contains("mod_version=3.1.1"));
         var editorPackage = JsonParser.parseString(Files.readString(PROJECT.resolve("editor-ui/package.json")))
             .getAsJsonObject();
         var editorLock = JsonParser.parseString(Files.readString(PROJECT.resolve("editor-ui/package-lock.json")))
             .getAsJsonObject();
-        assertEquals("3.1.0", editorPackage.get("version").getAsString());
-        assertEquals("3.1.0", editorLock.get("version").getAsString());
+        assertEquals("3.1.1", editorPackage.get("version").getAsString());
+        assertEquals("3.1.1", editorLock.get("version").getAsString());
 
         List<Path> files;
         try (var paths = Files.list(EXAMPLES)) {
