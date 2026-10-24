@@ -13,6 +13,7 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientChatReceivedEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 
@@ -23,6 +24,17 @@ import java.util.List;
  */
 @EventBusSubscriber(modid = Constants.MOD_ID, value = Dist.CLIENT)
 public class ClientEventHandler {
+
+    @SubscribeEvent
+    public static void onPlayerChatReceived(ClientChatReceivedEvent.Player event) {
+        if (ClientLockCache.isCreativeBypass()) return;
+        if (ClientStageCache.isPlayerChatLocked()) {
+            event.setCanceled(true);
+            return;
+        }
+        List<String> terms = ClientStageCache.getMissingChatMaskTerms();
+        if (!terms.isEmpty()) event.setMessage(ChatMasker.mask(event.getMessage(), terms));
+    }
 
     @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.HIGH)
     public static void onBlockInteract(net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock event) {

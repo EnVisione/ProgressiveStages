@@ -36,6 +36,37 @@ function openInteraction() {
 }
 
 describe("guided selective insertion", () => {
+  it("saves player chat masking through Access without changing other stage fields", async () => {
+    editor.boot.draft.files[stagePath] = '[stage]\nid = "chef"\n# keep this field\nicon = "minecraft:bread"\n';
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Require this stage for player chat" }));
+    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledWith(stagePath,
+      expect.stringContaining("lock_access = true"), "Chat access saved"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Obfuscate these terms until owned" }), { target: { value: "Create\nMechanical Press" } });
+    fireEvent.blur(screen.getByRole("textbox", { name: "Obfuscate these terms until owned" }));
+    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledWith(stagePath,
+      expect.stringContaining('mask_terms = ["Create", "Mechanical Press"]'), "Chat mask terms saved"));
+    expect((editor.mutateFile.mock.calls as unknown as [string, string][])[1][1]).toContain('# keep this field\nicon = "minecraft:bread"');
+  });
+
+  it("makes game mode grants personal and saves the chosen mode in one draft update", async () => {
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Creative" }));
+    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledOnce());
+    const [path, source] = editor.mutateFile.mock.calls[0] as unknown as [string, string];
+    expect(path).toBe(stagePath);
+    expect(source).toContain("team_stage = false");
+    expect(source).toContain('grant_in = ["creative"]');
+  });
+
+  it("keeps invalid duplicate chat terms in the editor with a visible error", () => {
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    const field = screen.getByRole("textbox", { name: "Obfuscate these terms until owned" });
+    fireEvent.change(field, { target: { value: "Create\ncreate" } });
+    fireEvent.blur(field);
+    expect(screen.getByRole("alert").textContent).toContain("distinct terms");
+    expect(editor.mutateFile).not.toHaveBeenCalled();
+  });
   it("adds the Selling Bin pair inside an existing inline array", async () => {
     editor.boot.draft.files[rulesPath] = "interactions=[] # Keep.\n[extension]\nvalue='keep'\n";
     openInteraction();

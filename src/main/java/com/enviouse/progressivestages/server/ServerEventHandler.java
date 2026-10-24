@@ -29,6 +29,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.neoforge.event.AnvilUpdateEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityMountEvent;
@@ -64,6 +65,23 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @EventBusSubscriber(modid = Constants.MOD_ID)
 public class ServerEventHandler {
+
+    @SubscribeEvent
+    public static void onPlayerChat(ServerChatEvent event) {
+        ServerPlayer player = event.getPlayer();
+        if (StageConfig.isAllowCreativeBypass() && player.isCreative()) return;
+        for (var id : com.enviouse.progressivestages.common.stage.StageOrder.getInstance().getAllStageIds()) {
+            var definition = com.enviouse.progressivestages.common.stage.StageOrder.getInstance()
+                .getStageDefinition(id).orElse(null);
+            if (definition != null && definition.getChat().lockAccess()
+                    && !com.enviouse.progressivestages.common.stage.StageManager.getInstance().hasStage(player, id)) {
+                event.setCanceled(true);
+                player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                    "progressivestages.message.chat_locked", definition.getDisplayName()));
+                return;
+            }
+        }
+    }
 
     private static boolean coreHandlersRegistered;
 
@@ -211,6 +229,7 @@ public class ServerEventHandler {
     @SubscribeEvent
     public static void onGameModeChange(PlayerEvent.PlayerChangeGameModeEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
+            player.server.execute(() -> GameModeStageGrants.reconcile(player));
             if (!StageConfig.isAllowCreativeBypass()) {
                 return; // Creative bypass disabled in config
             }
@@ -345,6 +364,7 @@ public class ServerEventHandler {
         if (!(event.getEntity() instanceof ServerPlayer player)) {
             return;
         }
+        if (player.tickCount % 20 == 0) GameModeStageGrants.reconcile(player);
 
         // v2.0.2: ore-spoof now runs entirely via chunk-rewriter mixins. No
         // per-tick scan needed — the masquerade is baked into chunk packets at
@@ -973,8 +993,9 @@ public class ServerEventHandler {
 
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer) {
+        if (event.getEntity() instanceof ServerPlayer player) {
             TeamProvider.getInstance().invalidateMembership();
+            player.server.execute(() -> GameModeStageGrants.reconcile(player));
         }
     }
 

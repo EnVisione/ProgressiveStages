@@ -91,6 +91,8 @@ public class StageDefinition {
     private final ConfigProvenance provenance;
     private final LuckPermsStageOptions luckPerms;
     private final StageGuide guide;
+    private final StageChatOptions chat;
+    private final StageGameModeGrant gameModeGrant;
 
     private StageDefinition(Builder builder) {
         this.id = builder.id;
@@ -163,6 +165,8 @@ public class StageDefinition {
         this.provenance = builder.provenance;
         this.luckPerms = builder.luckPerms != null ? builder.luckPerms : LuckPermsStageOptions.absent();
         this.guide = builder.guide != null ? builder.guide : StageGuide.EMPTY;
+        this.chat = builder.chat != null ? builder.chat : StageChatOptions.NONE;
+        this.gameModeGrant = builder.gameModeGrant != null ? builder.gameModeGrant : StageGameModeGrant.NONE;
     }
 
     public StageId getId() {
@@ -416,6 +420,8 @@ public class StageDefinition {
 
     /** Author supplied, inert player guide content. */
     public StageGuide getGuide() { return guide; }
+    public StageChatOptions getChat() { return chat; }
+    public StageGameModeGrant getGameModeGrant() { return gameModeGrant; }
 
     @Override
     public String toString() {
@@ -482,6 +488,8 @@ public class StageDefinition {
         private ConfigProvenance provenance;
         private LuckPermsStageOptions luckPerms = LuckPermsStageOptions.absent();
         private StageGuide guide = StageGuide.EMPTY;
+        private StageChatOptions chat = StageChatOptions.NONE;
+        private StageGameModeGrant gameModeGrant = StageGameModeGrant.NONE;
 
         private Builder(StageId id) {
             this.id = id;
@@ -657,6 +665,16 @@ public class StageDefinition {
 
         public Builder guide(StageGuide v) {
             this.guide = v != null ? v : StageGuide.EMPTY;
+            return this;
+        }
+
+        public Builder chat(StageChatOptions v) {
+            this.chat = v != null ? v : StageChatOptions.NONE;
+            return this;
+        }
+
+        public Builder gameModeGrant(StageGameModeGrant v) {
+            this.gameModeGrant = v != null ? v : StageGameModeGrant.NONE;
             return this;
         }
 

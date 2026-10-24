@@ -7,6 +7,7 @@
   "progressivestages.message.locked_recipe": "§c🔒 This recipe is locked!",
   "progressivestages.message.locked_block": "§c🔒 This block is locked!",
   "progressivestages.message.locked_dimension": "§c🔒 This dimension is locked!",
+  "progressivestages.message.chat_locked": "Chat requires stage %s.",
   "progressivestages.command.grant_success": "Granted stage %s to %s",
   "progressivestages.command.revoke_success": "Revoked stage %s from %s",
   "progressivestages.command.stage_not_found": "Stage not found: %s",

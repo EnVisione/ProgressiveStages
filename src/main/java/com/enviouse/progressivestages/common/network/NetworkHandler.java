@@ -3,6 +3,7 @@ package com.enviouse.progressivestages.common.network;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.config.StageGuide;
+import com.enviouse.progressivestages.common.config.StageChatOptions;
 import com.enviouse.progressivestages.common.config.StageConfig;
 import com.enviouse.progressivestages.common.lock.LockRegistry;
 import com.enviouse.progressivestages.common.stage.StageManager;
@@ -71,7 +72,7 @@ public class NetworkHandler {
 
     @SubscribeEvent
     public static void registerPayloads(final RegisterPayloadHandlersEvent event) {
-        final PayloadRegistrar registrar = event.registrar("3");
+        final PayloadRegistrar registrar = event.registrar("4");
 
         // Stage sync packet (full snapshot)
         registrar.playToClient(
@@ -1163,7 +1164,8 @@ public class NetworkHandler {
                     def.getGuide().nextSteps(),
                     def.getGuide().whereToFind(),
                     def.getGuide().recommendation().configName(),
-                    def.getGuide().enabled()
+                    def.getGuide().enabled(),
+                    def.getChat().lockAccess(), def.getChat().maskTerms()
                 ));
             });
         }
@@ -1490,7 +1492,7 @@ public class NetworkHandler {
                     entry.nextSteps(),
                     entry.whereToFind(),
                     entry.recommendation(),
-                    entry.showGuide()
+                    entry.showGuide(), entry.chatLocked(), entry.chatMaskTerms()
                 ));
             }
             ClientStageCache.setStageDefinitions(definitions);
@@ -1665,7 +1667,8 @@ public class NetworkHandler {
                                        boolean hasUiPosition, int uiX, int uiY, String uiFrame,
                                        String uiBackground, String uiReveal, int uiSortOrder,
                                        String howToUnlock, String nextSteps, String whereToFind,
-                                       String recommendation, boolean showGuide) {
+                                       String recommendation, boolean showGuide,
+                                       boolean chatLocked, List<String> chatMaskTerms) {
 
         private static final StreamCodec<io.netty.buffer.ByteBuf, List<ResourceLocation>> DEPS_CODEC =
             ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs.list());
@@ -1722,6 +1725,12 @@ public class NetworkHandler {
                 GUIDE_TEXT_CODEC.encode(buf, e.whereToFind());
                 ByteBufCodecs.STRING_UTF8.encode(buf, e.recommendation());
                 buf.writeBoolean(e.showGuide());
+                buf.writeBoolean(e.chatLocked());
+                if (e.chatMaskTerms().size() > StageChatOptions.MAX_TERMS) {
+                    throw new IllegalArgumentException("Too many chat mask terms");
+                }
+                buf.writeVarInt(e.chatMaskTerms().size());
+                for (String term : e.chatMaskTerms()) ByteBufCodecs.stringUtf8(320).encode(buf, term);
             },
             buf -> {
                 ResourceLocation stageId = ResourceLocation.STREAM_CODEC.decode(buf);
@@ -1754,13 +1763,24 @@ public class NetworkHandler {
                 String whereToFind = GUIDE_TEXT_CODEC.decode(buf);
                 String recommendation = ByteBufCodecs.STRING_UTF8.decode(buf);
                 boolean showGuide = buf.readBoolean();
+                boolean chatLocked = buf.readBoolean();
+                int chatTermCount = buf.readVarInt();
+                if (chatTermCount < 0 || chatTermCount > StageChatOptions.MAX_TERMS) {
+                    throw new IllegalArgumentException("Invalid chat mask term count");
+                }
+                List<String> chatMaskTerms = new ArrayList<>(chatTermCount);
+                for (int i = 0; i < chatTermCount; i++) {
+                    chatMaskTerms.add(ByteBufCodecs.stringUtf8(320).decode(buf));
+                }
+                chatMaskTerms = new StageChatOptions(chatLocked, chatMaskTerms).maskTerms();
                 return new StageDefinitionEntry(stageId, displayName, dependencies, dependencyMode,
                     dependencyCount, description,
                     icon, displayAsUnknownItem, obscureIcon, showTooltip, showDescriptionOnTooltip,
                     hasTriggers, hidden, color, category, slotGroup, slotLimit, slotPolicy,
                     hasUiPosition, uiX, uiY, uiFrame,
                     uiBackground, uiReveal, uiSortOrder,
-                    howToUnlock, nextSteps, whereToFind, recommendation, showGuide);
+                    howToUnlock, nextSteps, whereToFind, recommendation, showGuide,
+                    chatLocked, chatMaskTerms);
             }
         );
     }

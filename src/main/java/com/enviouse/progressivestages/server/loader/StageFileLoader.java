@@ -102,6 +102,7 @@ public class StageFileLoader {
         StageOrder.getInstance().clear();
         StageTagRegistry.clear();
         com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.resetRuntimeState();
+        com.enviouse.progressivestages.server.triggers.GameModeStageGrants.rebuild(java.util.List.of());
         com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(java.util.List.of());
         com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.rebuild(java.util.List.of());
         compiledSnapshot = CompiledSnapshot.EMPTY;
@@ -249,6 +250,7 @@ public class StageFileLoader {
         for (StageDefinition stage : loadedStages.values()) StageOrder.getInstance().registerStage(stage);
         registerLocksFromStages();
         com.enviouse.progressivestages.server.triggers.StageTriggerEvaluator.rebuild(loadedStages.values());
+        com.enviouse.progressivestages.server.triggers.GameModeStageGrants.rebuild(loadedStages.values());
         com.enviouse.progressivestages.server.enforcement.AbilityEnforcer.rebuild(loadedStages.values());
         com.enviouse.progressivestages.server.enforcement.ConditionalLockEngine.rebuild(loadedStages.values());
         compiledSnapshot = CompiledSnapshot.create(++compiledRevision, compiled);
