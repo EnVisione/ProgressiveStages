@@ -22,6 +22,55 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StageFileParserTest {
 
     @Test
+    void parsesChatRestrictionsAndPersonalGameModeGrant() {
+        var result = StageFileParser.parseText("""
+            [stage]
+            id = "chat_access"
+            team_stage = false
+            [chat]
+            lock_access = true
+            mask_terms = ["Create", "Mechanical Press"]
+            [gamemode]
+            grant_in = ["creative", "spectator"]
+            """, "chat.toml", "test", false);
+        assertTrue(result.isSuccess(), result.getErrorMessage());
+        assertTrue(result.getStageDefinition().getChat().lockAccess());
+        assertEquals(List.of("Create", "Mechanical Press"), result.getStageDefinition().getChat().maskTerms());
+        assertTrue(result.getStageDefinition().getGameModeGrant().modes()
+            .contains(net.minecraft.world.level.GameType.CREATIVE));
+    }
+
+    @Test
+    void rejectsUnsafeOrSharedGameModeRulesAndBadChatTerms() {
+        assertFalse(StageFileParser.parseText("""
+            [stage]
+            id = "shared_mode"
+            [gamemode]
+            grant_in = ["creative"]
+            """, "bad.toml", "test", false).isSuccess());
+        assertFalse(StageFileParser.parseText("""
+            [stage]
+            id = "bad_mode"
+            team_stage = false
+            [gamemode]
+            grant_in = ["unknown"]
+            """, "bad.toml", "test", false).isSuccess());
+        assertFalse(StageFileParser.parseText("""
+            [stage]
+            id = "unset_mode"
+            team_stage = false
+            [gamemode]
+            grant_in = ["not_set"]
+            """, "bad.toml", "test", false).isSuccess());
+        assertFalse(StageFileParser.parseText("""
+            [stage]
+            id = "bad_terms"
+            [chat]
+            mask_terms = ["Create", "create"]
+            """, "bad.toml", "test", false).isSuccess());
+    }
+
+    @Test
     void parsesBoundedGuideMetadataForLegacyStages() {
         var result = StageFileParser.parseText("""
             [stage]

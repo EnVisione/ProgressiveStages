@@ -61,7 +61,8 @@ public class ClientStageCache {
                                       Integer uiX, Integer uiY, String uiFrame,
                                       String uiBackground, String uiReveal, int uiSortOrder,
                                       String howToUnlock, String nextSteps, String whereToFind,
-                                      String recommendation, boolean showGuide) {
+                                      String recommendation, boolean showGuide,
+                                      boolean chatLocked, List<String> chatMaskTerms) {
     }
 
     /** v2.5: true if the stage opted out of the GUI tree via {@code [stage].hidden = true}. */
@@ -147,6 +148,15 @@ public class ClientStageCache {
      */
     public static Optional<StageDefinitionData> getStageDefinition(StageId stageId) {
         return Optional.ofNullable(stageDefinitions.get(stageId));
+    }
+
+    public static boolean isPlayerChatLocked() {
+        return stageDefinitions.values().stream().anyMatch(def -> def.chatLocked() && !stages.contains(def.id()));
+    }
+
+    public static List<String> getMissingChatMaskTerms() {
+        return stageDefinitions.values().stream().filter(def -> !stages.contains(def.id()))
+            .flatMap(def -> def.chatMaskTerms().stream()).distinct().toList();
     }
 
     /**

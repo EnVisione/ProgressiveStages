@@ -1,6 +1,6 @@
-# ProgressiveStages 3.1.1 — Complete Documentation
+# ProgressiveStages 3.2.0 — Complete Documentation
 
-> ProgressiveStages **3.1.1** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
+> ProgressiveStages **3.2.0** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
@@ -13,6 +13,30 @@
 > audited source grant API and upgrade details. The [3.1.0 release guide](docs/release/3.1.0/documentation.md)
 > covers the player-facing guide, editor settings and preview, structure rules, block overrides,
 > safe movement defaults, and bounded support diagnostics retained in 3.1.1.
+
+## Chat and game mode rules
+
+These optional settings live in a stage package's `stage.toml`. The editor exposes them under **Access**.
+
+```toml
+[stage]
+id = "example:creative_chat"
+display_name = "Creative Chat"
+team_stage = false
+
+[chat]
+lock_access = true
+mask_terms = ["Create", "Mechanical Press"]
+
+[gamemode]
+grant_in = ["creative"]
+```
+
+`chat.lock_access = true` blocks normal player chat sending on the server and hides normal incoming player messages on clients until that stage is owned. It leaves commands and system messages available, including `/stage`. The global creative bypass still applies when enabled. `chat.mask_terms` displays each configured whole word or phrase with obfuscated styling (`§k`) to recipients missing the stage; owners see the original message. Matching ignores case. The terms are plain text: enter `Create`, rather than `§kCreate`. Masking changes the client display only. The original signed message can still exist in server logs, chat reports, and other mods, so this is not a secrecy or moderation feature. `mask_terms` accepts up to 64 distinct entries per stage, each at most 80 characters.
+
+`gamemode.grant_in` accepts `survival`, `creative`, `adventure`, and `spectator`. A game mode grant is a named personal ownership source, so the stage must explicitly use `team_stage = false` and cannot use server scope. The source is granted when the player enters a selected mode and removed when they leave it; an independent command, quest, or other source remains owned. Existing dependencies and slot rules still apply, and a stage that was granted independently does not become temporary just because a game mode rule is present. Changing game mode updates access promptly, with periodic reconciliation and login/reload recovery.
+
+Author supplied formatting text elsewhere in the mod accepts both `&k` and `§k` for obfuscated text, followed by `&r` or `§r` to reset formatting.
 
 > **3.0.2 maintenance release:** The authenticated localhost editor now works for permission level
 > 3 operators in integrated single-player worlds as well as dedicated servers. The editor has a
@@ -4868,6 +4892,8 @@ Sync strategy:
 - **Deltas on grant/revoke** — only the changed stage is pushed.
 - **Re-sync on `/progressivestages reload`** — same as login, for every
   online player.
+
+Recipe-viewer item selectors are matched to registered items when compiled stage rules reload. Login, respawn, and stage changes then evaluate current player conditions once per matching rule and use the same decision for EMI and JEI. A rule reload rebuilds the match index so changed selectors and item tags take effect. The lock snapshot is sent before the stage snapshot, allowing recipe viewers to refresh from current data.
 
 The network channel is registered in
 [`NetworkHandler`](src/main/java/com/enviouse/progressivestages/common/network/NetworkHandler.java)

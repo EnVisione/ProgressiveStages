@@ -8,7 +8,7 @@ import fixtureText from "../../lib/fixtures/toml-preservation.json?raw";
 
 const editor = vi.hoisted(() => ({
   boot: { draft: { files: {} as Record<string, string> } },
-  mutateFile: vi.fn(async () => {}),
+  mutateFile: vi.fn(async (_path: string, _content: string | null | ((current: string) => string), _message?: string) => {}),
   openDialog: vi.fn(),
   closeDialog: vi.fn()
 }));
@@ -36,6 +36,62 @@ function openInteraction() {
 }
 
 describe("guided selective insertion", () => {
+  it("saves player chat masking through Access without changing other stage fields", async () => {
+    editor.boot.draft.files[stagePath] = '[stage]\nid = "chef"\n# keep this field\nicon = "minecraft:bread"\n';
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Require this stage for player chat" }));
+    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledWith(stagePath,
+      expect.any(Function), "Chat access saved"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Obfuscate these terms until owned" }), { target: { value: "Create\nMechanical Press" } });
+    fireEvent.blur(screen.getByRole("textbox", { name: "Obfuscate these terms until owned" }));
+    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledWith(stagePath,
+      expect.any(Function), "Chat mask terms saved"));
+    const first = editor.mutateFile.mock.calls[0][1] as (current: string) => string;
+    const second = editor.mutateFile.mock.calls[1][1] as (current: string) => string;
+    const saved = second(first(editor.boot.draft.files[stagePath]));
+    expect(saved).toContain("lock_access = true");
+    expect(saved).toContain('mask_terms = ["Create", "Mechanical Press"]');
+    expect(saved).toContain('# keep this field\nicon = "minecraft:bread"');
+  });
+
+  it("makes game mode grants personal and saves the chosen mode in one draft update", async () => {
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Creative" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Spectator" }));
+    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledTimes(2));
+    const [path, update] = editor.mutateFile.mock.calls[0] as unknown as [string, (current: string) => string];
+    const second = editor.mutateFile.mock.calls[1][1] as (current: string) => string;
+    const source = second(update(editor.boot.draft.files[stagePath]));
+    expect(path).toBe(stagePath);
+    expect(source).toContain("team_stage = false");
+    expect(source).toContain('grant_in = ["creative", "spectator"]');
+  });
+
+  it("recognizes mixed-case game mode names and removes a toggled mode", async () => {
+    editor.boot.draft.files[stagePath] += '[gamemode]\ngrant_in = [" Creative ", "SPECTATOR"]\n';
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    expect(screen.getByRole("checkbox", { name: "Creative" })).toHaveProperty("checked", true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Creative" }));
+    const update = editor.mutateFile.mock.calls[0][1] as (current: string) => string;
+    expect(update(editor.boot.draft.files[stagePath])).toContain('grant_in = ["spectator"]');
+  });
+
+  it("keeps invalid duplicate chat terms in the editor with a visible error", () => {
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    const field = screen.getByRole("textbox", { name: "Obfuscate these terms until owned" });
+    fireEvent.change(field, { target: { value: "Create\ncreate" } });
+    fireEvent.blur(field);
+    expect(screen.getByRole("alert").textContent).toContain("distinct terms");
+    expect(editor.mutateFile).not.toHaveBeenCalled();
+  });
+  it("rejects unicode control characters before saving chat terms", () => {
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    const field = screen.getByRole("textbox", { name: "Obfuscate these terms until owned" });
+    fireEvent.change(field, { target: { value: "Create\u0085" } });
+    fireEvent.blur(field);
+    expect(screen.getByRole("alert").textContent).toContain("control characters");
+    expect(editor.mutateFile).not.toHaveBeenCalled();
+  });
   it("adds the Selling Bin pair inside an existing inline array", async () => {
     editor.boot.draft.files[rulesPath] = "interactions=[] # Keep.\n[extension]\nvalue='keep'\n";
     openInteraction();

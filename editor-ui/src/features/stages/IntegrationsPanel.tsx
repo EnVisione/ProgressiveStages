@@ -1,11 +1,12 @@
 import { ContextEditor } from "../../components/ContextEditor";
+import { ChatAccessPanel } from "./ChatAccessPanel";
 import { contextMap } from "../../lib/contexts";
 import { OwnershipFeedback, ProviderFeedback } from "../../components/StageCapabilityFeedback";
 import { useMemo, useState } from "react";
 import { FieldDiagnostics } from "../../components/ValidationMessages";
 import { Badge, Button, EmptyState, Field, Section, Toggle } from "../../components/ui";
 import { parseCommandPermissions, parseInteractions, parseLuckPerms, parseOwnership, replaceCommandPermissions, replaceInbound, replaceInteractions, replaceOutbound, serializeCommandPermission, serializeContainerInsertionPair, serializeInbound, serializeInteraction, serializeOutbound, updateCommandPermissionBlock, updateInboundBlock, updateInteractionBlock, updateOutboundBlock, writeLuckPermsSettings, writeOwnership } from "../../lib/integrations";
-import { extractArrayGroups, lineValues } from "../../lib/toml";
+import { extractArrayGroups, lineValues, parseSimpleArray, readTomlValue } from "../../lib/toml";
 import { useEditor } from "../../store/EditorContext";
 import type { CommandPermissionModel, InboundModel, InteractionModel, OutboundModel, StagePackage } from "../../types";
 
@@ -95,6 +96,7 @@ function InteractionForm({ row, onSave, onCancel }: { row?: InteractionModel; on
 export function IntegrationsPanel({ stage }: { stage: StagePackage }) {
   const { boot, mutateFile, openDialog, closeDialog } = useEditor();
   const stageText = boot?.draft.files[stage.stagePath] || "";
+  const hasGameModeGrant = parseSimpleArray(readTomlValue(stageText, "gamemode.grant_in")).length > 0;
   const rulesText = boot?.draft.files[stage.rulesPath] || "";
   const luckperms = useMemo(() => parseLuckPerms(stageText), [stageText]);
   const inbound = luckperms.inbound;
@@ -113,8 +115,9 @@ export function IntegrationsPanel({ stage }: { stage: StagePackage }) {
     if (kind === "interaction") await mutateFile(stage.rulesPath, replaceInteractions(rulesText, interactions.filter((_, current) => current !== index).map(entry => entry.sourceText || serializeInteraction(entry))), "Interaction removed");
   };
   return <div className="stage-panel-stack">
+    <ChatAccessPanel stage={stage}/>
     <Section title="Ownership and scope" description="Select personal, team, server, or inherited ownership. Counter scope stays independent." className="identity-section">
-      <div className="form-grid"><Field label="Stage ownership" help="Personal uses team_stage = false. Inherited leaves both overrides absent."><select value={parseOwnership(stageText)} onChange={event => void saveStage(writeOwnership(stageText, event.target.value as Parameters<typeof writeOwnership>[1]), "Stage ownership saved")}><option value="inherit">Inherit the global team setting</option><option value="personal">Personal stage for each player</option><option value="team">Shared by the team</option><option value="server">Shared by the whole server</option></select><FieldDiagnostics file={stage.stagePath} fields={["stage.scope", "stage.team_stage"]}/></Field><div className="policy-summary"><strong>Ownership under current server settings</strong><OwnershipFeedback source={stageText}/></div></div>
+      <div className="form-grid"><Field label="Stage ownership" help={hasGameModeGrant ? "Game mode grants require personal ownership. Clear all selected modes before changing the owner." : "Personal uses team_stage = false. Inherited leaves both overrides absent."}><select value={parseOwnership(stageText)} onChange={event => void saveStage(writeOwnership(stageText, event.target.value as Parameters<typeof writeOwnership>[1]), "Stage ownership saved")}><option value="inherit" disabled={hasGameModeGrant}>Inherit the global team setting</option><option value="personal">Personal stage for each player</option><option value="team" disabled={hasGameModeGrant}>Shared by the team</option><option value="server" disabled={hasGameModeGrant}>Shared by the whole server</option></select><FieldDiagnostics file={stage.stagePath} fields={["stage.scope", "stage.team_stage"]}/></Field><div className="policy-summary"><strong>Ownership under current server settings</strong><OwnershipFeedback source={stageText}/></div></div>
     </Section>
     <Section title="LuckPerms bridge" description="Use optional provider mappings with synchronized or permanent inbound retention.">
       <ProviderFeedback/>

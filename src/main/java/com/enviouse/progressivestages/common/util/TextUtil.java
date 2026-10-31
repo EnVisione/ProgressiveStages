@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  */
 public final class TextUtil {
 
-    private static final Pattern COLOR_CODE_PATTERN = Pattern.compile("&([0-9a-fk-or])");
+    private static final Pattern COLOR_CODE_PATTERN = Pattern.compile("[&§]([0-9a-fk-or])");
 
     private static final Map<Character, ChatFormatting> COLOR_MAP = new HashMap<>();
 

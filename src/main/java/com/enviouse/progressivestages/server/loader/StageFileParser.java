@@ -8,6 +8,8 @@ import com.enviouse.progressivestages.common.config.StageAttribute;
 import com.enviouse.progressivestages.common.config.StageCost;
 import com.enviouse.progressivestages.common.config.StageDefinition;
 import com.enviouse.progressivestages.common.config.StageGuide;
+import com.enviouse.progressivestages.common.config.StageChatOptions;
+import com.enviouse.progressivestages.common.config.StageGameModeGrant;
 import com.enviouse.progressivestages.common.config.LuckPermsStageOptions;
 import com.enviouse.progressivestages.common.stage.DependencyMode;
 import com.enviouse.progressivestages.common.stage.FieldDiagnostic;
@@ -234,6 +236,7 @@ public final class StageFileParser {
         builder.triggers(parseTriggers(config));
         applyDisplaySection(config, builder);
         builder.guide(parseGuide(config));
+        builder.chat(parseChat(config));
 
         // v2.4: [stage] presentation/scope metadata + new sections.
         builder.hidden(readBool(stageSection, "hidden"));
@@ -286,6 +289,13 @@ public final class StageFileParser {
             }
             builder.teamStage((Boolean) rawTeamStage);
         }
+        StageGameModeGrant gameModeGrant = parseGameModeGrant(config);
+        if (gameModeGrant.enabled() && (!Boolean.FALSE.equals(stageSection.get("team_stage"))
+                || "server".equals(normalizedScope))) {
+            throw new FieldValidationException("gamemode.grant_in", null, "invalid_scope",
+                "Game mode grants require [stage] team_stage = false and cannot use server scope");
+        }
+        builder.gameModeGrant(gameModeGrant);
         builder.durationMillis(parseDuration(stageSection.get("duration")));
         builder.luckPerms(parseLuckPerms(config));
         builder.attributes(parseAttributes(config));
@@ -298,6 +308,34 @@ public final class StageFileParser {
         builder.activeLocks(parseActiveLocks(config));
 
         return ParseResult.success(builder.build(), schemaVersion == 4 ? Config.copy(config) : null);
+    }
+
+    private static StageChatOptions parseChat(Config config) {
+        Object raw = config.get("chat");
+        if (raw == null) return StageChatOptions.NONE;
+        if (!(raw instanceof Config section)) {
+            throw new FieldValidationException("chat", null, "invalid_type", "The chat section must be a table");
+        }
+        boolean lockAccess = strictBoolean(section, "lock_access", false, "chat.lock_access", null);
+        List<String> terms = strictStrings(section, "mask_terms", "chat.mask_terms", null);
+        try {
+            return new StageChatOptions(lockAccess, terms);
+        } catch (IllegalArgumentException error) {
+            throw new FieldValidationException("chat.mask_terms", null, "invalid_value", error.getMessage());
+        }
+    }
+
+    private static StageGameModeGrant parseGameModeGrant(Config config) {
+        Object raw = config.get("gamemode");
+        if (raw == null) return StageGameModeGrant.NONE;
+        if (!(raw instanceof Config section)) {
+            throw new FieldValidationException("gamemode", null, "invalid_type", "The gamemode section must be a table");
+        }
+        try {
+            return StageGameModeGrant.parse(strictStrings(section, "grant_in", "gamemode.grant_in", null));
+        } catch (IllegalArgumentException error) {
+            throw new FieldValidationException("gamemode.grant_in", null, "invalid_value", error.getMessage());
+        }
     }
 
     private static StageGuide parseGuide(Config config) {

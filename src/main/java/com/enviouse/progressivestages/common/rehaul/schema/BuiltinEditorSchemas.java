@@ -58,6 +58,15 @@ final class BuiltinEditorSchemas {
             SchemaValueType.BOOLEAN, false, false, null, Set.of(), List.of());
         add(sink, "stage.duration", "stage.toml", "stage.duration", "Ownership duration", "Automatically expire ownership after this duration.",
             SchemaValueType.DURATION, "", false, null, Set.of(), List.of());
+        add(sink, "access.chat.lock_access", "stage.toml", "chat.lock_access", "Lock player chat",
+            "Players missing this stage cannot send or read normal player chat. Commands and system messages remain available.",
+            SchemaValueType.BOOLEAN, false, false, null, Set.of(), List.of());
+        add(sink, "access.chat.mask_terms", "stage.toml", "chat.mask_terms", "Mask chat terms",
+            "Words or phrases shown as obfuscated text to players missing this stage. This is display masking, not secrecy.",
+            SchemaValueType.LIST, List.of(), false, null, Set.of(), List.of());
+        add(sink, "access.gamemode.grant_in", "stage.toml", "gamemode.grant_in", "Grant in game modes",
+            "Personal stage source active only while the player is in one of these modes. Other grant sources remain intact.",
+            SchemaValueType.LIST, List.of(), false, null, Set.of(), List.of());
         add(sink, "permissions.luckperms.enabled", "stage.toml", "luckperms.enabled", "LuckPerms bridge",
             "Enable this stage's optional LuckPerms mappings.", SchemaValueType.BOOLEAN, true, false, null, Set.of(), List.of());
         add(sink, "permissions.luckperms.inbound_mode", "stage.toml", "luckperms.inbound_mode", "Inbound retention",

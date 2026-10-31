@@ -5,7 +5,7 @@ import com.enviouse.progressivestages.common.rehaul.CompiledSnapshot;
 import com.enviouse.progressivestages.common.rehaul.ConditionNode;
 import com.enviouse.progressivestages.common.rehaul.RuleEffect;
 import com.enviouse.progressivestages.common.rehaul.RuleLifetime;
-import com.enviouse.progressivestages.common.rehaul.ViewerPolicy;
+import com.enviouse.progressivestages.common.rehaul.SelectorSpec;
 import com.enviouse.progressivestages.common.api.StageId;
 import com.enviouse.progressivestages.common.rehaul.condition.ConditionContext;
 import com.enviouse.progressivestages.common.rehaul.condition.ConditionEvaluator;
@@ -29,6 +29,8 @@ import net.minecraft.world.item.Item;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,6 +38,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 public final class CompiledRuleEngine {
 
@@ -50,6 +54,7 @@ public final class CompiledRuleEngine {
     private volatile long revision;
     private volatile Map<String, List<CompiledRule>> byCategory = Map.of();
     private volatile Map<ResourceLocation, CompiledRule> byId = Map.of();
+    private volatile ViewerSnapshot viewerSnapshot = new ViewerSnapshot(new ViewerRuleIndex(Map.of()), Map.of());
     private final ArrayDeque<DecisionTrace> history = new ArrayDeque<>();
     private int historyCapacity = 1_000;
 
@@ -69,7 +74,21 @@ public final class CompiledRuleEngine {
         }));
         next.replaceAll((key, value) -> List.copyOf(value));
         byCategory = Map.copyOf(next);
-        byId = Map.copyOf(ids);
+        Map<ResourceLocation, CompiledRule> nextById = Map.copyOf(ids);
+        ViewerRuleIndex nextViewerIndex;
+        List<CompiledRule> itemRules = rules("items");
+        if (itemRules.isEmpty()) {
+            nextViewerIndex = new ViewerRuleIndex(Map.of());
+        } else {
+            List<SelectorTarget> items = new ArrayList<>();
+            for (Item item : BuiltInRegistries.ITEM) {
+                ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+                if (id != null) items.add(target(id, BuiltInRegistries.ITEM.wrapAsHolder(item)));
+            }
+            nextViewerIndex = buildViewerRuleIndex(items, itemRules, selectors::match);
+        }
+        byId = nextById;
+        viewerSnapshot = new ViewerSnapshot(nextViewerIndex, nextById);
         revision = snapshot.revision();
         temporary.clear();
         history.clear();
@@ -147,55 +166,81 @@ public final class CompiledRuleEngine {
     }
 
     public Map<ResourceLocation, Set<StageId>> resolveViewerItemLocks(ServerPlayer player, RecipeViewer viewer) {
-        if (player == null || viewer == null) return Map.of();
-        List<CompiledRule> itemRules = rules("items");
-        if (itemRules.isEmpty()) return Map.of();
+        if (viewer == null) return Map.of();
+        ViewerItemLocks locks = resolveViewerItemLocks(player);
+        return viewer == RecipeViewer.EMI ? locks.emi() : locks.jei();
+    }
 
+    public ViewerItemLocks resolveViewerItemLocks(ServerPlayer player) {
+        ViewerSnapshot snapshot = viewerSnapshot;
+        if (player == null || snapshot.index().targets().isEmpty()) return ViewerItemLocks.EMPTY;
         ConditionContext context = MinecraftConditionContextFactory.create(player, RehaulRuntime.get(), Set.of());
-        Map<ResourceLocation, Set<StageId>> resolved = new LinkedHashMap<>();
-        for (Item item : BuiltInRegistries.ITEM) {
-            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(item);
-            if (itemId == null) continue;
-            Set<StageId> stages = resolveViewerItemLocks(player, viewer, itemId,
-                BuiltInRegistries.ITEM.wrapAsHolder(item), itemRules, context);
-            if (!stages.isEmpty()) resolved.put(itemId, stages);
+        return resolveIndexedViewerItemLocks(snapshot.index(), snapshot.rulesById(),
+            rule -> active(player, rule, context));
+    }
+
+    public record ViewerItemLocks(Map<ResourceLocation, Set<StageId>> emi,
+                                  Map<ResourceLocation, Set<StageId>> jei) {
+        private static final ViewerItemLocks EMPTY = new ViewerItemLocks(Map.of(), Map.of());
+    }
+
+    record MatchedViewerRule(CompiledRule rule, SelectorMatch match, int order, ResolvedPriority priority) {}
+
+    record ViewerRuleIndex(Map<ResourceLocation, Map<String, List<MatchedViewerRule>>> targets) {}
+
+    private record ViewerSnapshot(ViewerRuleIndex index, Map<ResourceLocation, CompiledRule> rulesById) {}
+
+    static ViewerRuleIndex buildViewerRuleIndex(Iterable<SelectorTarget> targets, List<CompiledRule> rules,
+                                               BiFunction<SelectorSpec, SelectorTarget, SelectorMatch> matcher) {
+        Map<ResourceLocation, Map<String, List<MatchedViewerRule>>> indexed = new LinkedHashMap<>();
+        for (SelectorTarget target : targets) {
+            Map<String, List<MatchedViewerRule>> byAction = new LinkedHashMap<>();
+            int order = 0;
+            for (CompiledRule rule : rules) {
+                if (legacyContext(rule.condition())) continue;
+                SelectorMatch match = matcher.apply(rule.selector(), target);
+                if (!match.matched()) continue;
+                PrioritySource source = parsePrioritySource(rule.settings().get("priority_source"));
+                byAction.computeIfAbsent(rule.action(), ignored -> new ArrayList<>()).add(
+                    new MatchedViewerRule(rule, match, order++, new ResolvedPriority(rule.priority(), source)));
+            }
+            if (byAction.isEmpty()) continue;
+            byAction.replaceAll((action, matches) -> List.copyOf(matches));
+            indexed.put(target.id(), Collections.unmodifiableMap(byAction));
         }
-        return Map.copyOf(resolved);
+        return new ViewerRuleIndex(Collections.unmodifiableMap(indexed));
+    }
+
+    static ViewerItemLocks resolveIndexedViewerItemLocks(ViewerRuleIndex index,
+                                                         Map<ResourceLocation, CompiledRule> rulesById,
+                                                         Predicate<CompiledRule> isActive) {
+        Map<CompiledRule, Boolean> active = new IdentityHashMap<>();
+        Map<ResourceLocation, Set<StageId>> emi = new LinkedHashMap<>();
+        Map<ResourceLocation, Set<StageId>> jei = new LinkedHashMap<>();
+        for (var item : index.targets().entrySet()) {
+            Set<StageId> emiStages = new LinkedHashSet<>();
+            Set<StageId> jeiStages = new LinkedHashSet<>();
+            for (var action : item.getValue().entrySet()) {
+                List<DecisionCandidate> candidates = new ArrayList<>(action.getValue().size());
+                for (MatchedViewerRule match : action.getValue()) {
+                    candidates.add(new DecisionCandidate(match.rule(), match.match(),
+                        active.computeIfAbsent(match.rule(), isActive::test), match.order(), match.priority()));
+                }
+                DecisionTrace trace = DecisionResolver.resolve(item.getKey(), "items", action.getKey(),
+                    candidates, TiePolicy.SAFE);
+                if (trace.winningEffect() != RuleEffect.LOCK || trace.winner().isEmpty()) continue;
+                CompiledRule winner = rulesById.get(trace.winner().get());
+                if (winner == null || !isMissingStageLock(winner) || winner.lifetime() != RuleLifetime.PERMANENT) continue;
+                if (winner.viewerPolicy().hidesInEmi()) emiStages.add(winner.ownerStage());
+                if (winner.viewerPolicy().hidesInJei()) jeiStages.add(winner.ownerStage());
+            }
+            if (!emiStages.isEmpty()) emi.put(item.getKey(), Set.copyOf(emiStages));
+            if (!jeiStages.isEmpty()) jei.put(item.getKey(), Set.copyOf(jeiStages));
+        }
+        return new ViewerItemLocks(Map.copyOf(emi), Map.copyOf(jei));
     }
 
     public synchronized List<DecisionTrace> history() { return List.copyOf(history); }
-
-    private Set<StageId> resolveViewerItemLocks(ServerPlayer player, RecipeViewer viewer,
-                                                ResourceLocation itemId, Holder<?> holder,
-                                                List<CompiledRule> itemRules, ConditionContext context) {
-        SelectorTarget target = target(itemId, holder);
-        Map<String, List<DecisionCandidate>> byAction = new LinkedHashMap<>();
-        int order = 0;
-        for (CompiledRule rule : itemRules) {
-            if (legacyContext(rule.condition())) continue;
-            SelectorMatch selectorMatch = selectors.match(rule.selector(), target);
-            if (!selectorMatch.matched()) continue;
-            PrioritySource source = parsePrioritySource(rule.settings().get("priority_source"));
-            byAction.computeIfAbsent(rule.action(), ignored -> new ArrayList<>()).add(new DecisionCandidate(
-                rule, selectorMatch, active(player, rule, context), order++,
-                new ResolvedPriority(rule.priority(), source)));
-        }
-
-        Set<StageId> stages = new LinkedHashSet<>();
-        for (Map.Entry<String, List<DecisionCandidate>> entry : byAction.entrySet()) {
-            DecisionTrace trace = DecisionResolver.resolve(itemId, "items", entry.getKey(), entry.getValue(), TiePolicy.SAFE);
-            if (trace.winningEffect() != RuleEffect.LOCK || trace.winner().isEmpty()) continue;
-            CompiledRule rule = byId.get(trace.winner().get());
-            if (rule != null && isViewerLock(rule, viewer)) stages.add(rule.ownerStage());
-        }
-        return Set.copyOf(stages);
-    }
-
-    private static boolean isViewerLock(CompiledRule rule, RecipeViewer viewer) {
-        if (rule.lifetime() != RuleLifetime.PERMANENT || !isMissingStageLock(rule)) return false;
-        ViewerPolicy policy = rule.viewerPolicy();
-        return viewer == RecipeViewer.EMI ? policy.hidesInEmi() : policy.hidesInJei();
-    }
 
     private static boolean isMissingStageLock(CompiledRule rule) {
         String state = String.valueOf(rule.settings().getOrDefault("stage_state", "")).toLowerCase(Locale.ROOT);

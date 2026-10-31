@@ -81,10 +81,10 @@ class StageGuideNetworkContractTest {
     }
 
     @Test
-    void guideSyncUsesProtocolThreeAndAtomicChunks() throws IOException {
+    void guideSyncUsesProtocolFourAndAtomicChunks() throws IOException {
         String source = Files.readString(PROJECT.resolve(
             "src/main/java/com/enviouse/progressivestages/common/network/NetworkHandler.java"));
-        assertTrue(source.contains("event.registrar(\"3\")"));
+        assertTrue(source.contains("event.registrar(\"4\")"));
         assertTrue(source.contains("totalChunks"));
         assertTrue(source.contains("applyStageDefinitionSnapshot"));
         assertTrue(source.contains("MAX_TEXT_BYTES"));
@@ -125,6 +125,26 @@ class StageGuideNetworkContractTest {
                 "the guide payload must exceed the unrelated player-snapshot chunk size");
             assertTrue(buffer.readableBytes() <= NetworkHandler.MAX_CUSTOM_PAYLOAD_BYTES);
             assertEquals(expected, NetworkHandler.StageDefinitionsSyncPayload.STREAM_CODEC.decode(buffer));
+        } finally {
+            buffer.release();
+        }
+    }
+
+    @Test
+    void chatPolicyRoundTripsWithTheDefinitionSnapshot() {
+        var entry = definitionEntry("chat", "", "", "", true, true,
+            List.of("Create", "Mechanical Press"));
+        var expected = new NetworkHandler.StageDefinitionsSyncPayload(20L, 0, 1, true, List.of(entry));
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            NetworkHandler.StageDefinitionsSyncPayload.STREAM_CODEC.encode(buffer, expected);
+            var decoded = NetworkHandler.StageDefinitionsSyncPayload.STREAM_CODEC.decode(buffer);
+            assertEquals(expected, decoded);
+            NetworkHandler.acceptStageDefinitionsClient(decoded);
+            assertTrue(ClientStageCache.isPlayerChatLocked());
+            assertEquals(List.of("Create", "Mechanical Press"), ClientStageCache.getMissingChatMaskTerms());
+            ClientStageCache.addStage(com.enviouse.progressivestages.common.api.StageId.fromResourceLocation(entry.stageId()));
+            assertFalse(ClientStageCache.isPlayerChatLocked());
         } finally {
             buffer.release();
         }
@@ -234,9 +254,16 @@ class StageGuideNetworkContractTest {
     private static NetworkHandler.StageDefinitionEntry definitionEntry(String id, String howToUnlock,
                                                                          String nextSteps, String whereToFind,
                                                                          boolean showGuide) {
+        return definitionEntry(id, howToUnlock, nextSteps, whereToFind, showGuide, false, List.of());
+    }
+
+    private static NetworkHandler.StageDefinitionEntry definitionEntry(String id, String howToUnlock,
+                                                                         String nextSteps, String whereToFind,
+                                                                         boolean showGuide, boolean chatLocked,
+                                                                         List<String> chatMaskTerms) {
         return new NetworkHandler.StageDefinitionEntry(ResourceLocation.parse("progressivestages:" + id),
             "Stage", List.of(), "all", 0, "", "", false, false, true, true, false,
             false, "", "", "", 0, "deny", false, 0, 0, "", "", "", 0,
-            howToUnlock, nextSteps, whereToFind, "auto", showGuide);
+            howToUnlock, nextSteps, whereToFind, "auto", showGuide, chatLocked, chatMaskTerms);
     }
 }

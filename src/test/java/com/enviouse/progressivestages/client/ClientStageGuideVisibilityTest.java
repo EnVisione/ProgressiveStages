@@ -11,6 +11,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ClientStageGuideVisibilityTest {
     private static final StageId ENABLED = new StageId("test:guide_enabled");
@@ -37,10 +38,27 @@ class ClientStageGuideVisibilityTest {
         assertFalse(ClientStageCache.isStageGuideVisible(new StageId("test:missing")));
     }
 
+    @Test
+    void chatRestrictionsFollowOwnershipAndClearOnDisconnect() {
+        StageId gate = new StageId("test:chat_gate");
+        ClientStageCache.setStageDefinitions(Map.of(gate, new ClientStageCache.StageDefinitionData(
+            gate, "Chat", List.of(), "all", 0, "", Optional.empty(),
+            false, false, true, true, false, false, "", "", "", 0, "deny",
+            null, null, "task", "", "always", 0, "", "", "", "auto", true,
+            true, List.of("Create"))));
+        assertTrue(ClientStageCache.isPlayerChatLocked());
+        assertEquals(List.of("Create"), ClientStageCache.getMissingChatMaskTerms());
+        ClientStageCache.addStage(gate);
+        assertFalse(ClientStageCache.isPlayerChatLocked());
+        assertTrue(ClientStageCache.getMissingChatMaskTerms().isEmpty());
+        ClientStageCache.clear();
+        assertFalse(ClientStageCache.isPlayerChatLocked());
+    }
+
     private static ClientStageCache.StageDefinitionData definition(StageId id, boolean showGuide) {
         return new ClientStageCache.StageDefinitionData(id, "Stage", List.of(), "all", 0,
             "", Optional.<ResourceLocation>empty(), false, false, true, true, false,
             false, "", "", "", 0, "deny", null, null, "task", "", "always", 0,
-            "", "", "", "auto", showGuide);
+            "", "", "", "auto", showGuide, false, List.of());
     }
 }
