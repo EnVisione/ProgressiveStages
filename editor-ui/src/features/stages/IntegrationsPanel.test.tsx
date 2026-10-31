@@ -41,22 +41,30 @@ describe("guided selective insertion", () => {
     render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
     fireEvent.click(screen.getByRole("checkbox", { name: "Require this stage for player chat" }));
     await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledWith(stagePath,
-      expect.stringContaining("lock_access = true"), "Chat access saved"));
+      expect.any(Function), "Chat access saved"));
     fireEvent.change(screen.getByRole("textbox", { name: "Obfuscate these terms until owned" }), { target: { value: "Create\nMechanical Press" } });
     fireEvent.blur(screen.getByRole("textbox", { name: "Obfuscate these terms until owned" }));
     await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledWith(stagePath,
-      expect.stringContaining('mask_terms = ["Create", "Mechanical Press"]'), "Chat mask terms saved"));
-    expect((editor.mutateFile.mock.calls as unknown as [string, string][])[1][1]).toContain('# keep this field\nicon = "minecraft:bread"');
+      expect.any(Function), "Chat mask terms saved"));
+    const first = editor.mutateFile.mock.calls[0][1] as (current: string) => string;
+    const second = editor.mutateFile.mock.calls[1][1] as (current: string) => string;
+    const saved = second(first(editor.boot.draft.files[stagePath]));
+    expect(saved).toContain("lock_access = true");
+    expect(saved).toContain('mask_terms = ["Create", "Mechanical Press"]');
+    expect(saved).toContain('# keep this field\nicon = "minecraft:bread"');
   });
 
   it("makes game mode grants personal and saves the chosen mode in one draft update", async () => {
     render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
     fireEvent.click(screen.getByRole("checkbox", { name: "Creative" }));
-    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledOnce());
-    const [path, source] = editor.mutateFile.mock.calls[0] as unknown as [string, string];
+    fireEvent.click(screen.getByRole("checkbox", { name: "Spectator" }));
+    await waitFor(() => expect(editor.mutateFile).toHaveBeenCalledTimes(2));
+    const [path, update] = editor.mutateFile.mock.calls[0] as unknown as [string, (current: string) => string];
+    const second = editor.mutateFile.mock.calls[1][1] as (current: string) => string;
+    const source = second(update(editor.boot.draft.files[stagePath]));
     expect(path).toBe(stagePath);
     expect(source).toContain("team_stage = false");
-    expect(source).toContain('grant_in = ["creative"]');
+    expect(source).toContain('grant_in = ["creative", "spectator"]');
   });
 
   it("keeps invalid duplicate chat terms in the editor with a visible error", () => {

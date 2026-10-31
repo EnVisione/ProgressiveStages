@@ -22,11 +22,14 @@ public record StageGameModeGrant(Set<GameType> modes) {
         EnumSet<GameType> parsed = EnumSet.noneOf(GameType.class);
         for (String name : names) {
             if (name == null) throw new IllegalArgumentException("gamemode.grant_in contains an invalid game mode");
-            try {
-                parsed.add(GameType.valueOf(name.trim().toUpperCase(Locale.ROOT)));
-            } catch (IllegalArgumentException error) {
-                throw new IllegalArgumentException("gamemode.grant_in contains an invalid game mode: " + name);
-            }
+            GameType mode = switch (name.trim().toUpperCase(Locale.ROOT)) {
+                case "SURVIVAL" -> GameType.SURVIVAL;
+                case "CREATIVE" -> GameType.CREATIVE;
+                case "ADVENTURE" -> GameType.ADVENTURE;
+                case "SPECTATOR" -> GameType.SPECTATOR;
+                default -> throw new IllegalArgumentException("gamemode.grant_in contains an invalid game mode: " + name);
+            };
+            parsed.add(mode);
         }
         return new StageGameModeGrant(parsed);
     }

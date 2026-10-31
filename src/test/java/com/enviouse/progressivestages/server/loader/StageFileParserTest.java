@@ -57,6 +57,13 @@ class StageFileParserTest {
             """, "bad.toml", "test", false).isSuccess());
         assertFalse(StageFileParser.parseText("""
             [stage]
+            id = "unset_mode"
+            team_stage = false
+            [gamemode]
+            grant_in = ["not_set"]
+            """, "bad.toml", "test", false).isSuccess());
+        assertFalse(StageFileParser.parseText("""
+            [stage]
             id = "bad_terms"
             [chat]
             mask_terms = ["Create", "create"]

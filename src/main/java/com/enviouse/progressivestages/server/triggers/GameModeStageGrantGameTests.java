@@ -47,18 +47,27 @@ public final class GameModeStageGrantGameTests {
             helper.assertTrue(!manager.hasStage(actor, id), "Survival should not grant the stage");
             actor.setGameMode(GameType.CREATIVE);
             GameModeStageGrants.reconcile(actor);
-            helper.assertTrue(manager.getStageSources(actor, id).contains("gamemode"),
+            helper.assertTrue(manager.hasGameModeStageSource(actor, id),
                 "Creative should add the game mode source");
-            manager.grantStageFromSource(actor, id, "independent", StageCause.API);
+            manager.grantStageFromSource(actor, id, "gamemode", StageCause.API);
             actor.setGameMode(GameType.SURVIVAL);
             GameModeStageGrants.reconcile(actor);
             helper.assertTrue(manager.hasStage(actor, id)
-                && manager.getStageSources(actor, id).equals(Set.of("independent")),
-                "Leaving creative must preserve the independent source");
+                && manager.getStageSources(actor, id).equals(Set.of("gamemode")),
+                "Leaving creative must preserve a caller-owned source named gamemode");
             actor.setGameMode(GameType.CREATIVE);
             GameModeStageGrants.reconcile(actor);
-            helper.assertTrue(manager.getStageSources(actor, id).equals(Set.of("independent", "gamemode")),
-                "Entering creative must also add its source to an independently owned stage");
+            helper.assertTrue(manager.hasGameModeStageSource(actor, id)
+                && manager.getStageSources(actor, id).contains("gamemode")
+                && manager.getStageSources(actor, id).size() == 2,
+                "Entering creative must keep the caller-owned source distinct");
+            helper.assertTrue(!manager.grantStageFromSource(actor, id,
+                "progressivestages:internal/gamemode", StageCause.API),
+                "The internal game mode source must be reserved from callers");
+            GameModeStageGrants.rebuild(List.of());
+            GameModeStageGrants.reconcile(actor);
+            helper.assertTrue(manager.getStageSources(actor, id).equals(Set.of("gamemode")),
+                "Removing the game mode rule must keep the caller-owned source");
             helper.succeed();
         } finally {
             data.revokePersonalStage(subject, id);

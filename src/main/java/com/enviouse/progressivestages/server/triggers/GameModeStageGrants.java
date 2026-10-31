@@ -12,7 +12,6 @@ import java.util.Map;
 
 /** Maintains a personal source for game mode grants without removing other grant sources. */
 public final class GameModeStageGrants {
-    private static final String SOURCE = "gamemode";
     private static volatile Map<StageId, StageDefinition> definitions = Map.of();
 
     private GameModeStageGrants() {}
@@ -31,11 +30,11 @@ public final class GameModeStageGrants {
         candidates.addAll(manager.getStoredStages(player));
         for (StageId id : candidates) {
             StageDefinition stage = definitions.get(id);
-            boolean hasSource = manager.getStageSources(player, id).contains(SOURCE);
+            boolean hasSource = manager.hasGameModeStageSource(player, id);
             boolean matches = stage != null
                 && stage.getGameModeGrant().modes().contains(player.gameMode.getGameModeForPlayer());
-            if (matches && !hasSource) manager.grantStageFromSource(player, id, SOURCE, StageCause.AUTO);
-            else if (!matches && hasSource) manager.revokeStageFromSource(player, id, SOURCE, StageCause.REGRESSION);
+            if (matches && !hasSource) manager.grantGameModeStageSource(player, id, StageCause.AUTO);
+            else if (!matches && hasSource) manager.revokeGameModeStageSource(player, id, StageCause.REGRESSION);
         }
     }
 }

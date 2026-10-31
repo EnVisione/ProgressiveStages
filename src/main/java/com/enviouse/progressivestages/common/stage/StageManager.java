@@ -43,6 +43,7 @@ public class StageManager {
 
     /** v2.4: synthetic "team" that holds server-wide ({@code scope = "server"}) stages shared by everyone. */
     public static final UUID SERVER_TEAM = new UUID(0L, 0L);
+    private static final String GAME_MODE_SOURCE = "progressivestages:internal/gamemode";
 
     /** One concrete stage removal from its real persistence owner. */
     private record RevokedStage(OwnerRef owner, StageId stageId) {
@@ -421,7 +422,20 @@ public class StageManager {
     /** grant a stage from a named derived source without conflating it with independent access. */
     public boolean grantStageFromSource(ServerPlayer player, StageId stageId, String source,
                                         StageCause cause) {
+        if (GAME_MODE_SOURCE.equals(source)) return false;
         return grantStageFromSource(player, stageId, source, cause, false, null);
+    }
+
+    public boolean hasGameModeStageSource(ServerPlayer player, StageId stageId) {
+        return getStageSources(player, stageId).contains(GAME_MODE_SOURCE);
+    }
+
+    public boolean grantGameModeStageSource(ServerPlayer player, StageId stageId, StageCause cause) {
+        return grantStageFromSource(player, stageId, GAME_MODE_SOURCE, cause, false, null);
+    }
+
+    public boolean revokeGameModeStageSource(ServerPlayer player, StageId stageId, StageCause cause) {
+        return revokeStageFromSourceInternal(player, stageId, GAME_MODE_SOURCE, cause);
     }
 
     /** Grant one derived source while bypassing prerequisites only, with an operator audit record. */
@@ -431,7 +445,7 @@ public class StageManager {
         if (player == null || stageId == null || cause == null || server == null || !server.isSameThread()
                 || server.getPlayerList().getPlayer(player.getUUID()) != player
                 || server.getProfilePermissions(player.getGameProfile()) < 3
-                || !isValidAuditField(source) || !source.equals(source.trim())
+                || !isValidAuditField(source) || GAME_MODE_SOURCE.equals(source) || !source.equals(source.trim())
                 || !isValidAuditField(auditReason)) return false;
         return grantStageFromSource(player, stageId, source, cause, true, auditReason);
     }
@@ -898,6 +912,12 @@ public class StageManager {
     /** remove one derived source while retaining independent or other derived access. */
     public boolean revokeStageFromSource(ServerPlayer player, StageId stageId, String source,
                                          StageCause cause) {
+        if (GAME_MODE_SOURCE.equals(source)) return false;
+        return revokeStageFromSourceInternal(player, stageId, source, cause);
+    }
+
+    private boolean revokeStageFromSourceInternal(ServerPlayer player, StageId stageId, String source,
+                                                  StageCause cause) {
         if (player == null || stageId == null || source == null || source.isBlank()) return false;
         Set<StageId> before = getStages(player);
         OwnerRef stageOwner = owner(player, stageId);
