@@ -24,6 +24,8 @@ can follow the [build and test guide](docs/testing/documentation.md).
 
 In the editor, open a stage's **Access** section to require that stage for normal player chat, enter words or phrases to obfuscate for players who have not earned it, or choose game modes that grant the stage. Game mode grants make the stage personal. See [Chat and game mode rules](DOCUMENTATION.md#chat-and-game-mode-rules) for TOML examples and limits. Both server and clients need the matching 3.2.0 build for these features.
 
+Login and respawn lock sync now builds recipe-viewer item matches when stage rules reload, then evaluates each player's rule state once per sync. This avoids repeating the full item registry scan for EMI and JEI on every join or death.
+
 ---
 
 ## What's new in 3.1.1

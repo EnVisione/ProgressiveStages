@@ -206,11 +206,7 @@ public class ServerEventHandler {
             NetworkHandler.sendStageDefinitionsSync(player);
             NetworkHandler.sendCompiledSnapshot(player);
 
-            // Sync lock registry to player BEFORE stage data so that when EMI reload
-            // fires on stage sync arrival, ClientLockCache is already populated.
-            NetworkHandler.sendLockSync(player);
-
-            // Send stage data to client (triggers EMI reload on arrival)
+            // Stage sync sends the lock snapshot before stage data.
             var stages = StageManager.getInstance().getStages(player);
             NetworkHandler.sendStageSync(player, stages);
 

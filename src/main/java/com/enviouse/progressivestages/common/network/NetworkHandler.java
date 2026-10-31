@@ -1027,10 +1027,10 @@ public class NetworkHandler {
             }
         }
 
-        List<LockEntry> emiViewerLocks = viewerLockEntries(player,
-            com.enviouse.progressivestages.server.rehaul.CompiledRuleEngine.RecipeViewer.EMI);
-        List<LockEntry> jeiViewerLocks = viewerLockEntries(player,
-            com.enviouse.progressivestages.server.rehaul.CompiledRuleEngine.RecipeViewer.JEI);
+        var viewerLocks = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
+            .resolveViewerItemLocks(player);
+        List<LockEntry> emiViewerLocks = viewerLockEntries(viewerLocks.emi());
+        List<LockEntry> jeiViewerLocks = viewerLockEntries(viewerLocks.jei());
 
         // Recipes: only single-stage entries are tracked (recipeIdCat doesn't have a multi-stage public method by id),
         // but ship via the same emission. Multi-stage recipes will work because LockRegistry.recipeIdCat already
@@ -1104,11 +1104,8 @@ public class NetworkHandler {
             emiViewerLocks, jeiViewerLocks));
     }
 
-    private static List<LockEntry> viewerLockEntries(ServerPlayer player,
-                                                       com.enviouse.progressivestages.server.rehaul.CompiledRuleEngine.RecipeViewer viewer) {
+    private static List<LockEntry> viewerLockEntries(Map<ResourceLocation, Set<StageId>> resolved) {
         List<LockEntry> entries = new ArrayList<>();
-        var resolved = com.enviouse.progressivestages.server.rehaul.RehaulRuntime.get().rules()
-            .resolveViewerItemLocks(player, viewer);
         for (var entry : resolved.entrySet()) {
             for (StageId stage : entry.getValue()) {
                 entries.add(new LockEntry(entry.getKey(), stage.getResourceLocation()));

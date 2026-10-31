@@ -4893,6 +4893,8 @@ Sync strategy:
 - **Re-sync on `/progressivestages reload`** — same as login, for every
   online player.
 
+Recipe-viewer item selectors are matched to registered items when compiled stage rules reload. Login, respawn, and stage changes then evaluate current player conditions once per matching rule and use the same decision for EMI and JEI. A rule reload rebuilds the match index so changed selectors and item tags take effect. The lock snapshot is sent before the stage snapshot, allowing recipe viewers to refresh from current data.
+
 The network channel is registered in
 [`NetworkHandler`](src/main/java/com/enviouse/progressivestages/common/network/NetworkHandler.java)
 using NeoForge's `PayloadRegistrar`. Packets are bound to the mod's

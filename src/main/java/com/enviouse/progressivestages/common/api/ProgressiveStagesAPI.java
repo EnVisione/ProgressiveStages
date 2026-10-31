@@ -443,7 +443,6 @@ public final class ProgressiveStagesAPI {
     /** Push definitions, lock rules, ownership, and bypass state to a connected client. */
     public static void syncPlayer(ServerPlayer player) {
         com.enviouse.progressivestages.common.network.NetworkHandler.sendStageDefinitionsSync(player);
-        com.enviouse.progressivestages.common.network.NetworkHandler.sendLockSync(player);
         com.enviouse.progressivestages.common.network.NetworkHandler.sendStageSync(player, getStages(player));
         com.enviouse.progressivestages.common.network.NetworkHandler.sendCreativeBypass(player,
             StageConfig.isAllowCreativeBypass() && player.isCreative());
