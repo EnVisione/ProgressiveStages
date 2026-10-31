@@ -67,12 +67,29 @@ describe("guided selective insertion", () => {
     expect(source).toContain('grant_in = ["creative", "spectator"]');
   });
 
+  it("recognizes mixed-case game mode names and removes a toggled mode", async () => {
+    editor.boot.draft.files[stagePath] += '[gamemode]\ngrant_in = [" Creative ", "SPECTATOR"]\n';
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    expect(screen.getByRole("checkbox", { name: "Creative" })).toHaveProperty("checked", true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Creative" }));
+    const update = editor.mutateFile.mock.calls[0][1] as (current: string) => string;
+    expect(update(editor.boot.draft.files[stagePath])).toContain('grant_in = ["spectator"]');
+  });
+
   it("keeps invalid duplicate chat terms in the editor with a visible error", () => {
     render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
     const field = screen.getByRole("textbox", { name: "Obfuscate these terms until owned" });
     fireEvent.change(field, { target: { value: "Create\ncreate" } });
     fireEvent.blur(field);
     expect(screen.getByRole("alert").textContent).toContain("distinct terms");
+    expect(editor.mutateFile).not.toHaveBeenCalled();
+  });
+  it("rejects unicode control characters before saving chat terms", () => {
+    render(<IntegrationsPanel stage={discoverStages(editor.boot.draft.files)[0]}/>);
+    const field = screen.getByRole("textbox", { name: "Obfuscate these terms until owned" });
+    fireEvent.change(field, { target: { value: "Create\u0085" } });
+    fireEvent.blur(field);
+    expect(screen.getByRole("alert").textContent).toContain("control characters");
     expect(editor.mutateFile).not.toHaveBeenCalled();
   });
   it("adds the Selling Bin pair inside an existing inline array", async () => {

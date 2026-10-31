@@ -7,20 +7,21 @@ import { useEditor } from "../../store/EditorContext";
 import type { StagePackage } from "../../types";
 
 const MODES = ["survival", "creative", "adventure", "spectator"];
+const normalizeMode = (value: string) => value.trim().toLowerCase();
 
 export function ChatAccessPanel({ stage }: { stage: StagePackage }) {
   const { boot, mutateFile } = useEditor();
   const source = boot?.draft.files[stage.stagePath] || "";
   const locked = booleanValue(readTomlValue(source, "chat.lock_access"));
   const terms = parseSimpleArray(readTomlValue(source, "chat.mask_terms"));
-  const modes = parseSimpleArray(readTomlValue(source, "gamemode.grant_in"));
+  const modes = parseSimpleArray(readTomlValue(source, "gamemode.grant_in")).map(normalizeMode);
   const [termsDraft, setTermsDraft] = useState(terms.join("\n"));
   const [termsError, setTermsError] = useState("");
   useEffect(() => setTermsDraft(terms.join("\n")), [source, stage.stagePath]);
   const save = (update: (current: string) => string, message: string) => mutateFile(stage.stagePath, update, message);
   const saveTerms = async () => {
     const next = termsDraft.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
-    if (next.length > 64 || next.some(value => value.length > 80 || /[\x00-\x1f\x7f]/.test(value))
+    if (next.length > 64 || next.some(value => value.length > 80 || /[\x00-\x1f\x7f-\x9f]/.test(value))
         || new Set(next.map(value => value.toLowerCase())).size !== next.length) {
       setTermsError("Use at most 64 distinct terms, each at most 80 characters, with no control characters.");
       return;
@@ -30,7 +31,7 @@ export function ChatAccessPanel({ stage }: { stage: StagePackage }) {
   };
   const setMode = (mode: string, checked: boolean) => {
     void save(current => {
-      const currentModes = parseSimpleArray(readTomlValue(current, "gamemode.grant_in"));
+      const currentModes = parseSimpleArray(readTomlValue(current, "gamemode.grant_in")).map(normalizeMode);
       const next = checked ? [...new Set([...currentModes, mode])] : currentModes.filter(value => value !== mode);
       return upsertToml(next.length ? writeOwnership(current, "personal") : current,
         "gamemode.grant_in", next);
