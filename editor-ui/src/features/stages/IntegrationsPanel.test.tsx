@@ -8,7 +8,7 @@ import fixtureText from "../../lib/fixtures/toml-preservation.json?raw";
 
 const editor = vi.hoisted(() => ({
   boot: { draft: { files: {} as Record<string, string> } },
-  mutateFile: vi.fn(async () => {}),
+  mutateFile: vi.fn(async (_path: string, _content: string | null | ((current: string) => string), _message?: string) => {}),
   openDialog: vi.fn(),
   closeDialog: vi.fn()
 }));
