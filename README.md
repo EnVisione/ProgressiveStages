@@ -4,7 +4,7 @@
 
 A NeoForge mod for Minecraft 1.21.1 that gives modpack developers complete control over stage-based progression. Define stages as TOML files; ProgressiveStages locks items, blocks, entities, fluids, dimensions, recipes, enchantments, crops, mob spawns, pets, regions, structures, screens, and player interactions until the player has earned the right stage(s).
 
-**ProgressiveStages 3.2.0 development** adds stage gated player chat, recipient side term obfuscation, and native personal game mode grants. The latest published 3.1.1 release includes the player guide and audited source scoped grant API.
+**ProgressiveStages 3.2.0** adds stage gated player chat, recipient side term obfuscation, native personal game mode grants, and less work during login and respawn lock synchronization. The 3.1.1 release introduced the player guide and audited source scoped grant API.
 
 See the [configuration and technical documentation](DOCUMENTATION.md) for setup and stage files.
 
@@ -20,7 +20,7 @@ Start with [configuration and technical documentation](DOCUMENTATION.md). For co
 questions, see [Block overrides and stage guides](docs/troubleshooting/documentation.md). Contributors
 can follow the [build and test guide](docs/testing/documentation.md).
 
-## New in 3.2.0 development
+## New in 3.2.0
 
 In the editor, open a stage's **Access** section to require that stage for normal player chat, enter words or phrases to obfuscate for players who have not earned it, or choose game modes that grant the stage. Game mode grants make the stage personal. See [Chat and game mode rules](DOCUMENTATION.md#chat-and-game-mode-rules) for TOML examples and limits. Both server and clients need the matching 3.2.0 build for these features.
 
@@ -307,7 +307,7 @@ settings, structure rules, block overrides, and upgrade notes.
 
 ## Installation
 
-1. For the 3.2.0 development build, install [NeoForge](https://neoforged.net/) 21.1.248 for Minecraft 1.21.1 on both the server and client.
+1. For 3.2.0, install [NeoForge](https://neoforged.net/) 21.1.248 for Minecraft 1.21.1 on both the server and client.
 2. Drop the jar into `mods/`.
 3. Optional integrations (auto-detected when their mods are present): EMI, JEI, FTB Quests + FTB Library, FTB Teams, Curios, Lootr, Mekanism, KubeJS, NaturesCompass, Visual Workbench.
 4. Launch the game once. ProgressiveStages generates the main file at `config/progressivestages/progressivestages.toml` and fifty schema 4 showcase packages under `config/progressivestages/stages/` when that folder is empty.

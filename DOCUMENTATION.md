@@ -1,6 +1,6 @@
 # ProgressiveStages 3.2.0 — Complete Documentation
 
-> ProgressiveStages **3.2.0 development** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
+> ProgressiveStages **3.2.0** for Minecraft 1.21.1, NeoForge 21.1.248, Java 21.
 > Mod id: `progressivestages`  Java package root: `com.enviouse.progressivestages`  
 > This document is exhaustive — every feature, every TOML field, every config key,
 > every command, every integration, every troubleshooting tip. If a section of
