@@ -120,11 +120,6 @@ runs/
 /implementation/*
 !/implementation/ProgressiveStages_3.0_Release_Plan.md
 
-# Claude Code session-local artifacts (analysis reports, settings, transcripts)
-# and project-level Claude instructions. Never push.
-.claude/
-CLAUDE.md
-
 # NeoForge build noise that sometimes lands at repo root
 /net/
 
