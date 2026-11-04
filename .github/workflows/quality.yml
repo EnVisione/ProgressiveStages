@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   gradle:
-    name: gradle
+    name: quality / gradle
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -64,7 +64,7 @@ jobs:
           category: /language:java-kotlin
 
   node:
-    name: node
+    name: quality / node
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -120,7 +120,7 @@ jobs:
           category: /language:javascript-typescript
 
   secret-scan:
-    name: secret scan
+    name: quality / secret scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
